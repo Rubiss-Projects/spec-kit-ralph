@@ -1,0 +1,27 @@
+name: Tests
+
+on:
+  pull_request:
+    branches: [main, master]
+  push:
+    branches: [main, master]
+
+jobs:
+  bash-tests:
+    name: Bash regression tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run bash tests
+        run: bash tests/regression/bash/test-ralph-loop.sh
+
+  powershell-tests:
+    name: PowerShell regression tests
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run PowerShell tests
+        shell: pwsh
+        run: ./tests/regression/powershell/Test-RalphLoop.ps1
