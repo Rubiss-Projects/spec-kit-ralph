@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `.github/workflows/release.yml` — manually-triggered release workflow (`workflow_dispatch`) that validates semver input, extracts `[Unreleased]` notes from CHANGELOG.md, bumps `extension.yml` version, commits, tags, and creates a GitHub Release
+
 ### Fixed
 - `get_incomplete_task_count` in `ralph-loop.sh` returning `"0 0"` instead of `"0"` when no incomplete tasks exist — `grep -c` outputs `"0"` with exit code 1, then `|| echo 0` duplicated it ([#1](https://github.com/Rubiss/spec-kit-ralph/issues/1))
 - Hardcoded `model: Claude Haiku 4.5 (copilot)` in `run.md` frontmatter preventing use with non-Copilot CLIs or setups without Haiku access ([#1](https://github.com/Rubiss/spec-kit-ralph/issues/1))
