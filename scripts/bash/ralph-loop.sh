@@ -203,12 +203,14 @@ print_status() {
 }
 
 get_incomplete_task_count() {
-    local path=$1
+    local path="$1"
     if [[ ! -f "$path" ]]; then
-        echo 0
-        return
+        printf "0"
+        return 0
     fi
-    grep -c '\- \[ \]' "$path" 2>/dev/null || echo 0
+    local count
+    count=$(grep -c '^- \[ \]' "$path" 2>/dev/null) || true
+    echo "${count:-0}"
 }
 
 initialize_progress_file() {
