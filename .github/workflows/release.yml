@@ -1,0 +1,93 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version (e.g. 1.0.1, 1.1.0, 2.0.0)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Create release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate version format
+        run: |
+          if ! echo "${{ inputs.version }}" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::Version must be in semver format (e.g. 1.0.1)"
+            exit 1
+          fi
+
+      - name: Check for unreleased changes
+        run: |
+          if ! grep -q '## \[Unreleased\]' CHANGELOG.md; then
+            echo "::error::No [Unreleased] section found in CHANGELOG.md"
+            exit 1
+          fi
+          # Extract content between [Unreleased] and the next version heading
+          CONTENT=$(sed -n '/^## \[Unreleased\]/,/^## \[/{/^## \[/!p}' CHANGELOG.md | sed '/^\s*$/d')
+          if [ -z "$CONTENT" ]; then
+            echo "::error::No changes listed under [Unreleased] in CHANGELOG.md"
+            exit 1
+          fi
+
+      - name: Extract release notes
+        id: notes
+        run: |
+          # Extract everything between [Unreleased] and the next ## heading
+          NOTES=$(sed -n '/^## \[Unreleased\]/,/^## \[/{/^## \[Unreleased\]/d;/^## \[/d;p}' CHANGELOG.md)
+          # Trim leading/trailing blank lines
+          NOTES=$(echo "$NOTES" | sed -e '/./,$!d' -e :a -e '/^\s*$/{ $d; N; ba; }')
+          # Write to file for the release body
+          echo "$NOTES" > release-notes.md
+          echo "Generated release notes:"
+          cat release-notes.md
+
+      - name: Update CHANGELOG.md
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          DATE=$(date +%Y-%m-%d)
+          # Replace [Unreleased] heading with version+date, add fresh [Unreleased] above it
+          sed -i "s/^## \[Unreleased\]/## [Unreleased]\n\n## [${VERSION}] - ${DATE}/" CHANGELOG.md
+
+      - name: Update extension.yml version
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          sed -i "s/^  version: \".*\"/  version: \"${VERSION}\"/" extension.yml
+
+      - name: Commit and tag
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add CHANGELOG.md extension.yml
+          git commit -m "release: v${VERSION}
+
+          Update CHANGELOG.md and extension.yml for v${VERSION} release."
+          git tag "v${VERSION}" -m "Release v${VERSION}"
+          git push origin HEAD --follow-tags
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          gh release create "v${VERSION}" \
+            --title "v${VERSION}" \
+            --notes-file release-notes.md
+
+      - name: Cleanup
+        if: always()
+        run: rm -f release-notes.md
