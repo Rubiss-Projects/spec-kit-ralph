@@ -3,7 +3,7 @@ schema_version: "1.0"
 extension:
   id: "ralph"
   name: "Ralph Loop"
-  version: "1.0.0"
+  version: "1.0.1"
   description: "Autonomous implementation loop using AI agent CLI"
   author: "Rubiss"
   repository: "https://github.com/Rubiss/spec-kit-ralph"
