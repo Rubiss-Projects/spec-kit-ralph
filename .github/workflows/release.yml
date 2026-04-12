@@ -10,15 +10,16 @@ on:
 
 permissions:
   contents: write
+  pull-requests: write
 
 jobs:
-  release:
-    name: Create release
+  create-release-pr:
+    name: Create release PR
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          ref: main
 
       - name: Validate version format
         run: |
@@ -41,13 +42,13 @@ jobs:
           fi
 
       - name: Extract release notes
-        id: notes
+        env:
+          VERSION: ${{ inputs.version }}
         run: |
           # Extract everything between [Unreleased] and the next ## heading
           NOTES=$(sed -n '/^## \[Unreleased\]/,/^## \[/{/^## \[Unreleased\]/d;/^## \[/d;p}' CHANGELOG.md)
           # Trim leading/trailing blank lines
           NOTES=$(echo "$NOTES" | sed -e '/./,$!d' -e :a -e '/^\s*$/{ $d; N; ba; }')
-          # Write to file for the release body
           echo "$NOTES" > release-notes.md
           echo "Generated release notes:"
           cat release-notes.md
@@ -57,7 +58,6 @@ jobs:
           VERSION: ${{ inputs.version }}
         run: |
           DATE=$(date +%Y-%m-%d)
-          # Replace [Unreleased] heading with version+date, add fresh [Unreleased] above it
           sed -i "s/^## \[Unreleased\]/## [Unreleased]\n\n## [${VERSION}] - ${DATE}/" CHANGELOG.md
 
       - name: Update extension.yml version
@@ -66,27 +66,31 @@ jobs:
         run: |
           sed -i "s/^  version: \".*\"/  version: \"${VERSION}\"/" extension.yml
 
-      - name: Commit and tag
-        env:
-          VERSION: ${{ inputs.version }}
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add CHANGELOG.md extension.yml
-          git commit -m "release: v${VERSION}
-
-          Update CHANGELOG.md and extension.yml for v${VERSION} release."
-          git tag "v${VERSION}" -m "Release v${VERSION}"
-          git push origin HEAD --follow-tags
-
-      - name: Create GitHub Release
+      - name: Create release branch and PR
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ inputs.version }}
         run: |
-          gh release create "v${VERSION}" \
-            --title "v${VERSION}" \
-            --notes-file release-notes.md
+          BRANCH="release/v${VERSION}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$BRANCH"
+          git add CHANGELOG.md extension.yml
+          git commit -m "release: v${VERSION}
+
+          Update CHANGELOG.md and extension.yml for v${VERSION} release."
+          git push origin "$BRANCH"
+
+          gh pr create \
+            --base main \
+            --head "$BRANCH" \
+            --title "release: v${VERSION}" \
+            --body "## Release v${VERSION}
+
+          $(cat release-notes.md)
+
+          ---
+          *Merge this PR to publish the release. A tag and GitHub Release will be created automatically.*"
 
       - name: Cleanup
         if: always()

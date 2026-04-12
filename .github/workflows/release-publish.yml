@@ -1,0 +1,68 @@
+name: Publish Release
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    name: Tag and publish release
+    if: github.event.pull_request.merged == true && startsWith(github.event.pull_request.head.ref, 'release/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.merge_commit_sha }}
+          fetch-depth: 0
+
+      - name: Extract and validate version from branch name
+        id: version
+        run: |
+          BRANCH="${{ github.event.pull_request.head.ref }}"
+          VERSION="${BRANCH#release/v}"
+          if ! echo "$VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::Branch '$BRANCH' does not contain a valid semver version"
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Releasing version: $VERSION"
+
+      - name: Extract release notes from CHANGELOG
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          # Extract the section for this specific version
+          sed -n "/^## \[${VERSION}\]/,/^## \[/{/^## \[${VERSION}\]/d;/^## \[/d;p}" CHANGELOG.md > release-notes.md
+          # Trim leading/trailing blank lines
+          sed -i -e '/./,$!d' -e :a -e '/^\s*$/{ $d; N; ba; }' release-notes.md
+          echo "Release notes:"
+          cat release-notes.md
+
+      - name: Create tag and GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag "v${VERSION}" -m "Release v${VERSION}"
+          git push origin "v${VERSION}"
+
+          gh release create "v${VERSION}" \
+            --title "v${VERSION}" \
+            --notes-file release-notes.md
+
+      - name: Delete release branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          gh api -X DELETE "repos/${{ github.repository }}/git/refs/heads/release/v${VERSION}" || true
+
+      - name: Cleanup
+        if: always()
+        run: rm -f release-notes.md
