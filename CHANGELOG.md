@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-04-12
+
 ### Added
 - Two-workflow release pipeline: `release.yml` (workflow_dispatch) creates a version-bump PR, and `release-publish.yml` creates the tag and GitHub Release when the PR merges — respects branch protection without elevated tokens
 - `.github/workflows/tests.yml` — CI workflow running bash tests on Ubuntu and PowerShell tests on Windows for PRs and pushes to main
