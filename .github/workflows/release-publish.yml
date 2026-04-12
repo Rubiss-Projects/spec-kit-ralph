@@ -38,7 +38,7 @@ jobs:
           # Extract the section for this specific version
           sed -n "/^## \[${VERSION}\]/,/^## \[/{/^## \[${VERSION}\]/d;/^## \[/d;p}" CHANGELOG.md > release-notes.md
           # Trim leading/trailing blank lines
-          sed -i -e '/./,$!d' -e :a -e '/^\s*$/{ $d; N; ba; }' release-notes.md
+          sed -i -e '/./,$!d' -e :a -e '/^[[:space:]]*$/{ $d; N; ba; }' release-notes.md
           echo "Release notes:"
           cat release-notes.md
 

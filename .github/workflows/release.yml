@@ -35,7 +35,7 @@ jobs:
             exit 1
           fi
           # Extract content between [Unreleased] and the next version heading
-          CONTENT=$(sed -n '/^## \[Unreleased\]/,/^## \[/{/^## \[/!p}' CHANGELOG.md | sed '/^\s*$/d')
+          CONTENT=$(sed -n '/^## \[Unreleased\]/,/^## \[/{/^## \[/!p}' CHANGELOG.md | sed '/^[[:space:]]*$/d')
           if [ -z "$CONTENT" ]; then
             echo "::error::No changes listed under [Unreleased] in CHANGELOG.md"
             exit 1
@@ -48,7 +48,7 @@ jobs:
           # Extract everything between [Unreleased] and the next ## heading
           NOTES=$(sed -n '/^## \[Unreleased\]/,/^## \[/{/^## \[Unreleased\]/d;/^## \[/d;p}' CHANGELOG.md)
           # Trim leading/trailing blank lines
-          NOTES=$(echo "$NOTES" | sed -e '/./,$!d' -e :a -e '/^\s*$/{ $d; N; ba; }')
+          NOTES=$(echo "$NOTES" | sed -e '/./,$!d' -e :a -e '/^[[:space:]]*$/{ $d; N; ba; }')
           echo "$NOTES" > release-notes.md
           echo "Generated release notes:"
           cat release-notes.md
