@@ -18,7 +18,7 @@
 # Usage:
 #   ./ralph-loop.sh --feature-name "001-feature" --tasks-path "specs/001-feature/tasks.md" \
 #                   --spec-dir "specs/001-feature" --max-iterations 10 \
-#                   --model "claude-sonnet-4.6" --agent-cli "copilot"
+#                   --model "claude-sonnet-4.6" --agent-cli "gh copilot"
 
 set -euo pipefail
 
@@ -29,7 +29,7 @@ TASKS_PATH=""
 SPEC_DIR=""
 MAX_ITERATIONS=10
 MODEL="claude-sonnet-4.6"
-AGENT_CLI="copilot"
+AGENT_CLI="gh copilot"
 VERBOSE=false
 WORKING_DIRECTORY=""
 
@@ -270,10 +270,13 @@ invoke_copilot_iteration() {
     local output_lines=()
 
     # Stream output line by line - use speckit.ralph.iterate agent
+    # Split AGENT_CLI into an array to support multi-word values like "gh copilot".
+    # Note: paths with spaces (e.g. /path with space/gh) are not supported.
+    read -ra AGENT_CMD <<< "$AGENT_CLI"
     while IFS= read -r line; do
         echo "$line" >&2
         output_lines+=("$line")
-    done < <("$AGENT_CLI" --agent speckit.ralph.iterate -p "$prompt" --model "$model" --yolo -s 2>&1) || exit_code=$?
+    done < <("${AGENT_CMD[@]}" --agent speckit.ralph.iterate -p "$prompt" --model "$model" --yolo -s 2>&1) || exit_code=$?
 
     echo -e "\033[36m--- End Agent Output ---\033[0m" >&2
     echo "" >&2

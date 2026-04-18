@@ -35,7 +35,7 @@
     AI model to use (default: claude-sonnet-4.6)
 
 .PARAMETER AgentCli
-    Path or name of the agent CLI binary (default: copilot)
+    Path or name of the agent CLI binary (default: gh copilot)
 
 .PARAMETER DetailedOutput
     Show detailed iteration output
@@ -62,7 +62,7 @@ param(
     [string]$Model = "claude-sonnet-4.6",
     
     [Parameter(Mandatory = $false)]
-    [string]$AgentCli = "copilot",
+    [string]$AgentCli = "gh copilot",
     
     [Parameter(Mandatory = $false)]
     [string]$WorkingDirectory = "",
@@ -272,8 +272,13 @@ function Invoke-CopilotIteration {
             Write-Host ""
             Write-Host "--- Copilot Agent Output ---" -ForegroundColor DarkCyan
             $outputLines = @()
+            # Split AgentCli to support multi-word values like "gh copilot".
+            # Note: paths containing spaces are not supported; use a wrapper script instead.
+            $cliParts = $AgentCli -split '\s+', 2
+            $cliExe = $cliParts[0]
+            $cliPrefix = if ($cliParts.Count -gt 1) { @($cliParts[1]) } else { @() }
             # Use speckit.ralph.iterate agent - it already knows to complete one work unit
-            & $AgentCli --agent speckit.ralph.iterate -p $prompt --model $Model --yolo -s 2>&1 | ForEach-Object {
+            & $cliExe @cliPrefix --agent speckit.ralph.iterate -p $prompt --model $Model --yolo -s 2>&1 | ForEach-Object {
                 # Stderr lines arrive as ErrorRecord objects; extract the message string
                 $line = if ($_ -is [System.Management.Automation.ErrorRecord]) { $_.Exception.Message } else { $_ }
                 Write-Host $line

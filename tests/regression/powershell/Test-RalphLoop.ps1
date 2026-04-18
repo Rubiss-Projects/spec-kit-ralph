@@ -86,7 +86,7 @@ foreach ($funcDef in $functionDefs) {
 Write-Section "Get-IncompleteTaskCount"
 
 # Missing file -> 0
-$result = Get-IncompleteTaskCount -Path "C:\nonexistent_ralph_test_$PID.md"
+$result = Get-IncompleteTaskCount -Path (Join-Path ([System.IO.Path]::GetTempPath()) "nonexistent_ralph_test_$PID.md")
 Assert-Equal "missing file returns 0" 0 $result
 
 # Empty file -> 0
@@ -128,7 +128,7 @@ $tasks = Get-IncompleteTasks -Path (Join-Path $FixtureDir "tasks-all-done.md")
 Assert-Equal "all done returns empty" 0 $tasks.Count
 
 # Missing file -> empty array
-$tasks = Get-IncompleteTasks -Path "C:\nonexistent_ralph_test_$PID.md"
+$tasks = Get-IncompleteTasks -Path (Join-Path ([System.IO.Path]::GetTempPath()) "nonexistent_ralph_test_$PID.md")
 Assert-Equal "missing file returns empty" 0 $tasks.Count
 
 #endregion
@@ -165,7 +165,7 @@ Assert-Equal "loads max_iterations from config" "5" $config["max_iterations"]
 Assert-Equal "loads agent_cli from config" "my-custom-cli" $config["agent_cli"]
 
 # Missing config -> empty hashtable
-$config = Read-RalphConfig -RepoRoot "C:\nonexistent_ralph_test_$PID"
+$config = Read-RalphConfig -RepoRoot (Join-Path ([System.IO.Path]::GetTempPath()) "nonexistent_ralph_test_$PID")
 Assert-Equal "missing config returns empty" 0 $config.Count
 
 # Local config overrides project config
