@@ -7,7 +7,7 @@ Autonomous implementation loop for [spec-kit](https://github.com/github/spec-kit
 | Requirement | Why |
 |---|---|
 | [spec-kit](https://github.com/github/spec-kit) (`specify` CLI) | Extension host — provides project structure and task management |
-| [GitHub Copilot CLI](https://docs.github.com/en/copilot) (`copilot` binary in PATH) | Default agent CLI used to execute each iteration |
+| [GitHub CLI with Copilot extension](https://docs.github.com/en/copilot/github-copilot-in-the-cli/using-github-copilot-in-the-cli) (`gh copilot`) | Default agent CLI used to execute each iteration |
 | [Git](https://git-scm.com/) | Version control — Ralph commits completed work units automatically |
 
 Your project must be initialized with `specify init` and have a feature branch checked out with a completed `tasks.md`.
@@ -89,10 +89,7 @@ model: "claude-sonnet-4.6"
 max_iterations: 10
 
 # Path or name of the agent CLI binary
-agent_cli: "copilot"
-```
-
-### Configuration Precedence
+agent_cli: "gh copilot"
 
 Settings are resolved from lowest to highest priority:
 
@@ -110,12 +107,12 @@ Settings are resolved from lowest to highest priority:
 |---|---|---|
 | `SPECKIT_RALPH_MODEL` | AI model to use | `claude-sonnet-4.6` |
 | `SPECKIT_RALPH_MAX_ITERATIONS` | Maximum iterations before stopping | `10` |
-| `SPECKIT_RALPH_AGENT_CLI` | Agent CLI binary name or path | `copilot` |
+| `SPECKIT_RALPH_AGENT_CLI` | Agent CLI binary name or path | `gh copilot` |
 
 ```bash
 export SPECKIT_RALPH_MODEL="gpt-5.1"
 export SPECKIT_RALPH_MAX_ITERATIONS="20"
-export SPECKIT_RALPH_AGENT_CLI="copilot"
+export SPECKIT_RALPH_AGENT_CLI="gh copilot"
 ```
 
 > **Note:** Never store authentication tokens in the config file. Use `GH_TOKEN` or `GITHUB_TOKEN` environment variables for authentication.
@@ -135,7 +132,7 @@ export SPECKIT_RALPH_AGENT_CLI="copilot"
                   ▼
   ┌───────────────────────────────┐
   │  Spawn fresh agent process    │
-  │  copilot --agent speckit.ralph│
+  │  gh copilot --agent speckit   │
   └──────────────┬────────────────┘
                  ▼
   ┌───────────────────────────────┐
@@ -154,7 +151,7 @@ export SPECKIT_RALPH_AGENT_CLI="copilot"
 
 ### Iteration Cycle
 
-1. The orchestrator spawns a **fresh** `copilot --agent speckit.ralph` process each iteration.
+1. The orchestrator spawns a **fresh** `gh copilot --agent speckit.ralph` process each iteration.
 2. The agent reads `tasks.md` to find the first incomplete work unit (phase, user story, or task group).
 3. It implements tasks within that single work unit, marks them `[x]` in `tasks.md`, and commits on completion.
 4. It appends an iteration entry to `progress.md` with files changed and lessons learned.

@@ -25,7 +25,7 @@ This command is a **thin launcher** for the ralph loop orchestrator. It validate
 
    | Check | Method | On Failure |
    |-------|--------|------------|
-   | Agent CLI installed | Run `which copilot` or `Get-Command copilot` | Print error with install instructions, STOP |
+   | Agent CLI installed | Run `which gh` or `Get-Command gh` | Print error with install instructions, STOP |
    | `tasks.md` exists | Search `specs/*/tasks.md` for current feature | Print error, suggest running `/speckit.tasks`, STOP |
    | Git repository | Run `git rev-parse --git-dir` | Print error: "Not a git repository", STOP |
    | Feature branch | Run `git branch --show-current`, verify not `main`/`master` | Print warning but continue |
