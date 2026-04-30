@@ -9,7 +9,7 @@ on:
 jobs:
   bash-tests:
     name: Bash regression tests
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - uses: actions/checkout@v4
 
@@ -18,7 +18,7 @@ jobs:
 
   powershell-tests:
     name: PowerShell regression tests
-    runs-on: windows-latest
+    runs-on: blacksmith-4vcpu-windows-2025
     steps:
       - uses: actions/checkout@v4
 

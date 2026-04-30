@@ -12,7 +12,7 @@ jobs:
   publish:
     name: Tag and publish release
     if: github.event.pull_request.merged == true && startsWith(github.event.pull_request.head.ref, 'release/v')
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - uses: actions/checkout@v4
         with:
