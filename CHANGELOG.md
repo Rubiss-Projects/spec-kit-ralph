@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.2] - 2026-05-01
+
 ### Changed
 - Updated repository references from `Rubiss/spec-kit-ralph` to `Rubiss-Projects/spec-kit-ralph` after the repository transfer
 - Updated the README installation example to point at the `v1.0.2` release archive
