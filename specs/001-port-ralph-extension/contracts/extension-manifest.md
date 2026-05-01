@@ -15,7 +15,7 @@ extension:
   version: "1.0.0"
   description: "Autonomous implementation loop using AI agent CLI"
   author: "Rubiss"
-  repository: "https://github.com/Rubiss/spec-kit-ralph"
+  repository: "https://github.com/Rubiss-Projects/spec-kit-ralph"
   license: "MIT"
 
 requires:

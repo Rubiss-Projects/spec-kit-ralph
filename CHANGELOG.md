@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Updated repository references from `Rubiss/spec-kit-ralph` to `Rubiss-Projects/spec-kit-ralph` after the repository transfer
+- Updated the README installation example to point at the `v1.0.2` release archive
+
 ## [1.0.1] - 2026-04-12
 
 ### Added
@@ -15,8 +19,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Regression test suites: 25 bash tests (`tests/regression/bash/`) and 26 PowerShell tests (`tests/regression/powershell/`)
 
 ### Fixed
-- `get_incomplete_task_count` in `ralph-loop.sh` returning `"0 0"` instead of `"0"` when no incomplete tasks exist — `grep -c` outputs `"0"` with exit code 1, then `|| echo 0` duplicated it ([#1](https://github.com/Rubiss/spec-kit-ralph/issues/1))
-- Hardcoded `model: Claude Haiku 4.5 (copilot)` in `run.md` frontmatter preventing use with non-Copilot CLIs or setups without Haiku access ([#1](https://github.com/Rubiss/spec-kit-ralph/issues/1))
+- `get_incomplete_task_count` in `ralph-loop.sh` returning `"0 0"` instead of `"0"` when no incomplete tasks exist — `grep -c` outputs `"0"` with exit code 1, then `|| echo 0` duplicated it ([#1](https://github.com/Rubiss-Projects/spec-kit-ralph/issues/1))
+- Hardcoded `model: Claude Haiku 4.5 (copilot)` in `run.md` frontmatter preventing use with non-Copilot CLIs or setups without Haiku access ([#1](https://github.com/Rubiss-Projects/spec-kit-ralph/issues/1))
 
 ## [1.0.0] - 2026-03-08
 
