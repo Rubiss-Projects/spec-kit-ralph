@@ -19,14 +19,14 @@ specify extension add ralph
 ```
 Or install from repository directly
 ```bash
-specify extension add ralph --from https://github.com/Rubiss/spec-kit-ralph/archive/refs/tags/v1.0.0.zip
+specify extension add ralph --from https://github.com/Rubiss-Projects/spec-kit-ralph/archive/refs/tags/v1.0.2.zip
 ```
 
 Verify the installation:
 
 ```bash
 specify extension list
-# ✓ Ralph Loop (v1.0.0)
+# ✓ Ralph Loop (v1.0.2)
 #   Autonomous implementation loop using AI agent CLI
 #   Commands: 2 | Hooks: 1 | Status: Enabled
 ```
