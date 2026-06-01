@@ -95,6 +95,8 @@ extract_functions() {
     sed -n '/^get_agent_cli_kind()/,/^}/p' "$SOURCE_SCRIPT"
     # Extract build_codex_iteration_prompt
     sed -n '/^build_codex_iteration_prompt()/,/^}/p' "$SOURCE_SCRIPT"
+    # Extract invoke_codex_iteration
+    sed -n '/^invoke_codex_iteration()/,/^}/p' "$SOURCE_SCRIPT"
     # Extract test_completion_signal
     sed -n '/^test_completion_signal()/,/^}/p' "$SOURCE_SCRIPT"
     # Extract load_ralph_config
@@ -242,6 +244,36 @@ assert_true "prompt includes iterate command" grep -q "Stop Conditions" <<< "$pr
 assert_true "prompt includes completion signal" grep -q "<promise>COMPLETE</promise>" <<< "$prompt"
 
 rm -rf "$TMP_PROMPT_DIR"
+
+#endregion
+
+#region Tests: invoke_codex_iteration
+
+section "invoke_codex_iteration"
+
+TMP_CODEX_DIR=$(mktemp -d)
+FAKE_CODEX="$TMP_CODEX_DIR/codex"
+cat > "$FAKE_CODEX" << 'FAKECODEX'
+#!/usr/bin/env bash
+echo '{"type":"item.completed","item":{"type":"agent_message","text":"fake failure"}}'
+exit 7
+FAKECODEX
+chmod +x "$FAKE_CODEX"
+
+AGENT_CLI="$FAKE_CODEX"
+VERBOSE=false
+ITERATE_COMMAND_PATH="$TMP_CODEX_DIR/iterate.md"
+echo "Fake iterate command" > "$ITERATE_COMMAND_PATH"
+
+set +e
+codex_output=$(invoke_codex_iteration "fake-model" 1 "$TMP_CODEX_DIR" 2>/dev/null)
+codex_exit=$?
+set -e
+
+assert_eq "propagates codex exit code" "7" "$codex_exit"
+assert_true "captures codex output" grep -q "fake failure" <<< "$codex_output"
+
+rm -rf "$TMP_CODEX_DIR"
 
 #endregion
 

@@ -473,6 +473,7 @@ Write-Host "Found $initialTasks incomplete task(s)" -ForegroundColor White
 
 # Iteration tracking
 $iteration = 1
+$lastIterationRun = 0
 $consecutiveFailures = 0
 $maxConsecutiveFailures = 3
 $completed = $false
@@ -484,6 +485,7 @@ $interrupted = $false
 
 try {
     while ($iteration -le $MaxIterations -and -not $completed -and -not $interrupted -and -not $circuitBreaker) {
+        $lastIterationRun = $iteration
         Write-RalphHeader -Iteration $iteration -Max $MaxIterations
         Write-IterationStatus -Iteration $iteration -Status "running" -Message "Starting iteration"
         
@@ -555,7 +557,13 @@ Write-Host ("=" * 60) -ForegroundColor Cyan
 $finalTasks = Get-IncompleteTaskCount -Path $TasksPath
 $tasksCompleted = $initialTasks - $finalTasks
 
-$iterationsRun = if ($completed) { $iteration } else { $iteration - 1 }
+if ($completed) {
+    $iterationsRun = $lastIterationRun
+} elseif ($interrupted) {
+    $iterationsRun = [Math]::Max(0, $lastIterationRun - 1)
+} else {
+    $iterationsRun = $lastIterationRun
+}
 Write-Host "  Iterations run: $iterationsRun" -ForegroundColor White
 Write-Host "  Tasks completed: $tasksCompleted" -ForegroundColor White
 Write-Host "  Tasks remaining: $finalTasks" -ForegroundColor White

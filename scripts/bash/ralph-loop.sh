@@ -353,17 +353,22 @@ invoke_codex_iteration() {
     echo -e "\033[36m--- Codex Agent Output ---\033[0m" >&2
 
     local exit_code=0
-    local output_lines=()
+    local output_file
+    output_file=$(mktemp)
     local codex_args=(exec --json --model "$model" --sandbox danger-full-access)
 
     if [[ -n "$work_dir" && -d "$work_dir" ]]; then
         codex_args+=(--cd "$work_dir")
     fi
 
-    while IFS= read -r line; do
+    set +e
+    printf '%s' "$prompt" | "$AGENT_CLI" "${codex_args[@]}" - 2>&1 | while IFS= read -r line; do
         echo "$line" >&2
-        output_lines+=("$line")
-    done < <(printf '%s' "$prompt" | "$AGENT_CLI" "${codex_args[@]}" - 2>&1) || exit_code=$?
+        printf '%s\n' "$line" >> "$output_file"
+    done
+    local pipeline_status=("${PIPESTATUS[@]}")
+    exit_code=${pipeline_status[1]}
+    set -e
 
     echo -e "\033[36m--- End Agent Output ---\033[0m" >&2
     echo "" >&2
@@ -373,7 +378,8 @@ invoke_codex_iteration() {
     fi
 
     local output
-    output=$(printf '%s\n' "${output_lines[@]}")
+    output=$(cat "$output_file")
+    rm -f "$output_file"
 
     echo "$output"
     return $exit_code
