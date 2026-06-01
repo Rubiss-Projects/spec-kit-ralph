@@ -3,7 +3,7 @@
     Ralph loop orchestrator for autonomous implementation.
 
 .DESCRIPTION
-    Executes GitHub Copilot CLI in a controlled loop, processing tasks from tasks.md.
+    Executes an AI agent CLI in a controlled loop, processing tasks from tasks.md.
     Each iteration spawns a fresh agent context with the speckit.ralph profile.
     
     The loop terminates when:
@@ -92,6 +92,9 @@ $RepoRoot = $WorkingDirectory
 $TasksPath = [System.IO.Path]::GetFullPath($TasksPath)
 $SpecDir = [System.IO.Path]::GetFullPath($SpecDir)
 $ProgressPath = Join-Path $SpecDir "progress.md"
+$ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$ExtensionRoot = Resolve-Path (Join-Path $ScriptDir "..\..") | Select-Object -ExpandProperty Path
+$IterateCommandPath = Join-Path $ExtensionRoot "commands\iterate.md"
 
 # Load config from extension config file
 function Read-RalphConfig {
@@ -231,6 +234,37 @@ Started: $timestamp
     }
 }
 
+function Get-AgentCliKind {
+    param([string]$Cli)
+
+    $cliName = [System.IO.Path]::GetFileName($Cli).ToLowerInvariant()
+    $cliName = $cliName -replace '\.(exe|cmd|bat)$', ''
+
+    switch ($cliName) {
+        "copilot" { return "copilot" }
+        "codex" { return "codex" }
+        default { return "unsupported" }
+    }
+}
+
+function New-CodexIterationPrompt {
+    param([int]$Iteration)
+
+    if (Test-Path $IterateCommandPath) {
+        $commandText = Get-Content -Path $IterateCommandPath -Raw
+    } else {
+        $commandText = "Complete at most one work unit from tasks.md. Mark completed tasks, update progress.md, commit only when the current user story is complete, and output <promise>COMPLETE</promise> when all tasks are done."
+    }
+
+    return @"
+You are running Ralph iteration $Iteration.
+
+Follow the speckit.ralph.iterate command below exactly for this single iteration.
+
+$commandText
+"@
+}
+
 function Invoke-CopilotIteration {
     param(
         [string]$Model,
@@ -307,6 +341,113 @@ function Invoke-CopilotIteration {
     }
 }
 
+function Invoke-CodexIteration {
+    param(
+        [string]$Model,
+        [int]$Iteration,
+        [string]$WorkDir,
+        [switch]$Verbose
+    )
+
+    $prompt = New-CodexIterationPrompt -Iteration $Iteration
+
+    if ($Verbose) {
+        Write-Host "DEBUG: Prompt = Ralph iteration $Iteration using $IterateCommandPath" -ForegroundColor Magenta
+        Write-Host "DEBUG: WorkDir = $WorkDir" -ForegroundColor Magenta
+        Write-Host "DEBUG: AgentCLI = $AgentCli" -ForegroundColor Magenta
+    }
+
+    try {
+        $prevOutputEncoding = $OutputEncoding
+        $prevConsoleEncoding = [Console]::OutputEncoding
+        $OutputEncoding = [System.Text.Encoding]::UTF8
+        [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+
+        try {
+            Write-Host ""
+            Write-Host "--- Codex Agent Output ---" -ForegroundColor DarkCyan
+            $outputLines = @()
+            $codexArgs = @("exec", "--json", "--model", $Model, "--sandbox", "danger-full-access")
+
+            if ($WorkDir -and (Test-Path $WorkDir)) {
+                $codexArgs += @("--cd", $WorkDir)
+            }
+
+            $codexArgs += "-"
+
+            $prompt | & $AgentCli @codexArgs 2>&1 | ForEach-Object {
+                $line = if ($_ -is [System.Management.Automation.ErrorRecord]) { $_.Exception.Message } else { $_ }
+                $outputLines += $line
+                try {
+                    $event = $line | ConvertFrom-Json -ErrorAction Stop
+                    switch ($event.type) {
+                        "item.completed" {
+                            if ($event.item.type -eq "agent_message" -and $event.item.text) {
+                                Write-Host $event.item.text
+                            } elseif ($event.item.type -eq "command_execution" -and $event.item.command) {
+                                Write-Host "exec: $($event.item.command)"
+                            }
+                        }
+                        "turn.failed" {
+                            Write-Host $line
+                        }
+                        "error" {
+                            Write-Host $line
+                        }
+                    }
+                }
+                catch {
+                    Write-Host $line
+                }
+            }
+            $output = $outputLines -join "`n"
+            $exitCode = $LASTEXITCODE
+            Write-Host "--- End Agent Output ---" -ForegroundColor DarkCyan
+            Write-Host ""
+        }
+        finally {
+            $OutputEncoding = $prevOutputEncoding
+            [Console]::OutputEncoding = $prevConsoleEncoding
+        }
+
+        if ($Verbose) {
+            Write-Host "DEBUG: $AgentCli exit code = $exitCode" -ForegroundColor Magenta
+        }
+    }
+    catch {
+        $output = "Error invoking codex: $_"
+        $exitCode = 1
+    }
+
+    return @{
+        Output = $output
+        ExitCode = $exitCode
+    }
+}
+
+function Invoke-AgentIteration {
+    param(
+        [string]$Model,
+        [int]$Iteration,
+        [string]$WorkDir,
+        [switch]$Verbose
+    )
+
+    $agentKind = Get-AgentCliKind -Cli $AgentCli
+    switch ($agentKind) {
+        "copilot" { return Invoke-CopilotIteration -Model $Model -Iteration $Iteration -WorkDir $WorkDir -Verbose:$Verbose }
+        "codex" { return Invoke-CodexIteration -Model $Model -Iteration $Iteration -WorkDir $WorkDir -Verbose:$Verbose }
+        default {
+            Write-Host "Unsupported agent CLI: $AgentCli" -ForegroundColor Red
+            Write-Host "Supported agent CLIs: copilot, codex" -ForegroundColor Red
+            return @{
+                Output = "Unsupported agent CLI: $AgentCli"
+                ExitCode = 2
+            }
+        }
+    }
+}
+
 function Test-CompletionSignal {
     param([string]$Output)
     
@@ -346,10 +487,10 @@ try {
         Write-RalphHeader -Iteration $iteration -Max $MaxIterations
         Write-IterationStatus -Iteration $iteration -Status "running" -Message "Starting iteration"
         
-        # Invoke Copilot CLI with speckit.ralph.iterate agent (agent already knows to complete one work unit)
+        # Invoke configured agent CLI with speckit.ralph.iterate behavior
         $verboseSwitch = @{}
         if ($DetailedOutput) { $verboseSwitch['Verbose'] = $true }
-        $result = Invoke-CopilotIteration -Model $Model -Iteration $iteration -WorkDir $WorkingDirectory @verboseSwitch
+        $result = Invoke-AgentIteration -Model $Model -Iteration $iteration -WorkDir $WorkingDirectory @verboseSwitch
         
         if ($DetailedOutput -or $result.ExitCode -ne 0) {
             Write-Host $result.Output
@@ -414,7 +555,8 @@ Write-Host ("=" * 60) -ForegroundColor Cyan
 $finalTasks = Get-IncompleteTaskCount -Path $TasksPath
 $tasksCompleted = $initialTasks - $finalTasks
 
-Write-Host "  Iterations run: $($iteration - 1)" -ForegroundColor White
+$iterationsRun = if ($completed) { $iteration } else { $iteration - 1 }
+Write-Host "  Iterations run: $iterationsRun" -ForegroundColor White
 Write-Host "  Tasks completed: $tasksCompleted" -ForegroundColor White
 Write-Host "  Tasks remaining: $finalTasks" -ForegroundColor White
 

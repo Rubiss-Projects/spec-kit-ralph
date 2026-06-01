@@ -19,13 +19,14 @@ This command is a **thin launcher** for the ralph loop orchestrator. It validate
 1. **Parse arguments** from `$ARGUMENTS`:
    - `--max-iterations N` or `-n N` (default: from config or 10)
    - `--model MODEL` or `-m MODEL` (default: from config or `claude-sonnet-4.6`)
+   - `--agent-cli CLI` (default: from config or `copilot`; supported: `copilot`, `codex`)
    - `--verbose` or `-v` (default: false)
 
 2. **Validate prerequisites** (all MUST pass before proceeding):
 
    | Check | Method | On Failure |
    |-------|--------|------------|
-   | Agent CLI installed | Run `which copilot` or `Get-Command copilot` | Print error with install instructions, STOP |
+   | Agent CLI installed | Resolve configured `agent_cli` (`copilot` or `codex`) with `which` or `Get-Command` | Print error with install instructions, STOP |
    | `tasks.md` exists | Search `specs/*/tasks.md` for current feature | Print error, suggest running `/speckit.tasks`, STOP |
    | Git repository | Run `git rev-parse --git-dir` | Print error: "Not a git repository", STOP |
    | Feature branch | Run `git branch --show-current`, verify not `main`/`master` | Print warning but continue |
@@ -45,7 +46,7 @@ This command is a **thin launcher** for the ralph loop orchestrator. It validate
 
 4. **Load configuration**:
    - Read `.specify/extensions/ralph/ralph-config.yml` if it exists
-   - Apply environment variable overrides (`SPECKIT_RALPH_MODEL`, `SPECKIT_RALPH_MAX_ITERATIONS`)
+   - Apply environment variable overrides (`SPECKIT_RALPH_MODEL`, `SPECKIT_RALPH_MAX_ITERATIONS`, `SPECKIT_RALPH_AGENT_CLI`)
    - CLI arguments from step 1 override everything
 
 5. **Launch orchestrator script in a visible terminal**:
@@ -55,16 +56,16 @@ This command is a **thin launcher** for the ralph loop orchestrator. It validate
 
      **PowerShell**:
      ```powershell
-     & ".specify/extensions/ralph/scripts/powershell/ralph-loop.ps1" -FeatureName "{feature}" -TasksPath "{tasks_path}" -SpecDir "{spec_dir}" -MaxIterations {n} -Model "{model}" [-DetailedOutput]
+     & ".specify/extensions/ralph/scripts/powershell/ralph-loop.ps1" -FeatureName "{feature}" -TasksPath "{tasks_path}" -SpecDir "{spec_dir}" -MaxIterations {n} -Model "{model}" -AgentCli "{agent_cli}" [-DetailedOutput]
      ```
 
      **Bash**:
      ```bash
-     bash ".specify/extensions/ralph/scripts/bash/ralph-loop.sh" --feature-name "{feature}" --tasks-path "{tasks_path}" --spec-dir "{spec_dir}" --max-iterations {n} --model "{model}" [--verbose]
+     bash ".specify/extensions/ralph/scripts/bash/ralph-loop.sh" --feature-name "{feature}" --tasks-path "{tasks_path}" --spec-dir "{spec_dir}" --max-iterations {n} --model "{model}" --agent-cli "{agent_cli}" [--verbose]
      ```
 
 6. **Confirm launch and exit**:
-   - Print a summary of what was launched (feature name, model, max iterations)
+   - Print a summary of what was launched (feature name, model, max iterations, agent CLI)
    - Tell the user to monitor the terminal for progress
    - Exit — do not poll, wait, or watch the script
 

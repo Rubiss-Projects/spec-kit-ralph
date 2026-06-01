@@ -7,7 +7,7 @@ Autonomous implementation loop for [spec-kit](https://github.com/github/spec-kit
 | Requirement | Why |
 |---|---|
 | [spec-kit](https://github.com/github/spec-kit) (`specify` CLI) | Extension host — provides project structure and task management |
-| [GitHub Copilot CLI](https://docs.github.com/en/copilot) (`copilot` binary in PATH) | Default agent CLI used to execute each iteration |
+| [GitHub Copilot CLI](https://docs.github.com/en/copilot) or [OpenAI Codex CLI](https://developers.openai.com/codex/cli) | Agent CLI used to execute each iteration (`copilot` is the default) |
 | [Git](https://git-scm.com/) | Version control — Ralph commits completed work units automatically |
 
 Your project must be initialized with `specify init` and have a feature branch checked out with a completed `tasks.md`.
@@ -37,7 +37,7 @@ The installer copies a config template to `.specify/extensions/ralph/ralph-confi
 
 ### Path 1 — Agent Command
 
-Run inside a Copilot chat session:
+Run inside an agent session that supports spec-kit extension commands:
 
 ```
 /speckit.ralph.run
@@ -63,7 +63,8 @@ Run the orchestrator scripts directly from your terminal for debugging or CI use
   -TasksPath "specs/001-my-feature/tasks.md" `
   -SpecDir "specs/001-my-feature" `
   -MaxIterations 10 `
-  -Model "claude-sonnet-4.6"
+  -Model "claude-sonnet-4.6" `
+  -AgentCli "copilot"
 ```
 
 **Bash (macOS / Linux):**
@@ -74,7 +75,8 @@ Run the orchestrator scripts directly from your terminal for debugging or CI use
   --tasks-path "specs/001-my-feature/tasks.md" \
   --spec-dir "specs/001-my-feature" \
   --max-iterations 10 \
-  --model "claude-sonnet-4.6"
+  --model "claude-sonnet-4.6" \
+  --agent-cli "copilot"
 ```
 
 ## Configuration
@@ -89,8 +91,28 @@ model: "claude-sonnet-4.6"
 max_iterations: 10
 
 # Path or name of the agent CLI binary
+# Supported: copilot, codex
 agent_cli: "copilot"
 ```
+
+### Agent CLI Support
+
+Ralph supports CLI-specific invocation codepaths selected by `agent_cli`.
+
+| `agent_cli` | Invocation shape | Notes |
+|---|---|---|
+| `copilot` | `copilot --agent speckit.ralph.iterate -p ... --model ... --yolo -s` | Default path. Requires the installed `speckit.ralph.iterate` Copilot agent profile. |
+| `codex` | `codex exec --json --model ... --sandbox danger-full-access --cd ... -` | Uses Codex non-interactive mode and passes the existing `speckit.ralph.iterate` command text via stdin. |
+
+To use Codex:
+
+```yaml
+model: "gpt-5.3-codex"
+max_iterations: 10
+agent_cli: "codex"
+```
+
+Install and authenticate the Codex CLI first. Ralph does not store Codex API keys or ChatGPT credentials in its config.
 
 ### Configuration Precedence
 
@@ -113,9 +135,9 @@ Settings are resolved from lowest to highest priority:
 | `SPECKIT_RALPH_AGENT_CLI` | Agent CLI binary name or path | `copilot` |
 
 ```bash
-export SPECKIT_RALPH_MODEL="gpt-5.1"
+export SPECKIT_RALPH_MODEL="gpt-5.3-codex"
 export SPECKIT_RALPH_MAX_ITERATIONS="20"
-export SPECKIT_RALPH_AGENT_CLI="copilot"
+export SPECKIT_RALPH_AGENT_CLI="codex"
 ```
 
 > **Note:** Never store authentication tokens in the config file. Use `GH_TOKEN` or `GITHUB_TOKEN` environment variables for authentication.
@@ -135,7 +157,7 @@ export SPECKIT_RALPH_AGENT_CLI="copilot"
                   ▼
   ┌───────────────────────────────┐
   │  Spawn fresh agent process    │
-  │  copilot --agent speckit.ralph│
+  │  configured agent CLI runs    │
   └──────────────┬────────────────┘
                  ▼
   ┌───────────────────────────────┐
@@ -154,7 +176,7 @@ export SPECKIT_RALPH_AGENT_CLI="copilot"
 
 ### Iteration Cycle
 
-1. The orchestrator spawns a **fresh** `copilot --agent speckit.ralph` process each iteration.
+1. The orchestrator spawns a **fresh** configured agent CLI process each iteration.
 2. The agent reads `tasks.md` to find the first incomplete work unit (phase, user story, or task group).
 3. It implements tasks within that single work unit, marks them `[x]` in `tasks.md`, and commits on completion.
 4. It appends an iteration entry to `progress.md` with files changed and lessons learned.

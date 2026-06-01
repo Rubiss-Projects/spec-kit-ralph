@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Official Codex CLI support via a dedicated `codex exec` invocation path in both Bash and PowerShell orchestrators
+- Regression coverage for agent CLI detection and Codex prompt assembly
+
+### Changed
+- Documented supported `agent_cli` values and marked Copilot/Codex tool requirements as alternative optional agent CLIs
+
 ## [1.0.2] - 2026-05-01
 
 ### Changed

@@ -2,7 +2,7 @@
 #
 # ralph-loop.sh - Ralph loop orchestrator for autonomous implementation
 #
-# Executes GitHub Copilot CLI in a controlled loop, processing tasks from tasks.md.
+# Executes an AI agent CLI in a controlled loop, processing tasks from tasks.md.
 # Each iteration spawns a fresh agent context with the speckit.ralph profile.
 #
 # The loop terminates when:
@@ -32,6 +32,9 @@ MODEL="claude-sonnet-4.6"
 AGENT_CLI="copilot"
 VERBOSE=false
 WORKING_DIRECTORY=""
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+EXTENSION_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+ITERATE_COMMAND_PATH="$EXTENSION_ROOT/commands/iterate.md"
 
 # Track which args were explicitly set via CLI
 FEATURE_NAME_EXPLICIT=false
@@ -237,6 +240,42 @@ EOF
     fi
 }
 
+get_agent_cli_kind() {
+    local cli=$1
+    local cli_name
+    cli=${cli//\\//}
+    cli_name=$(basename "$cli")
+    cli_name=${cli_name,,}
+    cli_name=${cli_name%.exe}
+    cli_name=${cli_name%.cmd}
+    cli_name=${cli_name%.bat}
+
+    case "$cli_name" in
+        copilot) echo "copilot" ;;
+        codex) echo "codex" ;;
+        *) echo "unsupported" ;;
+    esac
+}
+
+build_codex_iteration_prompt() {
+    local iteration=$1
+    local command_text=""
+
+    if [[ -f "$ITERATE_COMMAND_PATH" ]]; then
+        command_text=$(cat "$ITERATE_COMMAND_PATH")
+    else
+        command_text="Complete at most one work unit from tasks.md. Mark completed tasks, update progress.md, commit only when the current user story is complete, and output <promise>COMPLETE</promise> when all tasks are done."
+    fi
+
+    cat << EOF
+You are running Ralph iteration $iteration.
+
+Follow the speckit.ralph.iterate command below exactly for this single iteration.
+
+$command_text
+EOF
+}
+
 invoke_copilot_iteration() {
     local model=$1
     local iteration=$2
@@ -294,6 +333,72 @@ invoke_copilot_iteration() {
     # Return output via stdout, exit code via return
     echo "$output"
     return $exit_code
+}
+
+invoke_codex_iteration() {
+    local model=$1
+    local iteration=$2
+    local work_dir=$3
+
+    local prompt
+    prompt=$(build_codex_iteration_prompt "$iteration")
+
+    if [[ "$VERBOSE" == "true" ]]; then
+        echo -e "\033[35mDEBUG: Prompt = Ralph iteration $iteration using $ITERATE_COMMAND_PATH\033[0m" >&2
+        echo -e "\033[35mDEBUG: WorkDir = $work_dir\033[0m" >&2
+        echo -e "\033[35mDEBUG: AgentCLI = $AGENT_CLI\033[0m" >&2
+    fi
+
+    echo "" >&2
+    echo -e "\033[36m--- Codex Agent Output ---\033[0m" >&2
+
+    local exit_code=0
+    local output_lines=()
+    local codex_args=(exec --json --model "$model" --sandbox danger-full-access)
+
+    if [[ -n "$work_dir" && -d "$work_dir" ]]; then
+        codex_args+=(--cd "$work_dir")
+    fi
+
+    while IFS= read -r line; do
+        echo "$line" >&2
+        output_lines+=("$line")
+    done < <(printf '%s' "$prompt" | "$AGENT_CLI" "${codex_args[@]}" - 2>&1) || exit_code=$?
+
+    echo -e "\033[36m--- End Agent Output ---\033[0m" >&2
+    echo "" >&2
+
+    if [[ "$VERBOSE" == "true" ]]; then
+        echo -e "\033[35mDEBUG: $AGENT_CLI exit code = $exit_code\033[0m" >&2
+    fi
+
+    local output
+    output=$(printf '%s\n' "${output_lines[@]}")
+
+    echo "$output"
+    return $exit_code
+}
+
+invoke_agent_iteration() {
+    local model=$1
+    local iteration=$2
+    local work_dir=$3
+    local agent_kind
+    agent_kind=$(get_agent_cli_kind "$AGENT_CLI")
+
+    case "$agent_kind" in
+        copilot)
+            invoke_copilot_iteration "$model" "$iteration" "$work_dir"
+            ;;
+        codex)
+            invoke_codex_iteration "$model" "$iteration" "$work_dir"
+            ;;
+        *)
+            echo "Unsupported agent CLI: $AGENT_CLI" >&2
+            echo "Supported agent CLIs: copilot, codex" >&2
+            return 2
+            ;;
+    esac
 }
 
 test_completion_signal() {
@@ -366,9 +471,9 @@ while [[ $iteration -le $MAX_ITERATIONS && "$completed" == "false" && "$INTERRUP
     print_header "$iteration" "$MAX_ITERATIONS"
     print_status "$iteration" "running" "Starting iteration"
 
-    # Invoke Copilot CLI with speckit.ralph.iterate agent
+    # Invoke configured agent CLI with speckit.ralph.iterate behavior
     set +e
-    output=$(invoke_copilot_iteration \
+    output=$(invoke_agent_iteration \
         "$MODEL" \
         "$iteration" \
         "$WORKING_DIRECTORY")

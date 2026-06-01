@@ -13,7 +13,9 @@ requires:
   speckit_version: ">=0.1.0"
   tools:
     - name: "copilot"
-      required: true
+      required: false
+    - name: "codex"
+      required: false
     - name: "git"
       required: true
 
@@ -45,6 +47,7 @@ tags:
   - "automation"
   - "loop"
   - "copilot"
+  - "codex"
 
 defaults:
   model: "claude-sonnet-4.6"

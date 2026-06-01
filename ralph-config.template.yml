@@ -13,6 +13,7 @@ model: "claude-sonnet-4.6"
 max_iterations: 10
 
 # Path to agent CLI binary
+# Supported: copilot, codex
 # Default searches PATH for 'copilot'
 # Override: SPECKIT_RALPH_AGENT_CLI env var
 agent_cli: "copilot"

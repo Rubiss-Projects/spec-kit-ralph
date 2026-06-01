@@ -184,6 +184,38 @@ Remove-Item $tmpRepo -Recurse -Force
 
 #endregion
 
+#region Tests: Get-AgentCliKind
+
+Write-Section "Get-AgentCliKind"
+
+Assert-Equal "detects copilot" "copilot" (Get-AgentCliKind -Cli "copilot")
+Assert-Equal "detects codex" "codex" (Get-AgentCliKind -Cli "codex")
+Assert-Equal "detects codex path" "codex" (Get-AgentCliKind -Cli "C:\Tools\codex.exe")
+Assert-Equal "rejects unsupported cli" "unsupported" (Get-AgentCliKind -Cli "my-custom-cli")
+
+#endregion
+
+#region Tests: New-CodexIterationPrompt
+
+Write-Section "New-CodexIterationPrompt"
+
+$tmpPromptDir = Join-Path ([System.IO.Path]::GetTempPath()) "ralph-prompt-$PID"
+New-Item -ItemType Directory -Path $tmpPromptDir -Force | Out-Null
+$script:IterateCommandPath = Join-Path $tmpPromptDir "iterate.md"
+@"
+## Stop Conditions
+Output <promise>COMPLETE</promise> when done.
+"@ | Set-Content -Path $script:IterateCommandPath -Encoding UTF8
+
+$prompt = New-CodexIterationPrompt -Iteration 7
+Assert-True "prompt includes iteration" ($prompt -match "Ralph iteration 7")
+Assert-True "prompt includes iterate command" ($prompt -match "Stop Conditions")
+Assert-True "prompt includes completion signal" ($prompt -match "<promise>COMPLETE</promise>")
+
+Remove-Item $tmpPromptDir -Recurse -Force
+
+#endregion
+
 #region Tests: Initialize-ProgressFile
 
 Write-Section "Initialize-ProgressFile"

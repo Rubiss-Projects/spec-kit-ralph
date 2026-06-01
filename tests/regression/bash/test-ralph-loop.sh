@@ -91,6 +91,10 @@ extract_functions() {
     sed -n '/^get_incomplete_task_count()/,/^}/p' "$SOURCE_SCRIPT"
     # Extract initialize_progress_file
     sed -n '/^initialize_progress_file()/,/^}/p' "$SOURCE_SCRIPT"
+    # Extract get_agent_cli_kind
+    sed -n '/^get_agent_cli_kind()/,/^}/p' "$SOURCE_SCRIPT"
+    # Extract build_codex_iteration_prompt
+    sed -n '/^build_codex_iteration_prompt()/,/^}/p' "$SOURCE_SCRIPT"
     # Extract test_completion_signal
     sed -n '/^test_completion_signal()/,/^}/p' "$SOURCE_SCRIPT"
     # Extract load_ralph_config
@@ -206,6 +210,38 @@ assert_eq "local config overrides max_iterations" "20" "$CONFIG_MAX_ITERATIONS"
 assert_eq "local config inherits agent_cli from project" "my-custom-cli" "$CONFIG_AGENT_CLI"
 
 rm -rf "$TMP_REPO"
+
+#endregion
+
+#region Tests: get_agent_cli_kind
+
+section "get_agent_cli_kind"
+
+assert_eq "detects copilot" "copilot" "$(get_agent_cli_kind "copilot")"
+assert_eq "detects codex" "codex" "$(get_agent_cli_kind "codex")"
+assert_eq "detects codex path" "codex" "$(get_agent_cli_kind "/usr/local/bin/codex")"
+assert_eq "detects codex exe path" "codex" "$(get_agent_cli_kind "C:\\Tools\\codex.exe")"
+assert_eq "rejects unsupported cli" "unsupported" "$(get_agent_cli_kind "my-custom-cli")"
+
+#endregion
+
+#region Tests: build_codex_iteration_prompt
+
+section "build_codex_iteration_prompt"
+
+TMP_PROMPT_DIR=$(mktemp -d)
+ITERATE_COMMAND_PATH="$TMP_PROMPT_DIR/iterate.md"
+cat > "$ITERATE_COMMAND_PATH" << 'PROMPT'
+## Stop Conditions
+Output <promise>COMPLETE</promise> when done.
+PROMPT
+
+prompt=$(build_codex_iteration_prompt 7)
+assert_true "prompt includes iteration" grep -q "Ralph iteration 7" <<< "$prompt"
+assert_true "prompt includes iterate command" grep -q "Stop Conditions" <<< "$prompt"
+assert_true "prompt includes completion signal" grep -q "<promise>COMPLETE</promise>" <<< "$prompt"
+
+rm -rf "$TMP_PROMPT_DIR"
 
 #endregion
 
