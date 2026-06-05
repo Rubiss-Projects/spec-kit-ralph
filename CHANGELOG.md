@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-06-05
+
 ### Fixed
 - Install-time Ralph config placement now targets `.specify/extensions/ralph/ralph-config.yml`, matching the path loaded by the orchestrator scripts.
 
