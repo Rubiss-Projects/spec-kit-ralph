@@ -31,7 +31,7 @@ specify extension list
 #   Commands: 2 | Hooks: 1 | Status: Enabled
 ```
 
-The installer copies a config template to `.specify/extensions/ralph/ralph-config.yml` and the iterate command to `.github/agents/speckit.ralph.iterate.agent.md`.
+The installed extension includes `.specify/extensions/ralph/ralph-config.yml` for project defaults and registers the iterate command for your active agent. No post-install config copy step is required.
 
 ## Usage
 
@@ -94,6 +94,8 @@ max_iterations: 10
 # Supported: copilot, codex
 agent_cli: "copilot"
 ```
+
+Ralph also ships `.specify/extensions/ralph/ralph-config.template.yml` as a reference copy of the defaults. Use it to compare or reset configuration; the active project config is `ralph-config.yml`.
 
 ### Agent CLI Support
 
@@ -219,6 +221,7 @@ spec-kit-ralph/
 │       └── ralph-loop.sh          # Bash orchestrator
 ├── agents/
 │   └── speckit.ralph.agent.md     # Copilot agent profile
+├── ralph-config.yml               # Installed project config
 ├── ralph-config.template.yml      # Config template
 ├── README.md
 ├── CHANGELOG.md

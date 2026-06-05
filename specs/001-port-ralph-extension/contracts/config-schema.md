@@ -1,6 +1,7 @@
 # Contract: Configuration Schema
 
-**Template File**: `ralph-config.template.yml`
+**Config File**: `ralph-config.yml`
+**Template File**: `ralph-config.template.yml` (reference/reset copy)
 **Installed Location**: `.specify/extensions/ralph/ralph-config.yml`
 **Local Override**: `.specify/extensions/ralph/ralph-config.local.yml` (gitignored)
 

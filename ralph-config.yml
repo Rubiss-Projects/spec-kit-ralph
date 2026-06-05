@@ -1,0 +1,17 @@
+# Ralph Extension Configuration
+# WARNING: DO NOT store authentication tokens or secrets in this file!
+# Use environment variables instead: GH_TOKEN or GITHUB_TOKEN
+
+# AI model for agent iterations
+# Override: --model flag, or SPECKIT_RALPH_MODEL env var
+model: "claude-sonnet-4.6"
+
+# Maximum loop iterations before stopping
+# Override: --max-iterations flag, or SPECKIT_RALPH_MAX_ITERATIONS env var
+max_iterations: 10
+
+# Path to agent CLI binary
+# Supported: copilot, codex
+# Default searches PATH for 'copilot'
+# Override: SPECKIT_RALPH_AGENT_CLI env var
+agent_cli: "copilot"

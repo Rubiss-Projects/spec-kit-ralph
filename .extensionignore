@@ -1,4 +1,6 @@
+.agents/
 .github/
 .specify/
 .vscode/
 specs/
+AGENTS.md
