@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Hardened `speckit.ralph.run` so free-form launcher text like `Implement US1` is warned about and ignored, preventing the host agent from implementing tasks inline instead of launching the Ralph loop ([#18](https://github.com/Rubiss-Projects/spec-kit-ralph/issues/18)).
+
 ## [1.1.1] - 2026-06-05
 
 ### Fixed
