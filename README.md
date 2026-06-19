@@ -51,6 +51,8 @@ With options:
 
 The command validates prerequisites, detects the current feature context, and delegates to the platform-appropriate orchestrator script.
 
+Only launcher flags are accepted here. Free-form text such as `Implement US1` is ignored by the launcher because Ralph selects the next incomplete work unit from `tasks.md` inside the orchestrated iteration.
+
 ### Path 2 — Direct Script Invocation
 
 Run the orchestrator scripts directly from your terminal for debugging or CI use.
@@ -103,7 +105,7 @@ Ralph supports CLI-specific invocation codepaths selected by `agent_cli`.
 
 | `agent_cli` | Invocation shape | Notes |
 |---|---|---|
-| `copilot` | `copilot --agent speckit.ralph.iterate -p ... --model ... --yolo -s` | Default path. Requires the installed `speckit.ralph.iterate` Copilot agent profile. |
+| `copilot` | `copilot --agent speckit.ralph.iterate -p ... --model ... --yolo -s` | Default path. Uses the registered `speckit.ralph.iterate` command/agent generated from the extension command file. |
 | `codex` | `codex exec --json --model ... --sandbox danger-full-access --cd ... -` | Uses Codex non-interactive mode and passes the existing `speckit.ralph.iterate` command text via stdin. |
 
 To use Codex:
@@ -219,8 +221,6 @@ spec-kit-ralph/
 │   │   └── ralph-loop.ps1         # PowerShell orchestrator
 │   └── bash/
 │       └── ralph-loop.sh          # Bash orchestrator
-├── agents/
-│   └── speckit.ralph.agent.md     # Copilot agent profile
 ├── ralph-config.yml               # Installed project config
 ├── ralph-config.template.yml      # Config template
 ├── README.md

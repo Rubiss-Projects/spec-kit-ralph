@@ -186,12 +186,12 @@ Started: {timestamp}
 
 ---
 
-### 6. Agent Profile
+### 6. Registered Iteration Command
 
-**File (extension source)**: `agents/speckit.ralph.agent.md`
-**Installed Location**: Target project's `.github/agents/speckit.ralph.agent.md`
+**File (extension source)**: `commands/iterate.md`
+**Runtime usage**: Invoked by the orchestrator through the configured agent CLI, e.g. `copilot --agent speckit.ralph.iterate`.
 
-**Purpose**: Copilot agent definition that constrains agent behavior during each iteration. Read by `copilot --agent speckit.ralph`.
+**Purpose**: Agent-facing command definition that constrains behavior during each iteration.
 
 | Section | Purpose |
 |---------|---------|
@@ -203,7 +203,7 @@ Started: {timestamp}
 | Quality Gates | Tests must pass, no broken commits |
 | Error Handling | Table of condition → expected behavior |
 
-**Relationship to Commands**: The agent profile defines overall agent behavior. The `speckit.ralph.iterate` command file provides the same instructions in command format. They are functionally equivalent — the agent profile is used by Copilot's `--agent` flag, while the command is invoked via `/speckit.ralph.iterate`. Having both ensures compatibility with different invocation methods.
+**Relationship to Commands**: `speckit.ralph.run` launches the loop. Each loop iteration invokes `speckit.ralph.iterate` through the configured agent CLI, so the launcher never performs implementation work inline.
 
 ---
 
@@ -231,8 +231,8 @@ Started: {timestamp}
 | Section | Content |
 |---------|---------|
 | Frontmatter `description` | Thin launcher for ralph loop orchestration |
-| Frontmatter `scripts` | References to orchestrator scripts (platform-specific) |
-| Body | Prerequisites validation → agent profile placement → platform detection → script launch |
+| User input | Launcher flags only; free-form implementation text is warned and ignored |
+| Body | Prerequisites validation → configuration resolution → platform detection → script launch |
 
 #### `commands/iterate.md` (speckit.ralph.iterate)
 

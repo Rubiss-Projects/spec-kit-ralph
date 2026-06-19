@@ -16,6 +16,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 FIXTURE_DIR="$SCRIPT_DIR/../fixtures"
 SOURCE_SCRIPT="$REPO_ROOT/scripts/bash/ralph-loop.sh"
+RUN_COMMAND="$REPO_ROOT/commands/run.md"
 
 # Test bookkeeping
 TESTS_RUN=0
@@ -104,6 +105,17 @@ extract_functions() {
 }
 
 eval "$(extract_functions)"
+
+#endregion
+
+#region Tests: run command guardrails
+
+section "run command guardrails"
+
+assert_true "run treats input as launcher arguments only" grep -q "launcher arguments only" "$RUN_COMMAND"
+assert_true "run ignores free-form implementation requests" grep -q "Free-form requests such as" "$RUN_COMMAND"
+assert_true "run forbids inline implementation" grep -q "MUST NOT.*implement tasks" "$RUN_COMMAND"
+assert_true "run warns that ignored text comes from tasks.md scope" grep -q "Ralph selects work from.*tasks.md" "$RUN_COMMAND"
 
 #endregion
 

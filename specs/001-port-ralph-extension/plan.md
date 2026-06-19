@@ -5,7 +5,7 @@
 
 ## Summary
 
-Port the ralph loop autonomous implementation system from spec-kit core into a standalone spec-kit extension. The extension packages orchestrator scripts (PowerShell + Bash), agent command files, a Copilot agent profile, and config template into the `extension.yml` manifest format. The `speckit.ralph.run` command acts as a thin launcher delegating to platform scripts; `speckit.ralph.iterate` defines single-iteration agent behavior. No Python code — all orchestration via scripts, all agent behavior via markdown commands.
+Port the ralph loop autonomous implementation system from spec-kit core into a standalone spec-kit extension. The extension packages orchestrator scripts (PowerShell + Bash), agent command files, and a config template into the `extension.yml` manifest format. The `speckit.ralph.run` command acts as a thin launcher delegating to platform scripts; `speckit.ralph.iterate` defines single-iteration agent behavior. No Python code — all orchestration via scripts, all agent behavior via markdown commands.
 
 ## Technical Context
 
@@ -17,7 +17,7 @@ Port the ralph loop autonomous implementation system from spec-kit core into a s
 **Project Type**: spec-kit extension
 **Performance Goals**: <2s between iterations (SC-003)
 **Constraints**: No Python runtime required for end users; context isolation per iteration (NON-NEGOTIABLE); self-contained within extension directory
-**Scale/Scope**: 2 commands, 2 orchestrator scripts, 1 agent profile, 1 config template, 1 hook
+**Scale/Scope**: 2 commands, 2 orchestrator scripts, 1 config template, 1 hook
 
 ## Constitution Check
 
@@ -73,14 +73,12 @@ spec-kit-ralph/                          # Extension root (= repo root)
 │   └── bash/
 │       └── ralph-loop.sh                # Bash orchestrator (ported from core)
 ├── ralph-config.template.yml            # Config template (model, iterations, agent_cli)
-├── agents/
-│   └── speckit.ralph.agent.md           # Copilot agent profile (ported from core)
 ├── README.md                            # Extension documentation (install, usage, both paths)
 ├── LICENSE                              # MIT
 └── CHANGELOG.md                         # Version history
 ```
 
-**Structure Decision**: Extension-native flat structure per the [Extension Development Guide](https://github.com/github/spec-kit/blob/main/extensions/EXTENSION-DEVELOPMENT-GUIDE.md). No `src/`, `tests/`, or nested project layout — this is a script+command extension, not a library. The `agents/` directory is extension-local; the `run.md` command handles copying the agent profile to `.github/agents/` in the target project during first use.
+**Structure Decision**: Extension-native flat structure per the [Extension Development Guide](https://github.com/github/spec-kit/blob/main/extensions/EXTENSION-DEVELOPMENT-GUIDE.md). No `src/`, `tests/`, or nested project layout — this is a script+command extension, not a library. Agent behavior is supplied through registered extension command files, with `run.md` acting only as a launcher and `iterate.md` defining one iteration of work.
 
 ## Complexity Tracking
 
