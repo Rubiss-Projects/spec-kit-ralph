@@ -8,7 +8,21 @@ description: "Run the ralph autonomous implementation loop"
 $ARGUMENTS
 ```
 
-You **MUST** consider the user input before proceeding (if not empty).
+You **MUST** treat the user input as launcher arguments only.
+
+Recognized launcher arguments are:
+
+- `--max-iterations N` or `-n N`
+- `--model MODEL` or `-m MODEL`
+- `--agent-cli CLI`
+- `--verbose` or `-v`
+
+Free-form requests such as "Implement US1", "do the next story", or "fix the tasks" are **not** instructions for this command to execute work directly. If free-form text is present:
+
+1. Print a short warning that the text is ignored by `speckit.ralph.run` because Ralph selects work from `tasks.md`.
+2. Continue launching the Ralph orchestrator with the resolved configuration.
+
+This command **MUST NOT** implement tasks, edit project files, mark checkboxes, create commits, or run `/speckit.ralph.iterate` inline. Its only job is prerequisite validation, configuration resolution, and launching the orchestrator script.
 
 ## Purpose
 
@@ -16,11 +30,13 @@ This command is a **thin launcher** for the ralph loop orchestrator. It validate
 
 ## Outline
 
-1. **Parse arguments** from `$ARGUMENTS`:
+1. **Parse launcher arguments only** from `$ARGUMENTS`:
    - `--max-iterations N` or `-n N` (default: from config or 10)
    - `--model MODEL` or `-m MODEL` (default: from config or `claude-sonnet-4.6`)
    - `--agent-cli CLI` (default: from config or `copilot`; supported: `copilot`, `codex`)
    - `--verbose` or `-v` (default: false)
+   - Ignore non-flag free-form text after printing the warning described above
+   - Stop with a clear error for unknown flags or malformed flag values
 
 2. **Validate prerequisites** (all MUST pass before proceeding):
 
@@ -52,6 +68,7 @@ This command is a **thin launcher** for the ralph loop orchestrator. It validate
 5. **Launch orchestrator script in a visible terminal**:
    - Detect platform and run the appropriate script in a **visible, non-hidden terminal** so the user can monitor progress directly
    - **Do NOT wait** for the script to finish — launch it and exit immediately
+   - Do NOT perform any task implementation in the current agent session
    - Execute with resolved parameters:
 
      **PowerShell**:

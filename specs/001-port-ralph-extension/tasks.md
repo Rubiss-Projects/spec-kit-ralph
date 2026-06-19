@@ -18,7 +18,6 @@
 - **Extension-native flat structure**: Extension root = repository root (no `src/` or nested layout)
 - Scripts at `scripts/powershell/` and `scripts/bash/`
 - Commands at `commands/`
-- Agent profile at `agents/`
 - Config template at repository root
 
 ---
@@ -75,8 +74,8 @@ No standalone implementation tasks — US1 is the integration checkpoint verifie
 
 - [x] T006 [US2] Port ralph-loop.ps1 from source repo to scripts/powershell/ralph-loop.ps1 — adapt per research R2: remove common.ps1 dependency (inline any needed helpers), add config loading from .specify/extensions/ralph/ralph-config.yml with env var overrides (SPECKIT_RALPH_MODEL, SPECKIT_RALPH_MAX_ITERATIONS, SPECKIT_RALPH_AGENT_CLI), read agent_cli from config instead of hardcoded copilot path. MUST preserve from source: 3-consecutive-failure circuit breaker (FR-009), Ctrl+C/SIGINT trap with exit 130 (FR-010), summary block on ALL 4 termination paths — completion/limit/failure/interrupt (FR-013), and all 3 termination-condition checks (FR-008). Source: C:\Users\Rubis\Projects\spec-kit\scripts\powershell\ralph-loop.ps1
 - [x] T007 [P] [US2] Port ralph-loop.sh from source repo to scripts/bash/ralph-loop.sh — adapt per research R2: same changes as PowerShell (remove common.sh dependency, add YAML config loading, env var overrides, agent_cli from config). MUST preserve from source: 3-consecutive-failure circuit breaker (FR-009), Ctrl+C/SIGINT trap with exit 130 (FR-010), summary block on ALL 4 termination paths (FR-013), and all 3 termination-condition checks (FR-008). Source: C:\Users\Rubis\Projects\spec-kit\scripts\bash\ralph-loop.sh
-- [x] T008 [P] [US2] Port agent profile from source repo to agents/speckit.ralph.agent.md — adapt per research R7: keep all 11 outline steps, scope constraint, progress format, completion signal; add extension provenance note as YAML frontmatter field (NOT in body instructions — avoids wasting agent context tokens); keep reference to .specify/scripts/powershell/check-prerequisites.ps1 (core spec-kit script). Source: C:\Users\Rubis\Projects\spec-kit\.github\agents\speckit.ralph.agent.md
-- [x] T009 [US2] Create commands/run.md thin launcher per specs/001-port-ralph-extension/contracts/command-schemas.md at commands/run.md — implement: prerequisite validation (copilot CLI, tasks.md, git repo, feature branch), agent profile placement (copy agents/speckit.ralph.agent.md to .github/agents/ if missing), platform detection (PowerShell vs Bash), delegate to ralph-loop.ps1 or ralph-loop.sh with configured parameters (model, max_iterations, spec_dir). Delegation mechanism: frontmatter `scripts` field declares script paths (scripts/powershell/ralph-loop.ps1, scripts/bash/ralph-loop.sh); body instructions tell the agent to validate prerequisites FIRST, then launch the platform-appropriate script from frontmatter. Extension path resolution: after `specify extension add`, the extension files are symlinked/copied into `.specify/extensions/ralph/` — the agent resolves script paths relative to the extension install directory via the frontmatter references
+- [x] T008 [P] [US2] Port iteration behavior from source command material into commands/iterate.md — keep all outline steps, scope constraint, progress format, completion signal, and reference to .specify/scripts/powershell/check-prerequisites.ps1 (core spec-kit script). Source: C:\Users\Rubis\Projects\spec-kit\templates\commands\ralph.md
+- [x] T009 [US2] Create commands/run.md thin launcher per specs/001-port-ralph-extension/contracts/command-schemas.md at commands/run.md — implement: prerequisite validation (copilot CLI, tasks.md, git repo, feature branch), launcher-only argument parsing, platform detection (PowerShell vs Bash), and delegation to ralph-loop.ps1 or ralph-loop.sh with configured parameters (model, max_iterations, spec_dir). Extension path resolution: after `specify extension add`, the extension files are symlinked/copied into `.specify/extensions/ralph/`
 
 **Checkpoint**: Ralph loop runs end-to-end via direct script invocation. US2 acceptance scenarios 1-5 satisfied.
 
@@ -86,7 +85,7 @@ No standalone implementation tasks — US1 is the integration checkpoint verifie
 
 **Goal**: Create the iterate command that instructs the agent on single-iteration behavior — scope constraint, task identification, progress logging, commit protocol
 
-**Independent Test**: Manually invoke `copilot --agent speckit.ralph` on a project with incomplete tasks → agent completes one work unit, updates tasks.md checkboxes, appends progress entry, creates conventional commit
+**Independent Test**: Manually invoke `copilot --agent speckit.ralph.iterate` on a project with incomplete tasks → agent completes one work unit, updates tasks.md checkboxes, appends progress entry, creates conventional commit
 
 ### Implementation for User Story 4
 
@@ -119,7 +118,7 @@ No standalone implementation tasks — US1 is the integration checkpoint verifie
 ### User Story Dependencies
 
 - **US1 (Install)**: Satisfied when extension.yml (T004) + config template (T005) + all referenced command files (T009, T010) exist. Verified by T012.
-- **US2 (Run Loop)**: Core implementation. Scripts (T006, T007) + agent profile (T008) + run command (T009). Independent of US4.
+- **US2 (Run Loop)**: Core implementation. Scripts (T006, T007) + iterate command behavior (T008) + run command (T009). Independent of US4.
 - **US3 (Progress Tracking)**: Cross-cutting — satisfied by scripts' Initialize-ProgressFile function (T006/T007) + iterate command's progress report format (T010). No standalone tasks.
 - **US4 (Iterate Command)**: Single command file (T010). Independent of US2 scripts (can be written and tested separately).
 - **US5 (Config)**: Cross-cutting — satisfied by config template (T005) + script config loading (T006/T007) + env var overrides. No standalone tasks.
@@ -128,7 +127,7 @@ No standalone implementation tasks — US1 is the integration checkpoint verifie
 ### Within Each User Story
 
 - Scripts before commands (commands reference scripts)
-- Agent profile before run command (run.md places the profile)
+- Iterate command behavior before run command (orchestrator invokes `speckit.ralph.iterate`)
 - Core implementation before polish
 
 ### Parallel Opportunities
@@ -148,9 +147,9 @@ Task T006: "Port ralph-loop.ps1 to scripts/powershell/ralph-loop.ps1"
 
 # Then parallel (follow same pattern, independent files):
 Task T007: "Port ralph-loop.sh to scripts/bash/ralph-loop.sh"
-Task T008: "Port agent profile to agents/speckit.ralph.agent.md"
+Task T008: "Port iteration behavior to commands/iterate.md"
 
-# Then sequential (depends on scripts + agent profile):
+# Then sequential (depends on scripts + iteration behavior):
 Task T009: "Create commands/run.md thin launcher"
 ```
 

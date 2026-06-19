@@ -40,7 +40,9 @@ With options:
 /speckit.ralph.run --max-iterations 5 --model gpt-5.1
 ```
 
-The command validates prerequisites, sets up the agent profile, and launches the orchestrator script. Each iteration spawns a fresh Copilot process that completes one work unit.
+The command validates prerequisites, resolves configuration, and launches the orchestrator script. Each iteration spawns a fresh agent process that completes one work unit.
+
+Only launcher flags are accepted. Free-form text such as `Implement US1` is ignored because Ralph selects the next incomplete work unit from `tasks.md`.
 
 ## Usage — Path 2: Direct Script
 
@@ -98,7 +100,7 @@ export GH_TOKEN="your-token"
 
 1. Orchestrator validates prerequisites
 2. For each iteration:
-   - Spawns fresh `copilot --agent speckit.ralph` process
+   - Spawns fresh `copilot --agent speckit.ralph.iterate` process
    - Agent reads `tasks.md` and `progress.md`
    - Agent identifies first incomplete work unit
    - Agent implements tasks, marks `[x]` in `tasks.md`

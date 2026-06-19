@@ -3,7 +3,7 @@
 ## speckit.ralph.run
 
 **File**: `commands/run.md`
-**Purpose**: Thin launcher — validates prerequisites, ensures agent profile, delegates to orchestrator script
+**Purpose**: Thin launcher — validates prerequisites, resolves configuration, delegates to orchestrator script
 **Invoked by**: User via `/speckit.ralph.run` in agent session
 
 ### Frontmatter
@@ -11,19 +11,19 @@
 ```yaml
 ---
 description: "Run the ralph autonomous implementation loop"
-scripts:
-  ps: scripts/powershell/ralph-loop.ps1
-  sh: scripts/bash/ralph-loop.sh
 ---
 ```
 
 ### Required Behavior (agent instructions)
 
-1. **Parse `$ARGUMENTS`** for optional flags:
+1. **Parse `$ARGUMENTS` as launcher arguments only**:
    - `--max-iterations N` / `-n N` (default: from config or 10)
    - `--model MODEL` / `-m MODEL` (default: from config or `claude-sonnet-4.6`)
+   - `--agent-cli CLI` (default: from config or `copilot`)
    - `--verbose` / `-v` (default: false)
-   - `--list-models` / `-l` (list available models and exit)
+   - Ignore free-form text such as `Implement US1` after warning that Ralph selects work from `tasks.md`
+   - Stop with a clear error for unknown flags or malformed flag values
+   - MUST NOT implement tasks, edit project files, mark checkboxes, create commits, or run `speckit.ralph.iterate` inline
 
 2. **Validate prerequisites** (all MUST pass):
    | Check | Method | Failure Action |
@@ -33,35 +33,33 @@ scripts:
    | Git repository | `git rev-parse --git-dir` | Print error, stop |
    | Feature branch active | `git branch --show-current` | Print error, stop |
 
-3. **Ensure agent profile**:
-   - Check if `.github/agents/speckit.ralph.agent.md` exists in project root
-   - If missing, copy from extension's `agents/speckit.ralph.agent.md`
-   - If extension directory unknown, print warning with manual copy instructions
-
-4. **Load config**:
+3. **Load config**:
    - Read `.specify/extensions/ralph/ralph-config.yml` if exists
    - Apply env overrides (`SPECKIT_RALPH_*`)
    - CLI arguments override all
 
-5. **Launch orchestrator**:
+4. **Launch orchestrator**:
    - Detect platform: PowerShell on Windows, Bash on Unix
-   - Locate script: `{SCRIPT}` (rewritten from frontmatter)
+   - Locate script under `.specify/extensions/ralph/scripts/`
    - Execute with arguments:
      ```
      # PowerShell
-     powershell -ExecutionPolicy Bypass -File {script} -FeatureName {name} -TasksPath {path} -SpecDir {dir} -MaxIterations {n} -Model {model} [-DetailedOutput]
-     
+     powershell -ExecutionPolicy Bypass -File {script} -FeatureName {name} -TasksPath {path} -SpecDir {dir} -MaxIterations {n} -Model {model} -AgentCli {agent_cli} [-DetailedOutput]
+
      # Bash
-     bash {script} --feature-name {name} --tasks-path {path} --spec-dir {dir} --max-iterations {n} --model {model} [--verbose]
+     bash {script} --feature-name {name} --tasks-path {path} --spec-dir {dir} --max-iterations {n} --model {model} --agent-cli {agent_cli} [--verbose]
      ```
 
-### Exit Codes
+### Exit Behavior
 
-| Code | Meaning |
-|------|---------|
-| 0 | All tasks completed successfully |
-| 1 | Iteration limit reached, consecutive failures, or prerequisite failure |
-| 130 | User interrupted with Ctrl+C |
+The command exits after the orchestrator is launched. It does not wait for the loop outcome.
+
+| Outcome | Meaning |
+|---------|---------|
+| Command completes normally | Orchestrator was launched successfully |
+| Command fails during validation | Prerequisite check, argument parsing, or launch setup failed |
+
+The orchestrator script reports loop completion, iteration limit, consecutive failures, and Ctrl+C interruption in the visible terminal it owns.
 
 ---
 
@@ -69,7 +67,7 @@ scripts:
 
 **File**: `commands/iterate.md`
 **Purpose**: Define single-iteration agent behavior — complete one work unit from tasks.md
-**Invoked by**: Copilot agent via `copilot --agent speckit.ralph -p "Iteration N"` (called by orchestrator script)
+**Invoked by**: Orchestrator via `copilot --agent speckit.ralph.iterate -p "Iteration N"` or equivalent configured agent CLI path
 
 ### Frontmatter
 

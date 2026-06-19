@@ -16,6 +16,7 @@ $ScriptDir = $PSScriptRoot
 $RepoRoot = Resolve-Path (Join-Path $ScriptDir "..\..\..") | Select-Object -ExpandProperty Path
 $FixtureDir = Join-Path $ScriptDir "..\fixtures"
 $SourceScript = Join-Path $RepoRoot "scripts\powershell\ralph-loop.ps1"
+$RunCommand = Join-Path $RepoRoot "commands\run.md"
 
 # Test bookkeeping
 $script:TestsRun = 0
@@ -78,6 +79,18 @@ foreach ($funcDef in $functionDefs) {
     # Define each function in the current scope
     Invoke-Expression $funcDef.Extent.Text
 }
+
+#endregion
+
+#region Tests: run command guardrails
+
+Write-Section "run command guardrails"
+
+$runCommandText = Get-Content $RunCommand -Raw
+Assert-True "run treats input as launcher arguments only" ($runCommandText -match "launcher arguments only")
+Assert-True "run ignores free-form implementation requests" ($runCommandText -match "Free-form requests such as")
+Assert-True "run forbids inline implementation" ($runCommandText -match "MUST NOT.*implement tasks")
+Assert-True "run warns that ignored text comes from tasks.md scope" ($runCommandText -match "Ralph selects work from.*tasks.md")
 
 #endregion
 

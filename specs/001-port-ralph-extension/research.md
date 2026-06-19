@@ -23,7 +23,7 @@
 1. **Remove `common.ps1`/`common.sh` dependency**: These are spec-kit core scripts. The extension scripts must be fully self-contained. The only usage is optional — inline what's needed or skip.
 2. **Config file loading**: Add loading of `ralph-config.yml` from `.specify/extensions/ralph/` for defaults (model, max iterations, agent CLI path). Script parameters still override config values.
 3. **Agent CLI path**: Read from config's `agent_cli` field instead of hardcoding `copilot`. Default to `copilot` if not configured.
-4. **Agent name**: The scripts reference `--agent speckit.ralph` — keep this unchanged since the agent profile name is stable.
+4. **Agent name**: The scripts reference the registered iteration command/agent name `speckit.ralph.iterate`.
 
 **Alternatives Considered**:
 - Rewrite scripts from scratch: Rejected — existing scripts are proven and handle all edge cases (Ctrl+C, consecutive failures, completion detection)
@@ -35,23 +35,20 @@
 
 ---
 
-## R3: Agent File Placement Strategy
+## R3: Command Registration Strategy
 
-**Decision**: Extension bundles `speckit.ralph.agent.md`; the `run.md` command handles placement into `.github/agents/` as a prerequisite step
+**Decision**: The extension provides behavior through registered command files. `commands/run.md` is the launcher and `commands/iterate.md` is the agent-facing iteration behavior.
 
-**Rationale**: The spec-kit extension system's `CommandRegistrar` currently only supports Claude (`.claude/commands/` registration via `register_commands_for_claude()`). Copilot reads agent profiles from `.github/agents/*.agent.md`. Since the extension system has no `register_commands_for_copilot()` method, the extension must handle agent file placement itself.
+**Rationale**: The current implementation generates the agent/command surface from extension command files, so a separate bundled `agents/speckit.ralph.agent.md` file is no longer required. Keeping the behavior in command files avoids drift between launcher instructions, Copilot invocation, and Codex stdin invocation.
 
-The `run.md` command (thin launcher) checks for `.github/agents/speckit.ralph.agent.md` in the target project. If missing, it copies from the extension's `agents/` directory. This is:
-- Self-contained (no core changes needed)
-- Idempotent (safe to run repeatedly)
-- Transparent (user sees the setup step)
+The `run.md` command must not perform implementation work. It validates prerequisites, resolves configuration, and launches the orchestrator. The orchestrator then invokes the registered `speckit.ralph.iterate` behavior for each fresh context.
 
 **Alternatives Considered**:
-- Contribute `register_commands_for_copilot()` to spec-kit core: Rejected — out of scope for this extension; would require core PR
+- Keep a separate bundled agent profile: Rejected — creates duplicate behavior and stale file references
 - Require manual copy: Rejected — violates SC-001 (install + run with two commands, no additional manual config)
-- Post-install hook: Rejected — extension system has no post-install hook event
+- Post-install hook: Rejected — unnecessary for the command-file registration path
 
-**Key Detail**: The agent profile is stored at `agents/speckit.ralph.agent.md` in the extension root (NOT in `.github/agents/` which is the repo's own dev agent). During `run.md` prerequisite validation, it copies to the target project's `.github/agents/`.
+**Key Detail**: Free-form text passed to `speckit.ralph.run` is not implementation scope. The launcher warns and ignores it because work selection happens inside `speckit.ralph.iterate` from `tasks.md`.
 
 ---
 
@@ -63,16 +60,16 @@ The `run.md` command (thin launcher) checks for `.github/agents/speckit.ralph.ag
 - **Role**: User-facing entry point invoked via `/speckit.ralph.run` in an agent session
 - **Behavior**: 
   1. Validate prerequisites (copilot CLI, tasks.md, git repo, feature branch)
-  2. Ensure agent profile is placed in `.github/agents/`
+  2. Resolve configuration and launcher arguments
   3. Detect platform (PowerShell or Bash)
   4. Locate orchestrator script in extension directory
   5. Launch script with configured parameters
-- **Does NOT**: Contain loop logic, manage iterations, track progress
+- **Does NOT**: Contain loop logic, manage iterations, track progress, or implement task work inline
 
 ### `speckit.ralph.iterate` (single iteration)  
 - **Role**: Agent-facing command invoked BY the orchestrator script for each iteration
 - **Behavior**: Read tasks.md → identify first incomplete work unit → implement it → update tasks.md checkboxes → append to progress.md → commit if work unit complete
-- **Invoked by**: `copilot --agent speckit.ralph -p "Iteration N"` from the orchestrator script
+- **Invoked by**: `copilot --agent speckit.ralph.iterate -p "Iteration N"` from the orchestrator script
 
 ### Pipeline Flow
 ```
@@ -148,7 +145,7 @@ agent_cli: "copilot"
    ```
    These paths become `.specify/scripts/bash/check-prerequisites.sh` and `.specify/scripts/powershell/check-prerequisites.ps1` after registration (core spec-kit scripts).
 
-2. **Agent profile reference**: The iterate command references `speckit.ralph` agent. Since the `run.md` command ensures the agent profile is placed, iterate can assume it exists.
+2. **Registered command reference**: The orchestrator invokes `speckit.ralph.iterate` through the configured agent CLI.
 
 3. **Content**: The iterate command body from `templates/commands/ralph.md` (121 lines) is mature and comprehensive. Port with minimal changes:
    - Update header description to reference extension context
@@ -158,18 +155,18 @@ agent_cli: "copilot"
 
 ---
 
-## R7: Porting the Agent Profile
+## R7: Porting Iteration Command Behavior
 
-**Decision**: Port `speckit.ralph.agent.md` with minimal modifications
+**Decision**: Superseded by the registered command-file approach. Keep iteration behavior in `commands/iterate.md`.
 
-**Source**: `C:\Users\Rubis\Projects\spec-kit\.github\agents\speckit.ralph.agent.md` (184 lines)
+**Source**: `C:\Users\Rubis\Projects\spec-kit\templates\commands\ralph.md`
 
 **Changes Needed**:
-1. **Script reference in step 1**: The agent profile references `.specify/scripts/powershell/check-prerequisites.ps1`. This is a core spec-kit script that exists in any initialized project. Keep unchanged.
-2. **Work unit scope**: The agent profile defines work unit as "smallest of: one phase, one user story, one logical grouping." Keep unchanged.
-3. **Extension context**: Add a note that this profile is provided by the ralph extension, but avoid breaking the prompt structure.
+1. **Script reference in step 1**: The iterate command references `.specify/scripts/powershell/check-prerequisites.ps1`. This is a core spec-kit script that exists in any initialized project. Keep unchanged.
+2. **Work unit scope**: The iterate command constrains work to one user story per invocation. Keep unchanged.
+3. **Launcher boundary**: Keep `commands/run.md` limited to launch orchestration so user text like `Implement US1` cannot override it.
 
-**Rationale**: The agent profile is the most critical piece — it defines exactly how the AI behaves during each iteration. Minimal changes reduce risk of behavioral regressions.
+**Rationale**: The iteration command is the critical behavior surface. Duplicating it in a separate agent profile increases the chance of divergent instructions.
 
 ---
 
