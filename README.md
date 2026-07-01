@@ -7,7 +7,7 @@ Autonomous implementation loop for [spec-kit](https://github.com/github/spec-kit
 | Requirement | Why |
 |---|---|
 | [spec-kit](https://github.com/github/spec-kit) (`specify` CLI) | Extension host — provides project structure and task management |
-| [GitHub Copilot CLI](https://docs.github.com/en/copilot) or [OpenAI Codex CLI](https://developers.openai.com/codex/cli) | Agent CLI used to execute each iteration (`copilot` is the default) |
+| [GitHub Copilot CLI](https://docs.github.com/en/copilot), [OpenAI Codex CLI](https://developers.openai.com/codex/cli), or [Claude Code](https://docs.claude.com/en/docs/claude-code) | Agent CLI used to execute each iteration (`copilot` is the default) |
 | [Git](https://git-scm.com/) | Version control — Ralph commits completed work units automatically |
 
 Your project must be initialized with `specify init` and have a feature branch checked out with a completed `tasks.md`.
@@ -93,7 +93,7 @@ model: "claude-sonnet-4.6"
 max_iterations: 10
 
 # Path or name of the agent CLI binary
-# Supported: copilot, codex
+# Supported: copilot, codex, claude
 agent_cli: "copilot"
 ```
 
@@ -107,6 +107,7 @@ Ralph supports CLI-specific invocation codepaths selected by `agent_cli`.
 |---|---|---|
 | `copilot` | `copilot --agent speckit.ralph.iterate -p ... --model ... --yolo -s` | Default path. Uses the registered `speckit.ralph.iterate` command/agent generated from the extension command file. |
 | `codex` | `codex exec --json --model ... --sandbox danger-full-access --cd ... -` | Uses Codex non-interactive mode and passes the existing `speckit.ralph.iterate` command text via stdin. |
+| `claude` | `claude -p ... --model ... --dangerously-skip-permissions` | Uses Claude Code print/non-interactive mode. Passes the existing `speckit.ralph.iterate` command text in the prompt (Claude Code has no registered agent to select). `--dangerously-skip-permissions` runs unattended (equivalent to `--permission-mode bypassPermissions`). |
 
 To use Codex:
 
@@ -117,6 +118,16 @@ agent_cli: "codex"
 ```
 
 Install and authenticate the Codex CLI first. Ralph does not store Codex API keys or ChatGPT credentials in its config.
+
+To use Claude Code:
+
+```yaml
+model: "claude-sonnet-4-6"
+max_iterations: 10
+agent_cli: "claude"
+```
+
+Install and authenticate Claude Code (`claude`) first. Ralph passes `--dangerously-skip-permissions` so iterations run unattended — only use this in a trusted working directory. Ralph does not store Anthropic API keys or credentials in its config.
 
 ### Configuration Precedence
 

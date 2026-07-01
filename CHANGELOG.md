@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Official Claude Code support via a dedicated `claude` invocation path (`--dangerously-skip-permissions`) in both Bash and PowerShell orchestrators ([#8](https://github.com/Rubiss-Projects/spec-kit-ralph/issues/8))
+- Regression coverage for Claude CLI detection and the Claude iteration codepath
+
+### Changed
+- Documented `claude` as a supported `agent_cli` value and marked it as an optional tool requirement
+
+### Fixed
+- Agent CLI detection now works on bash 3.2 (the default on macOS); the previous `${var,,}` lowercasing failed with `bad substitution`, causing every `agent_cli` to be reported as unsupported
+- Claude iterations now pass the `speckit.ralph.iterate` command text in the prompt instead of `--agent speckit.ralph.iterate`; Claude Code has no registered agent to select, so the old invocation always failed
+- Completion signal is now recognized only when `<promise>COMPLETE</promise>` stands alone on a line, so agents mentioning the token in prose (e.g. "no `<promise>COMPLETE</promise>`") no longer terminate the loop prematurely
+
 ## [1.1.2] - 2026-06-19
 
 ### Fixed

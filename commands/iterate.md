@@ -88,15 +88,19 @@ APPEND to FEATURE_DIR/progress.md:
 
 ## Stop Conditions
 
-**If ALL tasks in tasks.md are complete** (`[x]`), output exactly:
+**If ALL tasks in tasks.md are complete** (`[x]`), output the following as the final
+line of your response, alone on its own line with no other text or backticks around it:
 
 ```text
 <promise>COMPLETE</promise>
 ```
 
-This signals the ralph loop orchestrator to terminate successfully.
+This signals the ralph loop orchestrator to terminate successfully. The orchestrator only
+recognizes the token when it stands alone on a line.
 
-**If tasks remain**, end your response normally. The next iteration will continue.
+**If tasks remain**, end your response normally and DO NOT write the token anywhere in your
+response — not even to say you are omitting it. Mentioning `<promise>COMPLETE</promise>` in
+prose while tasks remain would falsely terminate the loop. The next iteration will continue.
 
 ## Quality Gates
 

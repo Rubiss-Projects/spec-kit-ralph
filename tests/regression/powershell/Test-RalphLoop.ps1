@@ -150,7 +150,9 @@ Assert-Equal "missing file returns empty" 0 $tasks.Count
 
 Write-Section "Test-CompletionSignal"
 
-Assert-True "detects COMPLETE signal" (Test-CompletionSignal -Output "Some output <promise>COMPLETE</promise> more text")
+Assert-True "rejects signal embedded in prose" (-not (Test-CompletionSignal -Output "Some output <promise>COMPLETE</promise> more text"))
+
+Assert-True "rejects negated prose mention (regression)" (-not (Test-CompletionSignal -Output "stopping here; no <promise>COMPLETE</promise>."))
 
 Assert-True "rejects output without signal" (-not (Test-CompletionSignal -Output "Some output without the signal"))
 
@@ -158,6 +160,10 @@ Assert-True "rejects empty string" (-not (Test-CompletionSignal -Output ""))
 
 $multiLine = "line1`n<promise>COMPLETE</promise>`nline3"
 Assert-True "detects signal on its own line" (Test-CompletionSignal -Output $multiLine)
+
+$bt = [char]96  # literal backtick, avoids double-quoted-string escaping ambiguity
+$backtickLine = "line1`n$bt<promise>COMPLETE</promise>$bt`nline3"
+Assert-True "detects signal wrapped in backticks on its own line" (Test-CompletionSignal -Output $backtickLine)
 
 #endregion
 
@@ -204,13 +210,15 @@ Write-Section "Get-AgentCliKind"
 Assert-Equal "detects copilot" "copilot" (Get-AgentCliKind -Cli "copilot")
 Assert-Equal "detects codex" "codex" (Get-AgentCliKind -Cli "codex")
 Assert-Equal "detects codex path" "codex" (Get-AgentCliKind -Cli "C:\Tools\codex.exe")
+Assert-Equal "detects claude" "claude" (Get-AgentCliKind -Cli "claude")
+Assert-Equal "detects claude path" "claude" (Get-AgentCliKind -Cli "C:\Tools\claude.exe")
 Assert-Equal "rejects unsupported cli" "unsupported" (Get-AgentCliKind -Cli "my-custom-cli")
 
 #endregion
 
-#region Tests: New-CodexIterationPrompt
+#region Tests: New-IterationPrompt
 
-Write-Section "New-CodexIterationPrompt"
+Write-Section "New-IterationPrompt"
 
 $tmpPromptDir = Join-Path ([System.IO.Path]::GetTempPath()) "ralph-prompt-$PID"
 New-Item -ItemType Directory -Path $tmpPromptDir -Force | Out-Null
@@ -220,7 +228,7 @@ $script:IterateCommandPath = Join-Path $tmpPromptDir "iterate.md"
 Output <promise>COMPLETE</promise> when done.
 "@ | Set-Content -Path $script:IterateCommandPath -Encoding UTF8
 
-$prompt = New-CodexIterationPrompt -Iteration 7
+$prompt = New-IterationPrompt -Iteration 7
 Assert-True "prompt includes iteration" ($prompt -match "Ralph iteration 7")
 Assert-True "prompt includes iterate command" ($prompt -match "Stop Conditions")
 Assert-True "prompt includes completion signal" ($prompt -match "<promise>COMPLETE</promise>")

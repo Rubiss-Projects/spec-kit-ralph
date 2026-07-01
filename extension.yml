@@ -16,6 +16,8 @@ requires:
       required: false
     - name: "codex"
       required: false
+    - name: "claude"
+      required: false
     - name: "git"
       required: true
 
@@ -48,6 +50,7 @@ tags:
   - "loop"
   - "copilot"
   - "codex"
+  - "claude"
 
 defaults:
   model: "claude-sonnet-4.6"
