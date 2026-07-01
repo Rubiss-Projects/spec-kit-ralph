@@ -243,11 +243,12 @@ function Get-AgentCliKind {
     switch ($cliName) {
         "copilot" { return "copilot" }
         "codex" { return "codex" }
+        "claude" { return "claude" }
         default { return "unsupported" }
     }
 }
 
-function New-CodexIterationPrompt {
+function New-IterationPrompt {
     param([int]$Iteration)
 
     if (Test-Path $IterateCommandPath) {
@@ -341,6 +342,76 @@ function Invoke-CopilotIteration {
     }
 }
 
+function Invoke-ClaudeIteration {
+    param(
+        [string]$Model,
+        [int]$Iteration,
+        [string]$WorkDir,
+        [switch]$Verbose
+    )
+
+    # Claude Code has no registered speckit.ralph.iterate agent (that's a Copilot mechanism),
+    # so inline the iterate command text into the prompt, the same way the codex path does.
+    $prompt = New-IterationPrompt -Iteration $Iteration
+
+    if ($Verbose) {
+        Write-Host "DEBUG: Prompt = Ralph iteration $Iteration using $IterateCommandPath" -ForegroundColor Magenta
+        Write-Host "DEBUG: WorkDir = $WorkDir" -ForegroundColor Magenta
+        Write-Host "DEBUG: AgentCLI = $AgentCli" -ForegroundColor Magenta
+    }
+
+    try {
+        $originalDir = Get-Location
+        if ($WorkDir -and (Test-Path $WorkDir)) {
+            Push-Location $WorkDir
+            if ($Verbose) {
+                Write-Host "DEBUG: Changed to $WorkDir" -ForegroundColor Magenta
+            }
+        }
+
+        $prevOutputEncoding = $OutputEncoding
+        $prevConsoleEncoding = [Console]::OutputEncoding
+        $OutputEncoding = [System.Text.Encoding]::UTF8
+        [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+
+        try {
+            Write-Host ""
+            Write-Host "--- Claude Agent Output ---" -ForegroundColor DarkCyan
+            $outputLines = @()
+            # Claude Code uses --dangerously-skip-permissions for unattended execution (vs copilot's --yolo -s)
+            & $AgentCli -p $prompt --model $Model --dangerously-skip-permissions 2>&1 | ForEach-Object {
+                $line = if ($_ -is [System.Management.Automation.ErrorRecord]) { $_.Exception.Message } else { $_ }
+                Write-Host $line
+                $outputLines += $line
+            }
+            $output = $outputLines -join "`n"
+            $exitCode = $LASTEXITCODE
+            Write-Host "--- End Agent Output ---" -ForegroundColor DarkCyan
+            Write-Host ""
+        }
+        finally {
+            $OutputEncoding = $prevOutputEncoding
+            [Console]::OutputEncoding = $prevConsoleEncoding
+            if ($WorkDir -and (Test-Path $WorkDir)) {
+                Pop-Location
+            }
+        }
+
+        if ($Verbose) {
+            Write-Host "DEBUG: claude exit code = $exitCode" -ForegroundColor Magenta
+        }
+    }
+    catch {
+        $output = "Error invoking claude: $_"
+        $exitCode = 1
+    }
+
+    return @{
+        Output = $output
+        ExitCode = $exitCode
+    }
+}
+
 function Invoke-CodexIteration {
     param(
         [string]$Model,
@@ -349,7 +420,7 @@ function Invoke-CodexIteration {
         [switch]$Verbose
     )
 
-    $prompt = New-CodexIterationPrompt -Iteration $Iteration
+    $prompt = New-IterationPrompt -Iteration $Iteration
 
     if ($Verbose) {
         Write-Host "DEBUG: Prompt = Ralph iteration $Iteration using $IterateCommandPath" -ForegroundColor Magenta
@@ -437,9 +508,10 @@ function Invoke-AgentIteration {
     switch ($agentKind) {
         "copilot" { return Invoke-CopilotIteration -Model $Model -Iteration $Iteration -WorkDir $WorkDir -Verbose:$Verbose }
         "codex" { return Invoke-CodexIteration -Model $Model -Iteration $Iteration -WorkDir $WorkDir -Verbose:$Verbose }
+        "claude" { return Invoke-ClaudeIteration -Model $Model -Iteration $Iteration -WorkDir $WorkDir -Verbose:$Verbose }
         default {
             Write-Host "Unsupported agent CLI: $AgentCli" -ForegroundColor Red
-            Write-Host "Supported agent CLIs: copilot, codex" -ForegroundColor Red
+            Write-Host "Supported agent CLIs: copilot, codex, claude" -ForegroundColor Red
             return @{
                 Output = "Unsupported agent CLI: $AgentCli"
                 ExitCode = 2
@@ -450,8 +522,11 @@ function Invoke-AgentIteration {
 
 function Test-CompletionSignal {
     param([string]$Output)
-    
-    return $Output -match '<promise>COMPLETE</promise>'
+
+    # Only honor the signal when it stands alone on a line (ignoring surrounding
+    # whitespace/backticks). Agents often mention the token in prose — e.g.
+    # "stopping here; no <promise>COMPLETE</promise>" — which must NOT complete the loop.
+    return $Output -match '(?m)^[\s`]*<promise>COMPLETE</promise>[\s`]*$'
 }
 
 #endregion

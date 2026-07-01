@@ -94,10 +94,12 @@ extract_functions() {
     sed -n '/^initialize_progress_file()/,/^}/p' "$SOURCE_SCRIPT"
     # Extract get_agent_cli_kind
     sed -n '/^get_agent_cli_kind()/,/^}/p' "$SOURCE_SCRIPT"
-    # Extract build_codex_iteration_prompt
-    sed -n '/^build_codex_iteration_prompt()/,/^}/p' "$SOURCE_SCRIPT"
+    # Extract build_iteration_prompt
+    sed -n '/^build_iteration_prompt()/,/^}/p' "$SOURCE_SCRIPT"
     # Extract invoke_codex_iteration
     sed -n '/^invoke_codex_iteration()/,/^}/p' "$SOURCE_SCRIPT"
+    # Extract invoke_claude_iteration
+    sed -n '/^invoke_claude_iteration()/,/^}/p' "$SOURCE_SCRIPT"
     # Extract test_completion_signal
     sed -n '/^test_completion_signal()/,/^}/p' "$SOURCE_SCRIPT"
     # Extract load_ralph_config
@@ -163,7 +165,9 @@ assert_eq "single-line output (regression #1)" "1" "$line_count"
 
 section "test_completion_signal"
 
-assert_true "detects COMPLETE signal" test_completion_signal "Some output <promise>COMPLETE</promise> more text"
+assert_false "rejects signal embedded in prose" test_completion_signal "Some output <promise>COMPLETE</promise> more text"
+
+assert_false "rejects negated prose mention (regression)" test_completion_signal "stopping here; no <promise>COMPLETE</promise>."
 
 assert_false "rejects output without signal" test_completion_signal "Some output without the signal"
 
@@ -172,6 +176,10 @@ assert_false "rejects empty string" test_completion_signal ""
 assert_true "detects signal on its own line" test_completion_signal "line1
 <promise>COMPLETE</promise>
 line3"
+
+assert_true "detects signal wrapped in backticks on its own line" test_completion_signal 'line1
+`<promise>COMPLETE</promise>`
+line3'
 
 #endregion
 
@@ -235,13 +243,15 @@ assert_eq "detects copilot" "copilot" "$(get_agent_cli_kind "copilot")"
 assert_eq "detects codex" "codex" "$(get_agent_cli_kind "codex")"
 assert_eq "detects codex path" "codex" "$(get_agent_cli_kind "/usr/local/bin/codex")"
 assert_eq "detects codex exe path" "codex" "$(get_agent_cli_kind "C:\\Tools\\codex.exe")"
+assert_eq "detects claude" "claude" "$(get_agent_cli_kind "claude")"
+assert_eq "detects claude path" "claude" "$(get_agent_cli_kind "/usr/local/bin/claude")"
 assert_eq "rejects unsupported cli" "unsupported" "$(get_agent_cli_kind "my-custom-cli")"
 
 #endregion
 
-#region Tests: build_codex_iteration_prompt
+#region Tests: build_iteration_prompt
 
-section "build_codex_iteration_prompt"
+section "build_iteration_prompt"
 
 TMP_PROMPT_DIR=$(mktemp -d)
 ITERATE_COMMAND_PATH="$TMP_PROMPT_DIR/iterate.md"
@@ -250,7 +260,7 @@ cat > "$ITERATE_COMMAND_PATH" << 'PROMPT'
 Output <promise>COMPLETE</promise> when done.
 PROMPT
 
-prompt=$(build_codex_iteration_prompt 7)
+prompt=$(build_iteration_prompt 7)
 assert_true "prompt includes iteration" grep -q "Ralph iteration 7" <<< "$prompt"
 assert_true "prompt includes iterate command" grep -q "Stop Conditions" <<< "$prompt"
 assert_true "prompt includes completion signal" grep -q "<promise>COMPLETE</promise>" <<< "$prompt"
@@ -286,6 +296,41 @@ assert_eq "propagates codex exit code" "7" "$codex_exit"
 assert_true "captures codex output" grep -q "fake failure" <<< "$codex_output"
 
 rm -rf "$TMP_CODEX_DIR"
+
+#endregion
+
+#region Tests: invoke_claude_iteration
+
+section "invoke_claude_iteration"
+
+TMP_CLAUDE_DIR=$(mktemp -d)
+FAKE_CLAUDE="$TMP_CLAUDE_DIR/claude"
+cat > "$FAKE_CLAUDE" << 'FAKECLAUDE'
+#!/usr/bin/env bash
+# Echo args so we can assert the claude-specific flags are used
+echo "ARGS: $*"
+echo "fake claude failure"
+exit 9
+FAKECLAUDE
+chmod +x "$FAKE_CLAUDE"
+
+AGENT_CLI="$FAKE_CLAUDE"
+VERBOSE=false
+ITERATE_COMMAND_PATH="$TMP_CLAUDE_DIR/iterate.md"
+echo "Fake iterate command" > "$ITERATE_COMMAND_PATH"
+
+set +e
+claude_output=$(invoke_claude_iteration "fake-model" 1 "$TMP_CLAUDE_DIR" 2>/dev/null)
+claude_exit=$?
+set -e
+
+assert_eq "propagates claude exit code" "9" "$claude_exit"
+assert_true "captures claude output" grep -q "fake claude failure" <<< "$claude_output"
+assert_true "uses --dangerously-skip-permissions flag" grep -q -- "--dangerously-skip-permissions" <<< "$claude_output"
+# Claude Code has no registered speckit.ralph.iterate agent, so --agent must NOT be passed
+assert_false "does not pass --agent flag" grep -q -- "--agent" <<< "$claude_output"
+
+rm -rf "$TMP_CLAUDE_DIR"
 
 #endregion
 
