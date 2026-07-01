@@ -245,7 +245,8 @@ get_agent_cli_kind() {
     local cli_name
     cli=${cli//\\//}
     cli_name=$(basename "$cli")
-    cli_name=${cli_name,,}
+    # tr (not ${var,,}) so this works on bash 3.2, the default on macOS
+    cli_name=$(printf '%s' "$cli_name" | tr '[:upper:]' '[:lower:]')
     cli_name=${cli_name%.exe}
     cli_name=${cli_name%.cmd}
     cli_name=${cli_name%.bat}
@@ -253,11 +254,12 @@ get_agent_cli_kind() {
     case "$cli_name" in
         copilot) echo "copilot" ;;
         codex) echo "codex" ;;
+        claude) echo "claude" ;;
         *) echo "unsupported" ;;
     esac
 }
 
-build_codex_iteration_prompt() {
+build_iteration_prompt() {
     local iteration=$1
     local command_text=""
 
@@ -335,13 +337,74 @@ invoke_copilot_iteration() {
     return $exit_code
 }
 
+invoke_claude_iteration() {
+    local model=$1
+    local iteration=$2
+    local work_dir=$3
+
+    # Claude Code has no registered speckit.ralph.iterate agent (that's a Copilot mechanism),
+    # so inline the iterate command text into the prompt, the same way the codex path does.
+    local prompt
+    prompt=$(build_iteration_prompt "$iteration")
+
+    if [[ "$VERBOSE" == "true" ]]; then
+        echo -e "\033[35mDEBUG: Prompt = Ralph iteration $iteration using $ITERATE_COMMAND_PATH\033[0m" >&2
+        echo -e "\033[35mDEBUG: WorkDir = $work_dir\033[0m" >&2
+        echo -e "\033[35mDEBUG: AgentCLI = $AGENT_CLI\033[0m" >&2
+    fi
+
+    local original_dir
+    original_dir=$(pwd)
+    if [[ -n "$work_dir" && -d "$work_dir" ]]; then
+        cd "$work_dir"
+        if [[ "$VERBOSE" == "true" ]]; then
+            echo -e "\033[35mDEBUG: Changed to $work_dir\033[0m" >&2
+        fi
+    fi
+
+    echo "" >&2
+    echo -e "\033[36m--- Claude Agent Output ---\033[0m" >&2
+
+    local exit_code=0
+    local output_file
+    output_file=$(mktemp)
+
+    # Claude Code uses --dangerously-skip-permissions for unattended execution (vs copilot's --yolo -s).
+    # Pipe through a loop and read PIPESTATUS so the agent exit code survives the redirection.
+    set +e
+    "$AGENT_CLI" -p "$prompt" --model "$model" --dangerously-skip-permissions 2>&1 | while IFS= read -r line; do
+        echo "$line" >&2
+        printf '%s\n' "$line" >> "$output_file"
+    done
+    exit_code=${PIPESTATUS[0]}
+    set -e
+
+    echo -e "\033[36m--- End Agent Output ---\033[0m" >&2
+    echo "" >&2
+
+    if [[ -n "$work_dir" && -d "$work_dir" ]]; then
+        cd "$original_dir"
+    fi
+
+    if [[ "$VERBOSE" == "true" ]]; then
+        echo -e "\033[35mDEBUG: $AGENT_CLI exit code = $exit_code\033[0m" >&2
+    fi
+
+    local output
+    output=$(cat "$output_file")
+    rm -f "$output_file"
+
+    echo "$output"
+    return $exit_code
+}
+
 invoke_codex_iteration() {
     local model=$1
     local iteration=$2
     local work_dir=$3
 
     local prompt
-    prompt=$(build_codex_iteration_prompt "$iteration")
+    prompt=$(build_iteration_prompt "$iteration")
 
     if [[ "$VERBOSE" == "true" ]]; then
         echo -e "\033[35mDEBUG: Prompt = Ralph iteration $iteration using $ITERATE_COMMAND_PATH\033[0m" >&2
@@ -399,9 +462,12 @@ invoke_agent_iteration() {
         codex)
             invoke_codex_iteration "$model" "$iteration" "$work_dir"
             ;;
+        claude)
+            invoke_claude_iteration "$model" "$iteration" "$work_dir"
+            ;;
         *)
             echo "Unsupported agent CLI: $AGENT_CLI" >&2
-            echo "Supported agent CLIs: copilot, codex" >&2
+            echo "Supported agent CLIs: copilot, codex, claude" >&2
             return 2
             ;;
     esac
@@ -409,7 +475,10 @@ invoke_agent_iteration() {
 
 test_completion_signal() {
     local output=$1
-    echo "$output" | grep -q '<promise>COMPLETE</promise>'
+    # Only honor the signal when it stands alone on a line (ignoring surrounding
+    # whitespace/backticks). Agents often mention the token in prose — e.g.
+    # "stopping here; no <promise>COMPLETE</promise>" — which must NOT complete the loop.
+    echo "$output" | grep -Eq '^[[:space:]`]*<promise>COMPLETE</promise>[[:space:]`]*$'
 }
 
 print_summary() {
