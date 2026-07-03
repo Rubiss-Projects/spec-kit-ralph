@@ -266,7 +266,7 @@ get_specify_integration_field() {
 
     [[ -f "$integration_path" ]] || return 0
 
-    sed -nE "s/.*\"$field\"[[:space:]]*:[[:space:]]*\"([^\"]*)\".*/\1/p" "$integration_path" | head -n 1
+    sed -nE "/\"$field\"[[:space:]]*:/ { s/.*\"$field\"[[:space:]]*:[[:space:]]*\"([^\"]*)\".*/\1/p; q; }" "$integration_path"
 }
 
 get_specify_integration_invoke_separator() {
@@ -385,7 +385,7 @@ invoke_copilot_iteration() {
 
     local exit_code=0
     local output_file
-    output_file=$(mktemp)
+    output_file="$(mktemp "${TMPDIR:-/tmp}/ralph-copilot-output.XXXXXX")"
 
     set +e
     if is_copilot_skills_mode "$invoke_separator"; then
