@@ -105,7 +105,7 @@ Ralph supports CLI-specific invocation codepaths selected by `agent_cli`.
 
 | `agent_cli` | Invocation shape | Notes |
 |---|---|---|
-| `copilot` | `copilot --agent speckit.ralph.iterate -p ...` or `copilot -p "/speckit-ralph-iterate ..."` | Default path. Resolves the registered command/skill name from `.specify/integration.json`: dot separator uses `--agent speckit.ralph.iterate`; dash/skills mode invokes `/speckit-ralph-iterate` in the prompt. Spec Kit integration options such as `--skills` are not passed as Copilot runtime flags. |
+| `copilot` | `copilot --agent speckit.ralph.iterate -p ... --model ... --yolo -s` or `copilot -p "/speckit-ralph-iterate ..." --model ... --yolo -s` | Default path. Resolves the registered command/skill name from `.specify/integration.json`: dot separator uses `--agent speckit.ralph.iterate`; dash/skills mode invokes `/speckit-ralph-iterate` in the prompt. Spec Kit integration options such as `--skills` are not passed as Copilot runtime flags. |
 | `codex` | `codex exec --json --model ... --sandbox danger-full-access --cd ... -` | Uses Codex non-interactive mode and passes the existing `speckit.ralph.iterate` command text via stdin. |
 | `claude` | `claude -p ... --model ... --dangerously-skip-permissions` | Uses Claude Code print/non-interactive mode. Passes the existing `speckit.ralph.iterate` command text in the prompt (Claude Code has no registered agent to select). `--dangerously-skip-permissions` runs unattended (equivalent to `--permission-mode bypassPermissions`). |
 
