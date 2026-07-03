@@ -291,6 +291,16 @@ assert_eq "resolves copilot skills agent name" "speckit-ralph-iterate" "$agent_n
 cat > "$TMP_INTEGRATION_REPO/.specify/integration.json" << 'JSON'
 {
   "integration": "copilot",
+  "invoke_separator": ".",
+  "invoke_separator": "-"
+}
+JSON
+
+assert_eq "field reader returns first matching value" "." "$(get_specify_integration_field "$TMP_INTEGRATION_REPO" "invoke_separator")"
+
+cat > "$TMP_INTEGRATION_REPO/.specify/integration.json" << 'JSON'
+{
+  "integration": "copilot",
   "raw_options": "--skills"
 }
 JSON
