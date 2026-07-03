@@ -282,6 +282,7 @@ Write-Section "Test-AgentResolutionFailure"
 Assert-True "detects missing agent" (Test-AgentResolutionFailure -Output "No such agent: speckit.ralph.iterate, available:")
 Assert-True "detects missing skill" (Test-AgentResolutionFailure -Output "No such skill: speckit-ralph-iterate")
 Assert-True "detects unknown option" (Test-AgentResolutionFailure -Output "error: unknown option '--skills'")
+Assert-True "ignores bare unknown option prose" (-not (Test-AgentResolutionFailure -Output "The docs mention an unknown option in prose."))
 Assert-True "ignores unrelated failure output" (-not (Test-AgentResolutionFailure -Output "model request failed"))
 
 #endregion

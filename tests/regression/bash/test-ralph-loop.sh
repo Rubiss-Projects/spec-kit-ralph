@@ -318,6 +318,7 @@ section "is_agent_resolution_failure"
 assert_true "detects missing agent" is_agent_resolution_failure "No such agent: speckit.ralph.iterate, available:"
 assert_true "detects missing skill" is_agent_resolution_failure "No such skill: speckit-ralph-iterate"
 assert_true "detects unknown option" is_agent_resolution_failure "error: unknown option '--skills'"
+assert_false "ignores bare unknown option prose" is_agent_resolution_failure "The docs mention an unknown option in prose."
 assert_false "ignores unrelated failure output" is_agent_resolution_failure "model request failed"
 
 #endregion
