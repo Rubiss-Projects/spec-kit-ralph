@@ -98,8 +98,11 @@ Assert-True "run warns that ignored text comes from tasks.md scope" ($runCommand
 
 Write-Section "Get-IncompleteTaskCount"
 
+$missingPath = Join-Path ([System.IO.Path]::GetTempPath()) "nonexistent_ralph_test_$PID.md"
+$missingRepo = Join-Path ([System.IO.Path]::GetTempPath()) "nonexistent_ralph_test_$PID"
+
 # Missing file -> 0
-$result = Get-IncompleteTaskCount -Path "C:\nonexistent_ralph_test_$PID.md"
+$result = Get-IncompleteTaskCount -Path $missingPath
 Assert-Equal "missing file returns 0" 0 $result
 
 # Empty file -> 0
@@ -141,7 +144,7 @@ $tasks = Get-IncompleteTasks -Path (Join-Path $FixtureDir "tasks-all-done.md")
 Assert-Equal "all done returns empty" 0 $tasks.Count
 
 # Missing file -> empty array
-$tasks = Get-IncompleteTasks -Path "C:\nonexistent_ralph_test_$PID.md"
+$tasks = Get-IncompleteTasks -Path $missingPath
 Assert-Equal "missing file returns empty" 0 $tasks.Count
 
 #endregion
@@ -184,7 +187,7 @@ Assert-Equal "loads max_iterations from config" "5" $config["max_iterations"]
 Assert-Equal "loads agent_cli from config" "my-custom-cli" $config["agent_cli"]
 
 # Missing config -> empty hashtable
-$config = Read-RalphConfig -RepoRoot "C:\nonexistent_ralph_test_$PID"
+$config = Read-RalphConfig -RepoRoot $missingRepo
 Assert-Equal "missing config returns empty" 0 $config.Count
 
 # Local config overrides project config
@@ -216,6 +219,73 @@ Assert-Equal "rejects unsupported cli" "unsupported" (Get-AgentCliKind -Cli "my-
 
 #endregion
 
+#region Tests: Spec Kit integration command resolution
+
+Write-Section "Spec Kit integration command resolution"
+
+$tmpIntegrationRepo = Join-Path ([System.IO.Path]::GetTempPath()) "ralph-integration-$PID"
+$tmpSpecifyDir = Join-Path $tmpIntegrationRepo ".specify"
+New-Item -ItemType Directory -Path $tmpSpecifyDir -Force | Out-Null
+
+$integrationConfig = Read-SpecKitIntegrationConfig -RepoRoot $tmpIntegrationRepo
+Assert-Equal "missing integration defaults to dot separator" "." $integrationConfig.invoke_separator
+Assert-Equal "dot separator keeps dotted command" "speckit.ralph.iterate" (Join-IntegrationCommandName -CommandName "speckit.ralph.iterate" -Separator ".")
+Assert-Equal "dash separator builds skills command" "speckit-ralph-iterate" (Join-IntegrationCommandName -CommandName "speckit.ralph.iterate" -Separator "-")
+Assert-True "dash separator enables skills mode" (Test-CopilotSkillsMode -InvokeSeparator "-")
+Assert-True "dot separator disables skills mode" (-not (Test-CopilotSkillsMode -InvokeSeparator "."))
+Assert-Equal "skills mode prompt uses slash command" "/speckit-ralph-iterate Iteration 1 - Complete one work unit from tasks.md" (New-CopilotIterationPrompt -AgentName "speckit-ralph-iterate" -InvokeSeparator "-" -Prompt "Iteration 1 - Complete one work unit from tasks.md")
+Assert-Equal "agent mode prompt is plain prompt" "Iteration 1 - Complete one work unit from tasks.md" (New-CopilotIterationPrompt -AgentName "speckit.ralph.iterate" -InvokeSeparator "." -Prompt "Iteration 1 - Complete one work unit from tasks.md")
+
+@"
+{
+  "integration": "copilot",
+  "raw_options": "--skills",
+  "invoke_separator": "-"
+}
+"@ | Set-Content -Path (Join-Path $tmpSpecifyDir "integration.json") -Encoding UTF8
+
+$integrationConfig = Read-SpecKitIntegrationConfig -RepoRoot $tmpIntegrationRepo
+$agentName = Join-IntegrationCommandName -CommandName "speckit.ralph.iterate" -Separator $integrationConfig.invoke_separator
+
+Assert-Equal "reads copilot dash separator" "-" $integrationConfig.invoke_separator
+Assert-Equal "resolves copilot skills agent name" "speckit-ralph-iterate" $agentName
+
+@"
+{
+  "integration": "copilot",
+  "raw_options": "--skills"
+}
+"@ | Set-Content -Path (Join-Path $tmpSpecifyDir "integration.json") -Encoding UTF8
+
+$integrationConfig = Read-SpecKitIntegrationConfig -RepoRoot $tmpIntegrationRepo
+Assert-Equal "raw skills option implies dash separator" "-" $integrationConfig.invoke_separator
+
+@"
+{
+  "integration": "codex",
+  "raw_options": "--skills",
+  "invoke_separator": "-"
+}
+"@ | Set-Content -Path (Join-Path $tmpSpecifyDir "integration.json") -Encoding UTF8
+
+$integrationConfig = Read-SpecKitIntegrationConfig -RepoRoot $tmpIntegrationRepo
+Assert-Equal "ignores non-copilot separator for copilot path" "." $integrationConfig.invoke_separator
+
+Remove-Item $tmpIntegrationRepo -Recurse -Force
+
+#endregion
+
+#region Tests: Test-AgentResolutionFailure
+
+Write-Section "Test-AgentResolutionFailure"
+
+Assert-True "detects missing agent" (Test-AgentResolutionFailure -Output "No such agent: speckit.ralph.iterate, available:")
+Assert-True "detects missing skill" (Test-AgentResolutionFailure -Output "No such skill: speckit-ralph-iterate")
+Assert-True "detects unknown option" (Test-AgentResolutionFailure -Output "error: unknown option '--skills'")
+Assert-True "ignores unrelated failure output" (-not (Test-AgentResolutionFailure -Output "model request failed"))
+
+#endregion
+
 #region Tests: New-IterationPrompt
 
 Write-Section "New-IterationPrompt"
@@ -234,6 +304,49 @@ Assert-True "prompt includes iterate command" ($prompt -match "Stop Conditions")
 Assert-True "prompt includes completion signal" ($prompt -match "<promise>COMPLETE</promise>")
 
 Remove-Item $tmpPromptDir -Recurse -Force
+
+#endregion
+
+#region Tests: Invoke-CopilotIteration
+
+Write-Section "Invoke-CopilotIteration"
+
+$tmpCopilotDir = Join-Path ([System.IO.Path]::GetTempPath()) "ralph-copilot-$PID"
+New-Item -ItemType Directory -Path $tmpCopilotDir -Force | Out-Null
+$fakeCopilot = Join-Path $tmpCopilotDir "copilot"
+@'
+#!/usr/bin/env bash
+printf 'ARGS:'
+for arg in "$@"; do
+    printf ' [%s]' "$arg"
+done
+printf '\n'
+exit 0
+'@ | Set-Content -Path $fakeCopilot -Encoding UTF8
+& chmod +x $fakeCopilot
+
+$script:AgentCli = $fakeCopilot
+
+$result = Invoke-CopilotIteration -Model "fake-model" -Iteration 1 -WorkDir $tmpCopilotDir
+Assert-True "dot mode uses --agent" ($result.Output -match "\[--agent\] \[speckit\.ralph\.iterate\]")
+Assert-True "dot mode sends plain prompt" ($result.Output -match "\[-p\] \[Iteration 1 - Complete one work unit from tasks\.md\]")
+
+$tmpSpecifyDir = Join-Path $tmpCopilotDir ".specify"
+New-Item -ItemType Directory -Path $tmpSpecifyDir -Force | Out-Null
+@"
+{
+  "integration": "copilot",
+  "raw_options": "--skills",
+  "invoke_separator": "-"
+}
+"@ | Set-Content -Path (Join-Path $tmpSpecifyDir "integration.json") -Encoding UTF8
+
+$result = Invoke-CopilotIteration -Model "fake-model" -Iteration 2 -WorkDir $tmpCopilotDir
+Assert-True "skills mode does not use --agent" (-not ($result.Output -match "\[--agent\]"))
+Assert-True "skills mode sends slash command prompt" ($result.Output -match "\[-p\] \[/speckit-ralph-iterate Iteration 2 - Complete one work unit from tasks\.md\]")
+Assert-True "skills mode does not pass --skills runtime flag" (-not ($result.Output -match "\[--skills\]"))
+
+Remove-Item $tmpCopilotDir -Recurse -Force
 
 #endregion
 

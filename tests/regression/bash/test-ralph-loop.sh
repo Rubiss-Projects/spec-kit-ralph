@@ -94,8 +94,18 @@ extract_functions() {
     sed -n '/^initialize_progress_file()/,/^}/p' "$SOURCE_SCRIPT"
     # Extract get_agent_cli_kind
     sed -n '/^get_agent_cli_kind()/,/^}/p' "$SOURCE_SCRIPT"
+    # Extract Spec Kit integration helpers
+    sed -n '/^get_specify_integration_field()/,/^}/p' "$SOURCE_SCRIPT"
+    sed -n '/^get_specify_integration_invoke_separator()/,/^}/p' "$SOURCE_SCRIPT"
+    sed -n '/^build_integration_command_name()/,/^}/p' "$SOURCE_SCRIPT"
+    sed -n '/^is_copilot_skills_mode()/,/^}/p' "$SOURCE_SCRIPT"
+    sed -n '/^build_copilot_iteration_prompt()/,/^}/p' "$SOURCE_SCRIPT"
     # Extract build_iteration_prompt
     sed -n '/^build_iteration_prompt()/,/^}/p' "$SOURCE_SCRIPT"
+    # Extract invoke_copilot_iteration
+    sed -n '/^invoke_copilot_iteration()/,/^}/p' "$SOURCE_SCRIPT"
+    # Extract agent resolution failure helper
+    sed -n '/^is_agent_resolution_failure()/,/^}/p' "$SOURCE_SCRIPT"
     # Extract invoke_codex_iteration
     sed -n '/^invoke_codex_iteration()/,/^}/p' "$SOURCE_SCRIPT"
     # Extract invoke_claude_iteration
@@ -249,6 +259,69 @@ assert_eq "rejects unsupported cli" "unsupported" "$(get_agent_cli_kind "my-cust
 
 #endregion
 
+#region Tests: Spec Kit integration command resolution
+
+section "Spec Kit integration command resolution"
+
+TMP_INTEGRATION_REPO=$(mktemp -d)
+mkdir -p "$TMP_INTEGRATION_REPO/.specify"
+
+assert_eq "missing integration defaults to dot separator" "." "$(get_specify_integration_invoke_separator "$TMP_INTEGRATION_REPO")"
+assert_eq "dot separator keeps dotted command" "speckit.ralph.iterate" "$(build_integration_command_name "speckit.ralph.iterate" ".")"
+assert_eq "dash separator builds skills command" "speckit-ralph-iterate" "$(build_integration_command_name "speckit.ralph.iterate" "-")"
+assert_true "dash separator enables skills mode" is_copilot_skills_mode "-"
+assert_false "dot separator disables skills mode" is_copilot_skills_mode "."
+assert_eq "skills mode prompt uses slash command" "/speckit-ralph-iterate Iteration 1 - Complete one work unit from tasks.md" "$(build_copilot_iteration_prompt "speckit-ralph-iterate" "-" "Iteration 1 - Complete one work unit from tasks.md")"
+assert_eq "agent mode prompt is plain prompt" "Iteration 1 - Complete one work unit from tasks.md" "$(build_copilot_iteration_prompt "speckit.ralph.iterate" "." "Iteration 1 - Complete one work unit from tasks.md")"
+
+cat > "$TMP_INTEGRATION_REPO/.specify/integration.json" << 'JSON'
+{
+  "integration": "copilot",
+  "raw_options": "--skills",
+  "invoke_separator": "-"
+}
+JSON
+
+separator=$(get_specify_integration_invoke_separator "$TMP_INTEGRATION_REPO")
+agent_name=$(build_integration_command_name "speckit.ralph.iterate" "$separator")
+
+assert_eq "reads copilot dash separator" "-" "$separator"
+assert_eq "resolves copilot skills agent name" "speckit-ralph-iterate" "$agent_name"
+
+cat > "$TMP_INTEGRATION_REPO/.specify/integration.json" << 'JSON'
+{
+  "integration": "copilot",
+  "raw_options": "--skills"
+}
+JSON
+
+assert_eq "raw skills option implies dash separator" "-" "$(get_specify_integration_invoke_separator "$TMP_INTEGRATION_REPO")"
+
+cat > "$TMP_INTEGRATION_REPO/.specify/integration.json" << 'JSON'
+{
+  "integration": "codex",
+  "raw_options": "--skills",
+  "invoke_separator": "-"
+}
+JSON
+
+assert_eq "ignores non-copilot separator for copilot path" "." "$(get_specify_integration_invoke_separator "$TMP_INTEGRATION_REPO")"
+
+rm -rf "$TMP_INTEGRATION_REPO"
+
+#endregion
+
+#region Tests: is_agent_resolution_failure
+
+section "is_agent_resolution_failure"
+
+assert_true "detects missing agent" is_agent_resolution_failure "No such agent: speckit.ralph.iterate, available:"
+assert_true "detects missing skill" is_agent_resolution_failure "No such skill: speckit-ralph-iterate"
+assert_true "detects unknown option" is_agent_resolution_failure "error: unknown option '--skills'"
+assert_false "ignores unrelated failure output" is_agent_resolution_failure "model request failed"
+
+#endregion
+
 #region Tests: build_iteration_prompt
 
 section "build_iteration_prompt"
@@ -266,6 +339,48 @@ assert_true "prompt includes iterate command" grep -q "Stop Conditions" <<< "$pr
 assert_true "prompt includes completion signal" grep -q "<promise>COMPLETE</promise>" <<< "$prompt"
 
 rm -rf "$TMP_PROMPT_DIR"
+
+#endregion
+
+#region Tests: invoke_copilot_iteration
+
+section "invoke_copilot_iteration"
+
+TMP_COPILOT_DIR=$(mktemp -d)
+FAKE_COPILOT="$TMP_COPILOT_DIR/copilot"
+cat > "$FAKE_COPILOT" << 'FAKECOPILOT'
+#!/usr/bin/env bash
+printf 'ARGS:'
+for arg in "$@"; do
+    printf ' [%s]' "$arg"
+done
+printf '\n'
+exit 0
+FAKECOPILOT
+chmod +x "$FAKE_COPILOT"
+
+AGENT_CLI="$FAKE_COPILOT"
+VERBOSE=false
+
+copilot_output=$(invoke_copilot_iteration "fake-model" 1 "$TMP_COPILOT_DIR" 2>/dev/null)
+assert_true "dot mode uses --agent" grep -Fq "[--agent] [speckit.ralph.iterate]" <<< "$copilot_output"
+assert_true "dot mode sends plain prompt" grep -Fq "[-p] [Iteration 1 - Complete one work unit from tasks.md]" <<< "$copilot_output"
+
+mkdir -p "$TMP_COPILOT_DIR/.specify"
+cat > "$TMP_COPILOT_DIR/.specify/integration.json" << 'JSON'
+{
+  "integration": "copilot",
+  "raw_options": "--skills",
+  "invoke_separator": "-"
+}
+JSON
+
+copilot_output=$(invoke_copilot_iteration "fake-model" 2 "$TMP_COPILOT_DIR" 2>/dev/null)
+assert_false "skills mode does not use --agent" grep -Fq "[--agent]" <<< "$copilot_output"
+assert_true "skills mode sends slash command prompt" grep -Fq "[-p] [/speckit-ralph-iterate Iteration 2 - Complete one work unit from tasks.md]" <<< "$copilot_output"
+assert_false "skills mode does not pass --skills runtime flag" grep -Fq "[--skills]" <<< "$copilot_output"
+
+rm -rf "$TMP_COPILOT_DIR"
 
 #endregion
 
