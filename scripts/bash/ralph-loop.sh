@@ -284,12 +284,16 @@ get_specify_integration_invoke_separator() {
         return 0
     fi
 
-    if [[ " $raw_options " == *" --skills "* ]]; then
+    if [[ $raw_options =~ (^|[[:space:]])--skills($|[[:space:]]) ]]; then
         printf "-"
         return 0
     fi
 
-    printf "%s" "${separator:-.}"
+    separator=${separator:-.}
+    if [[ "$separator" != "." && "$separator" != "-" ]]; then
+        separator="."
+    fi
+    printf "%s" "$separator"
 }
 
 build_integration_command_name() {

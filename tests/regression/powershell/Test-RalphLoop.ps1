@@ -262,6 +262,16 @@ Assert-Equal "raw skills option implies dash separator" "-" $integrationConfig.i
 
 @"
 {
+  "integration": "copilot",
+  "invoke_separator": "_"
+}
+"@ | Set-Content -Path (Join-Path $tmpSpecifyDir "integration.json") -Encoding UTF8
+
+$integrationConfig = Read-SpecKitIntegrationConfig -RepoRoot $tmpIntegrationRepo
+Assert-Equal "invalid invoke separator falls back to dot" "." $integrationConfig.invoke_separator
+
+@"
+{
   "integration": "codex",
   "raw_options": "--skills",
   "invoke_separator": "-"

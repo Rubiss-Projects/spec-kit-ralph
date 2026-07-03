@@ -288,6 +288,10 @@ agent_name=$(build_integration_command_name "speckit.ralph.iterate" "$separator"
 assert_eq "reads copilot dash separator" "-" "$separator"
 assert_eq "resolves copilot skills agent name" "speckit-ralph-iterate" "$agent_name"
 
+printf '{\n  "integration": "copilot",\n  "raw_options": "--foo\t--skills"\n}\n' > "$TMP_INTEGRATION_REPO/.specify/integration.json"
+
+assert_eq "raw skills option accepts whitespace separators" "-" "$(get_specify_integration_invoke_separator "$TMP_INTEGRATION_REPO")"
+
 cat > "$TMP_INTEGRATION_REPO/.specify/integration.json" << 'JSON'
 {
   "integration": "copilot",
@@ -297,6 +301,15 @@ cat > "$TMP_INTEGRATION_REPO/.specify/integration.json" << 'JSON'
 JSON
 
 assert_eq "field reader returns first matching value" "." "$(get_specify_integration_field "$TMP_INTEGRATION_REPO" "invoke_separator")"
+
+cat > "$TMP_INTEGRATION_REPO/.specify/integration.json" << 'JSON'
+{
+  "integration": "copilot",
+  "invoke_separator": "_"
+}
+JSON
+
+assert_eq "invalid invoke separator falls back to dot" "." "$(get_specify_integration_invoke_separator "$TMP_INTEGRATION_REPO")"
 
 cat > "$TMP_INTEGRATION_REPO/.specify/integration.json" << 'JSON'
 {
