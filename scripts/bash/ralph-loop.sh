@@ -91,7 +91,7 @@ while [[ $# -gt 0 ]]; do
             shift 2
             ;;
         *)
-            echo "Unknown option: $1" >&2
+            printf 'Unknown option: %s\n' "$1" >&2
             exit 1
             ;;
     esac
@@ -99,8 +99,8 @@ done
 
 # Validate required arguments
 if [[ -z "$FEATURE_NAME" || -z "$TASKS_PATH" || -z "$SPEC_DIR" ]]; then
-    echo "Error: Missing required arguments" >&2
-    echo "Usage: $0 --feature-name NAME --tasks-path PATH --spec-dir DIR [--max-iterations N] [--model MODEL] [--agent-cli CLI] [--verbose]" >&2
+    printf '%s\n' "Error: Missing required arguments" >&2
+    printf 'Usage: %s --feature-name NAME --tasks-path PATH --spec-dir DIR [--max-iterations N] [--model MODEL] [--agent-cli CLI] [--verbose]\n' "$0" >&2
     exit 1
 fi
 
@@ -134,10 +134,10 @@ load_ralph_config() {
     for cfg in "$config_path" "$local_config_path"; do
         if [[ -f "$cfg" ]]; then
             while IFS= read -r line; do
-                line=$(echo "$line" | sed 's/^[[:space:]]*//' | sed 's/[[:space:]]*$//')
+                line=$(printf '%s\n' "$line" | sed 's/^[[:space:]]*//' | sed 's/[[:space:]]*$//')
                 [[ -z "$line" || "$line" == \#* ]] && continue
-                key=$(echo "$line" | sed 's/:.*//' | tr -d ' ')
-                value=$(echo "$line" | sed 's/^[^:]*:[[:space:]]*//' | sed 's/^"//' | sed 's/"$//')
+                key=$(printf '%s\n' "$line" | sed 's/:.*//' | tr -d ' ')
+                value=$(printf '%s\n' "$line" | sed 's/^[^:]*:[[:space:]]*//' | sed 's/^"//' | sed 's/"$//')
                 case "$key" in
                     model) CONFIG_MODEL="$value" ;;
                     max_iterations) CONFIG_MAX_ITERATIONS="$value" ;;
@@ -208,12 +208,12 @@ print_status() {
 get_incomplete_task_count() {
     local path="$1"
     if [[ ! -f "$path" ]]; then
-        printf "0"
+        printf '%s\n' "0"
         return 0
     fi
     local count
     count=$(grep -c '^- \[ \]' "$path" 2>/dev/null) || true
-    echo "${count:-0}"
+    printf '%s\n' "${count:-0}"
 }
 
 initialize_progress_file() {
@@ -395,13 +395,13 @@ invoke_copilot_iteration() {
     set +e
     if is_copilot_skills_mode "$invoke_separator"; then
         "$AGENT_CLI" -p "$prompt" --model "$model" --yolo -s 2>&1 | while IFS= read -r line; do
-            echo "$line" >&2
+            printf '%s\n' "$line" >&2
             printf '%s\n' "$line" >> "$output_file"
         done
         exit_code=${PIPESTATUS[0]}
     else
         "$AGENT_CLI" --agent "$agent_name" -p "$prompt" --model "$model" --yolo -s 2>&1 | while IFS= read -r line; do
-            echo "$line" >&2
+            printf '%s\n' "$line" >&2
             printf '%s\n' "$line" >> "$output_file"
         done
         exit_code=${PIPESTATUS[0]}
@@ -471,7 +471,7 @@ invoke_claude_iteration() {
     # Pipe through a loop and read PIPESTATUS so the agent exit code survives the redirection.
     set +e
     "$AGENT_CLI" -p "$prompt" --model "$model" --dangerously-skip-permissions 2>&1 | while IFS= read -r line; do
-        echo "$line" >&2
+        printf '%s\n' "$line" >&2
         printf '%s\n' "$line" >> "$output_file"
     done
     exit_code=${PIPESTATUS[0]}
@@ -492,7 +492,7 @@ invoke_claude_iteration() {
     output=$(cat "$output_file")
     rm -f "$output_file"
 
-    echo "$output"
+    printf '%s\n' "$output"
     return $exit_code
 }
 
@@ -524,7 +524,7 @@ invoke_codex_iteration() {
 
     set +e
     printf '%s' "$prompt" | "$AGENT_CLI" "${codex_args[@]}" - 2>&1 | while IFS= read -r line; do
-        echo "$line" >&2
+        printf '%s\n' "$line" >&2
         printf '%s\n' "$line" >> "$output_file"
     done
     local pipeline_status=("${PIPESTATUS[@]}")
@@ -542,7 +542,7 @@ invoke_codex_iteration() {
     output=$(cat "$output_file")
     rm -f "$output_file"
 
-    echo "$output"
+    printf '%s\n' "$output"
     return $exit_code
 }
 
@@ -564,8 +564,8 @@ invoke_agent_iteration() {
             invoke_claude_iteration "$model" "$iteration" "$work_dir"
             ;;
         *)
-            echo "Unsupported agent CLI: $AGENT_CLI" >&2
-            echo "Supported agent CLIs: copilot, codex, claude" >&2
+            printf 'Unsupported agent CLI: %s\n' "$AGENT_CLI" >&2
+            printf '%s\n' "Supported agent CLIs: copilot, codex, claude" >&2
             return 2
             ;;
     esac
@@ -576,7 +576,7 @@ test_completion_signal() {
     # Only honor the signal when it stands alone on a line (ignoring surrounding
     # whitespace/backticks). Agents often mention the token in prose — e.g.
     # "stopping here; no <promise>COMPLETE</promise>" — which must NOT complete the loop.
-    echo "$output" | grep -Eq '^[[:space:]`]*<promise>COMPLETE</promise>[[:space:]`]*$'
+    printf '%s\n' "$output" | grep -Eq '^[[:space:]`]*<promise>COMPLETE</promise>[[:space:]`]*$'
 }
 
 print_summary() {

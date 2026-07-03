@@ -37,8 +37,8 @@ assert_eq() {
         ((TESTS_PASSED++))
     else
         echo -e "  \033[31mFAIL\033[0m $test_name"
-        echo "         expected: [$expected]"
-        echo "         actual:   [$actual]"
+        printf '         expected: [%s]\n' "$expected"
+        printf '         actual:   [%s]\n' "$actual"
         ((TESTS_FAILED++))
         FAILURES+=("$test_name")
     fi
@@ -54,7 +54,7 @@ assert_true() {
         ((TESTS_PASSED++))
     else
         echo -e "  \033[31mFAIL\033[0m $test_name"
-        echo "         command returned non-zero: $*"
+        printf '         command returned non-zero: %s\n' "$*"
         ((TESTS_FAILED++))
         FAILURES+=("$test_name")
     fi
@@ -67,7 +67,7 @@ assert_false() {
 
     if "$@" >/dev/null 2>&1; then
         echo -e "  \033[31mFAIL\033[0m $test_name"
-        echo "         command should have failed but returned 0: $*"
+        printf '         command should have failed but returned 0: %s\n' "$*"
         ((TESTS_FAILED++))
         FAILURES+=("$test_name")
     else
@@ -166,7 +166,7 @@ assert_true "result is arithmetic-safe (3)" test "$result" -eq 3
 
 # Single-line result (no double output regression)
 result=$(get_incomplete_task_count "$FIXTURE_DIR/tasks-empty.md")
-line_count=$(echo "$result" | wc -l | tr -d ' ')
+line_count=$(printf '%s\n' "$result" | wc -l | tr -d ' ')
 assert_eq "single-line output (regression #1)" "1" "$line_count"
 
 #endregion
@@ -389,10 +389,12 @@ VERBOSE=false
 OLD_TMPDIR="${TMPDIR:-}"
 TMPDIR="$TMP_COPILOT_DIR"
 
-copilot_output=$(invoke_copilot_iteration "fake-model" 1 "$TMP_COPILOT_DIR" 2>/dev/null)
+COPILOT_STDERR="$TMP_COPILOT_DIR/copilot.stderr"
+copilot_output=$(invoke_copilot_iteration "fake-model" 1 "$TMP_COPILOT_DIR" 2>"$COPILOT_STDERR")
 assert_true "dot mode uses --agent" grep -Fq "[--agent] [speckit.ralph.iterate]" <<< "$copilot_output"
 assert_true "dot mode sends plain prompt" grep -Fq "[-p] [Iteration 1 - Complete one work unit from tasks.md]" <<< "$copilot_output"
 assert_true "preserves leading dash output" grep -Fxq -- "-n literal output" <<< "$copilot_output"
+assert_true "streams leading dash output literally" grep -Fxq -- "-n literal output" "$COPILOT_STDERR"
 
 mkdir -p "$TMP_COPILOT_DIR/.specify"
 cat > "$TMP_COPILOT_DIR/.specify/integration.json" << 'JSON'
@@ -434,7 +436,7 @@ mkdir -p "$TMP_FALSE_POSITIVE_REPO/ok" "$TMP_FALSE_POSITIVE_REPO/fail"
 FAKE_COPILOT_OK="$TMP_FALSE_POSITIVE_REPO/ok/copilot"
 cat > "$FAKE_COPILOT_OK" << 'FAKECOPILOTOK'
 #!/usr/bin/env bash
-echo "The docs mention an unknown option, but this is normal model output."
+printf '%s\n' "The docs mention an unknown option, but this is normal model output."
 exit 0
 FAKECOPILOTOK
 chmod +x "$FAKE_COPILOT_OK"
@@ -451,7 +453,7 @@ assert_false "matching output with zero exit does not report unavailable agent" 
 FAKE_COPILOT_FAIL="$TMP_FALSE_POSITIVE_REPO/fail/copilot"
 cat > "$FAKE_COPILOT_FAIL" << 'FAKECOPILOTFAIL'
 #!/usr/bin/env bash
-echo "error: unknown option '--skills'"
+printf '%s\n' "error: unknown option '--skills'"
 exit 2
 FAKECOPILOTFAIL
 chmod +x "$FAKE_COPILOT_FAIL"
@@ -476,7 +478,7 @@ TMP_CODEX_DIR=$(mktemp -d)
 FAKE_CODEX="$TMP_CODEX_DIR/codex"
 cat > "$FAKE_CODEX" << 'FAKECODEX'
 #!/usr/bin/env bash
-echo '{"type":"item.completed","item":{"type":"agent_message","text":"fake failure"}}'
+printf '%s\n' '{"type":"item.completed","item":{"type":"agent_message","text":"fake failure"}}'
 exit 7
 FAKECODEX
 chmod +x "$FAKE_CODEX"
@@ -484,7 +486,7 @@ chmod +x "$FAKE_CODEX"
 AGENT_CLI="$FAKE_CODEX"
 VERBOSE=false
 ITERATE_COMMAND_PATH="$TMP_CODEX_DIR/iterate.md"
-echo "Fake iterate command" > "$ITERATE_COMMAND_PATH"
+printf '%s\n' "Fake iterate command" > "$ITERATE_COMMAND_PATH"
 
 set +e
 codex_output=$(invoke_codex_iteration "fake-model" 1 "$TMP_CODEX_DIR" 2>/dev/null)
@@ -507,8 +509,8 @@ FAKE_CLAUDE="$TMP_CLAUDE_DIR/claude"
 cat > "$FAKE_CLAUDE" << 'FAKECLAUDE'
 #!/usr/bin/env bash
 # Echo args so we can assert the claude-specific flags are used
-echo "ARGS: $*"
-echo "fake claude failure"
+printf '%s\n' "ARGS: $*"
+printf '%s\n' "fake claude failure"
 exit 9
 FAKECLAUDE
 chmod +x "$FAKE_CLAUDE"
@@ -516,7 +518,7 @@ chmod +x "$FAKE_CLAUDE"
 AGENT_CLI="$FAKE_CLAUDE"
 VERBOSE=false
 ITERATE_COMMAND_PATH="$TMP_CLAUDE_DIR/iterate.md"
-echo "Fake iterate command" > "$ITERATE_COMMAND_PATH"
+printf '%s\n' "Fake iterate command" > "$ITERATE_COMMAND_PATH"
 
 set +e
 claude_output=$(invoke_claude_iteration "fake-model" 1 "$TMP_CLAUDE_DIR" 2>/dev/null)
@@ -549,7 +551,7 @@ assert_true "contains feature name" grep -q "Feature: test-feature" "$PROGRESS_F
 assert_true "contains codebase patterns section" grep -q "## Codebase Patterns" "$PROGRESS_FILE"
 
 # Doesn't overwrite existing file
-echo "custom content" > "$PROGRESS_FILE"
+printf '%s\n' "custom content" > "$PROGRESS_FILE"
 initialize_progress_file "$PROGRESS_FILE" "other-feature" >/dev/null 2>&1
 content=$(cat "$PROGRESS_FILE")
 assert_eq "does not overwrite existing file" "custom content" "$content"
@@ -572,7 +574,7 @@ if [[ $TESTS_FAILED -gt 0 ]]; then
     echo ""
     echo -e "\033[31mFailed tests:\033[0m"
     for f in "${FAILURES[@]}"; do
-        echo "  - $f"
+        printf '  - %s\n' "$f"
     done
     exit 1
 fi
