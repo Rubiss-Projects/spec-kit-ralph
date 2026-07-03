@@ -34,6 +34,7 @@ This command is a **thin launcher** for the ralph loop orchestrator. It validate
    - `--max-iterations N` or `-n N` (default: from config or 10)
    - `--model MODEL` or `-m MODEL` (default: from config or `claude-sonnet-4.6`)
    - `--agent-cli CLI` (default: from config or `copilot`; supported: `copilot`, `codex`, `claude`)
+     - For `copilot`, resolve the registered Spec Kit command/skill name from `.specify/integration.json`. Dot separator uses `--agent speckit.ralph.iterate`; dash/skills mode invokes `/speckit-ralph-iterate` in the prompt. Spec Kit integration options such as `--skills` are not passed as Copilot runtime flags.
    - `--verbose` or `-v` (default: false)
    - Ignore non-flag free-form text after printing the warning described above
    - Stop with a clear error for unknown flags or malformed flag values

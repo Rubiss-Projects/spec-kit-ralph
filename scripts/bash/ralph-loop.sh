@@ -259,6 +259,73 @@ get_agent_cli_kind() {
     esac
 }
 
+get_specify_integration_field() {
+    local repo_root=$1
+    local field=$2
+    local integration_path="$repo_root/.specify/integration.json"
+
+    [[ -f "$integration_path" ]] || return 0
+
+    sed -nE "s/.*\"$field\"[[:space:]]*:[[:space:]]*\"([^\"]*)\".*/\1/p" "$integration_path" | head -n 1
+}
+
+get_specify_integration_invoke_separator() {
+    local repo_root=$1
+    local integration
+    local separator
+    local raw_options
+
+    integration=$(get_specify_integration_field "$repo_root" "integration")
+    separator=$(get_specify_integration_field "$repo_root" "invoke_separator")
+    raw_options=$(get_specify_integration_field "$repo_root" "raw_options")
+
+    if [[ -n "$integration" && "$integration" != "copilot" ]]; then
+        printf "."
+        return 0
+    fi
+
+    if [[ " $raw_options " == *" --skills "* ]]; then
+        printf "-"
+        return 0
+    fi
+
+    printf "%s" "${separator:-.}"
+}
+
+build_integration_command_name() {
+    local command_name=$1
+    local separator=${2:-.}
+    local parts=()
+    local result
+    local part
+
+    IFS='.' read -r -a parts <<< "$command_name"
+    result="${parts[0]}"
+    for part in "${parts[@]:1}"; do
+        result+="${separator}${part}"
+    done
+
+    printf "%s" "$result"
+}
+
+is_copilot_skills_mode() {
+    local invoke_separator=$1
+    [[ "$invoke_separator" == "-" ]]
+}
+
+build_copilot_iteration_prompt() {
+    local agent_name=$1
+    local invoke_separator=$2
+    local prompt=$3
+
+    if is_copilot_skills_mode "$invoke_separator"; then
+        printf "/%s %s" "$agent_name" "$prompt"
+        return 0
+    fi
+
+    printf "%s" "$prompt"
+}
+
 build_iteration_prompt() {
     local iteration=$1
     local command_text=""
@@ -284,13 +351,22 @@ invoke_copilot_iteration() {
     local work_dir=$3
 
     # Simple prompt - the speckit.ralph agent already knows to complete one work unit
-    local prompt="Iteration $iteration - Complete one work unit from tasks.md"
+    local base_prompt="Iteration $iteration - Complete one work unit from tasks.md"
+    local prompt
+    local invoke_separator
+    local agent_name
+
+    invoke_separator=$(get_specify_integration_invoke_separator "$work_dir")
+    agent_name=$(build_integration_command_name "speckit.ralph.iterate" "$invoke_separator")
+    prompt=$(build_copilot_iteration_prompt "$agent_name" "$invoke_separator" "$base_prompt")
 
     # Only show debug info when verbose
     if [[ "$VERBOSE" == "true" ]]; then
         echo -e "\033[35mDEBUG: Prompt = $prompt\033[0m" >&2
         echo -e "\033[35mDEBUG: WorkDir = $work_dir\033[0m" >&2
         echo -e "\033[35mDEBUG: AgentCLI = $AGENT_CLI\033[0m" >&2
+        echo -e "\033[35mDEBUG: AgentName = $agent_name\033[0m" >&2
+        echo -e "\033[35mDEBUG: InvokeSeparator = $invoke_separator\033[0m" >&2
     fi
 
     # Change to working directory if specified
@@ -310,11 +386,17 @@ invoke_copilot_iteration() {
     local exit_code=0
     local output_lines=()
 
-    # Stream output line by line - use speckit.ralph.iterate agent
-    while IFS= read -r line; do
-        echo "$line" >&2
-        output_lines+=("$line")
-    done < <("$AGENT_CLI" --agent speckit.ralph.iterate -p "$prompt" --model "$model" --yolo -s 2>&1) || exit_code=$?
+    if is_copilot_skills_mode "$invoke_separator"; then
+        while IFS= read -r line; do
+            echo "$line" >&2
+            output_lines+=("$line")
+        done < <("$AGENT_CLI" -p "$prompt" --model "$model" --yolo -s 2>&1) || exit_code=$?
+    else
+        while IFS= read -r line; do
+            echo "$line" >&2
+            output_lines+=("$line")
+        done < <("$AGENT_CLI" --agent "$agent_name" -p "$prompt" --model "$model" --yolo -s 2>&1) || exit_code=$?
+    fi
 
     echo -e "\033[36m--- End Agent Output ---\033[0m" >&2
     echo "" >&2
@@ -335,6 +417,11 @@ invoke_copilot_iteration() {
     # Return output via stdout, exit code via return
     echo "$output"
     return $exit_code
+}
+
+is_agent_resolution_failure() {
+    local output=$1
+    echo "$output" | grep -Eiq 'No such agent|No such skill|Unknown agent|Unknown skill|agent .*not found|skill .*not found|unknown option'
 }
 
 invoke_claude_iteration() {
@@ -541,8 +628,9 @@ consecutive_failures=0
 max_consecutive_failures=3
 completed=false
 circuit_breaker=false
+fatal_failure=false
 
-while [[ $iteration -le $MAX_ITERATIONS && "$completed" == "false" && "$INTERRUPTED" == "false" && "$circuit_breaker" == "false" ]]; do
+while [[ $iteration -le $MAX_ITERATIONS && "$completed" == "false" && "$INTERRUPTED" == "false" && "$circuit_breaker" == "false" && "$fatal_failure" == "false" ]]; do
     print_header "$iteration" "$MAX_ITERATIONS"
     print_status "$iteration" "running" "Starting iteration"
 
@@ -559,6 +647,13 @@ while [[ $iteration -le $MAX_ITERATIONS && "$completed" == "false" && "$INTERRUP
     if test_completion_signal "$output"; then
         print_status "$iteration" "success" "COMPLETE signal received"
         completed=true
+        break
+    fi
+
+    if is_agent_resolution_failure "$output"; then
+        print_status "$iteration" "failure" "Agent command unavailable"
+        echo -e "\033[31mResolved agent command is unavailable. Stopping loop before consuming more iterations.\033[0m"
+        fatal_failure=true
         break
     fi
 
@@ -607,6 +702,9 @@ elif [[ "$INTERRUPTED" == "true" ]]; then
     print_summary "$((iteration - 1))" "INTERRUPTED" "\033[33m"
     exit 130
 elif [[ "$circuit_breaker" == "true" ]]; then
+    print_summary "$iteration" "FAILED" "\033[31m"
+    exit 1
+elif [[ "$fatal_failure" == "true" ]]; then
     print_summary "$iteration" "FAILED" "\033[31m"
     exit 1
 else

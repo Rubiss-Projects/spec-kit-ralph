@@ -237,7 +237,8 @@ Started: $timestamp
 function Get-AgentCliKind {
     param([string]$Cli)
 
-    $cliName = [System.IO.Path]::GetFileName($Cli).ToLowerInvariant()
+    $normalizedCli = $Cli -replace '\\', '/'
+    $cliName = [System.IO.Path]::GetFileName($normalizedCli).ToLowerInvariant()
     $cliName = $cliName -replace '\.(exe|cmd|bat)$', ''
 
     switch ($cliName) {
@@ -246,6 +247,72 @@ function Get-AgentCliKind {
         "claude" { return "claude" }
         default { return "unsupported" }
     }
+}
+
+function Read-SpecKitIntegrationConfig {
+    param([string]$RepoRoot)
+
+    $config = @{
+        invoke_separator = "."
+    }
+    $integrationPath = Join-Path (Join-Path $RepoRoot ".specify") "integration.json"
+
+    if (-not (Test-Path $integrationPath)) {
+        return $config
+    }
+
+    try {
+        $integration = Get-Content -Path $integrationPath -Raw | ConvertFrom-Json
+    }
+    catch {
+        return $config
+    }
+
+    if ($integration.integration -and $integration.integration -ne "copilot") {
+        return $config
+    }
+
+    if ($integration.invoke_separator) {
+        $config.invoke_separator = [string]$integration.invoke_separator
+    }
+    if ($integration.raw_options -and (([string]$integration.raw_options).Trim() -split '\s+' -contains "--skills")) {
+        $config.invoke_separator = "-"
+    }
+
+    return $config
+}
+
+function Join-IntegrationCommandName {
+    param(
+        [string]$CommandName,
+        [string]$Separator = "."
+    )
+
+    if (-not $Separator) {
+        $Separator = "."
+    }
+
+    return (($CommandName -split "\.") -join $Separator)
+}
+
+function Test-CopilotSkillsMode {
+    param([string]$InvokeSeparator)
+
+    return $InvokeSeparator -eq "-"
+}
+
+function New-CopilotIterationPrompt {
+    param(
+        [string]$AgentName,
+        [string]$InvokeSeparator,
+        [string]$Prompt
+    )
+
+    if (Test-CopilotSkillsMode -InvokeSeparator $InvokeSeparator) {
+        return "/$AgentName $Prompt"
+    }
+
+    return $Prompt
 }
 
 function New-IterationPrompt {
@@ -275,12 +342,17 @@ function Invoke-CopilotIteration {
     )
     
     # Simple prompt - the speckit.ralph agent already knows to complete one work unit
-    $prompt = "Iteration $Iteration - Complete one work unit from tasks.md"
+    $basePrompt = "Iteration $Iteration - Complete one work unit from tasks.md"
+    $integrationConfig = Read-SpecKitIntegrationConfig -RepoRoot $WorkDir
+    $agentName = Join-IntegrationCommandName -CommandName "speckit.ralph.iterate" -Separator $integrationConfig.invoke_separator
+    $prompt = New-CopilotIterationPrompt -AgentName $agentName -InvokeSeparator $integrationConfig.invoke_separator -Prompt $basePrompt
     
     # Only show debug info when verbose
     if ($Verbose) {
         Write-Host "DEBUG: Prompt = $prompt" -ForegroundColor Magenta
         Write-Host "DEBUG: WorkDir = $WorkDir" -ForegroundColor Magenta
+        Write-Host "DEBUG: AgentName = $agentName" -ForegroundColor Magenta
+        Write-Host "DEBUG: InvokeSeparator = $($integrationConfig.invoke_separator)" -ForegroundColor Magenta
     }
     
     try {
@@ -307,8 +379,12 @@ function Invoke-CopilotIteration {
             Write-Host ""
             Write-Host "--- Copilot Agent Output ---" -ForegroundColor DarkCyan
             $outputLines = @()
-            # Use speckit.ralph.iterate agent - it already knows to complete one work unit
-            & $AgentCli --agent speckit.ralph.iterate -p $prompt --model $Model --yolo -s 2>&1 | ForEach-Object {
+            $copilotArgs = if (Test-CopilotSkillsMode -InvokeSeparator $integrationConfig.invoke_separator) {
+                @("-p", $prompt, "--model", $Model, "--yolo", "-s")
+            } else {
+                @("--agent", $agentName, "-p", $prompt, "--model", $Model, "--yolo", "-s")
+            }
+            & $AgentCli @copilotArgs 2>&1 | ForEach-Object {
                 # Stderr lines arrive as ErrorRecord objects; extract the message string
                 $line = if ($_ -is [System.Management.Automation.ErrorRecord]) { $_.Exception.Message } else { $_ }
                 Write-Host $line
@@ -340,6 +416,12 @@ function Invoke-CopilotIteration {
         Output = $output
         ExitCode = $exitCode
     }
+}
+
+function Test-AgentResolutionFailure {
+    param([string]$Output)
+
+    return $Output -match '(?i)(No such agent|No such skill|Unknown agent|Unknown skill|agent .*not found|skill .*not found|unknown option)'
 }
 
 function Invoke-ClaudeIteration {
@@ -553,13 +635,14 @@ $consecutiveFailures = 0
 $maxConsecutiveFailures = 3
 $completed = $false
 $circuitBreaker = $false
+$fatalFailure = $false
 
 # Register Ctrl+C handler
 $interrupted = $false
 [Console]::TreatControlCAsInput = $false
 
 try {
-    while ($iteration -le $MaxIterations -and -not $completed -and -not $interrupted -and -not $circuitBreaker) {
+    while ($iteration -le $MaxIterations -and -not $completed -and -not $interrupted -and -not $circuitBreaker -and -not $fatalFailure) {
         $lastIterationRun = $iteration
         Write-RalphHeader -Iteration $iteration -Max $MaxIterations
         Write-IterationStatus -Iteration $iteration -Status "running" -Message "Starting iteration"
@@ -577,6 +660,13 @@ try {
         if (Test-CompletionSignal -Output $result.Output) {
             Write-IterationStatus -Iteration $iteration -Status "success" -Message "COMPLETE signal received"
             $completed = $true
+            break
+        }
+
+        if (Test-AgentResolutionFailure -Output $result.Output) {
+            Write-IterationStatus -Iteration $iteration -Status "failure" -Message "Agent command unavailable"
+            Write-Host "Resolved agent command is unavailable. Stopping loop before consuming more iterations." -ForegroundColor Red
+            $fatalFailure = $true
             break
         }
         
@@ -651,6 +741,10 @@ if ($completed) {
     Write-Host "  Status: " -NoNewline -ForegroundColor White
     Write-Host "INTERRUPTED" -ForegroundColor Yellow
     exit 130
+} elseif ($fatalFailure) {
+    Write-Host "  Status: " -NoNewline -ForegroundColor White
+    Write-Host "FAILED" -ForegroundColor Red
+    exit 1
 } elseif ($circuitBreaker) {
     Write-Host "  Status: " -NoNewline -ForegroundColor White
     Write-Host "FAILED" -ForegroundColor Red
