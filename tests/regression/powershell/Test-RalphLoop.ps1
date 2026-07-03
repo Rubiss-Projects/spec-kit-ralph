@@ -66,6 +66,65 @@ function Write-Section {
     Write-Host "-- $Name --" -ForegroundColor Cyan
 }
 
+function New-FakeCopilot {
+    param(
+        [string]$Directory,
+        [string[]]$OutputLines = @(),
+        [int]$ExitCode = 0,
+        [switch]$EchoArgs
+    )
+
+    $isWindowsRunner = ($env:OS -eq "Windows_NT") -or ($PSVersionTable.PSEdition -eq "Desktop")
+
+    if ($isWindowsRunner) {
+        $path = Join-Path $Directory "copilot.cmd"
+        $lines = @("@echo off")
+
+        if ($EchoArgs) {
+            $lines += @(
+                "setlocal enabledelayedexpansion",
+                'set "out=ARGS:"',
+                ":args_loop",
+                'if "%~1"=="" goto args_done',
+                'set "out=!out! [%~1]"',
+                "shift",
+                "goto args_loop",
+                ":args_done",
+                "echo !out!"
+            )
+        }
+
+        foreach ($line in $OutputLines) {
+            $lines += "echo $line"
+        }
+        $lines += "exit /b $ExitCode"
+        Set-Content -Path $path -Value ($lines -join "`r`n") -Encoding ASCII
+        return $path
+    }
+
+    $path = Join-Path $Directory "copilot"
+    $lines = @("#!/usr/bin/env bash")
+
+    if ($EchoArgs) {
+        $lines += @(
+            "printf 'ARGS:'",
+            'for arg in "$@"; do',
+            "    printf ' [%s]' ""`$arg""",
+            "done",
+            "printf '\n'"
+        )
+    }
+
+    foreach ($line in $OutputLines) {
+        $escaped = $line -replace "'", "'\''"
+        $lines += "printf '%s\n' '$escaped'"
+    }
+    $lines += "exit $ExitCode"
+    Set-Content -Path $path -Value ($lines -join "`n") -Encoding UTF8
+    & chmod +x $path
+    return $path
+}
+
 #endregion
 
 #region Extract Functions
@@ -324,17 +383,7 @@ Write-Section "Invoke-CopilotIteration"
 
 $tmpCopilotDir = Join-Path ([System.IO.Path]::GetTempPath()) "ralph-copilot-$PID"
 New-Item -ItemType Directory -Path $tmpCopilotDir -Force | Out-Null
-$fakeCopilot = Join-Path $tmpCopilotDir "copilot"
-@'
-#!/usr/bin/env bash
-printf 'ARGS:'
-for arg in "$@"; do
-    printf ' [%s]' "$arg"
-done
-printf '\n'
-exit 0
-'@ | Set-Content -Path $fakeCopilot -Encoding UTF8
-& chmod +x $fakeCopilot
+$fakeCopilot = New-FakeCopilot -Directory $tmpCopilotDir -EchoArgs
 
 $script:AgentCli = $fakeCopilot
 
@@ -375,13 +424,10 @@ $fakeCopilotFailDir = Join-Path $tmpFalsePositiveRepo "fail"
 New-Item -ItemType Directory -Path $fakeCopilotOkDir -Force | Out-Null
 New-Item -ItemType Directory -Path $fakeCopilotFailDir -Force | Out-Null
 
-$fakeCopilotOk = Join-Path $fakeCopilotOkDir "copilot"
-@'
-#!/usr/bin/env bash
-echo "The docs mention an unknown option, but this is normal model output."
-exit 0
-'@ | Set-Content -Path $fakeCopilotOk -Encoding UTF8
-& chmod +x $fakeCopilotOk
+$fakeCopilotOk = New-FakeCopilot `
+    -Directory $fakeCopilotOkDir `
+    -OutputLines @("The docs mention an unknown option, but this is normal model output.") `
+    -ExitCode 0
 
 $falsePositiveOutput = & pwsh -NoLogo -NoProfile -File $SourceScript `
     -FeatureName "001-false-positive" `
@@ -398,13 +444,10 @@ Assert-Equal "matching output with zero exit reaches iteration limit" 1 $falsePo
 Assert-True "matching output with zero exit is not fatal" ($falsePositiveText -match "ITERATION LIMIT REACHED")
 Assert-True "matching output with zero exit does not report unavailable agent" (-not ($falsePositiveText -match "Agent command unavailable"))
 
-$fakeCopilotFail = Join-Path $fakeCopilotFailDir "copilot"
-@'
-#!/usr/bin/env bash
-echo "error: unknown option '--skills'"
-exit 2
-'@ | Set-Content -Path $fakeCopilotFail -Encoding UTF8
-& chmod +x $fakeCopilotFail
+$fakeCopilotFail = New-FakeCopilot `
+    -Directory $fakeCopilotFailDir `
+    -OutputLines @("error: unknown option '--skills'") `
+    -ExitCode 2
 
 $fatalOutput = & pwsh -NoLogo -NoProfile -File $SourceScript `
     -FeatureName "001-false-positive" `
