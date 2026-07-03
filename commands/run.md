@@ -33,7 +33,7 @@ This command is a **thin launcher** for the ralph loop orchestrator. It validate
 1. **Parse launcher arguments only** from `$ARGUMENTS`:
    - `--max-iterations N` or `-n N` (default: from config or 10)
    - `--model MODEL` or `-m MODEL` (default: from config or `claude-sonnet-4.6`)
-   - `--agent-cli CLI` (default: from config or `copilot`; supported: `copilot`, `codex`)
+   - `--agent-cli CLI` (default: from config or `copilot`; supported: `copilot`, `codex`, `claude`)
    - `--verbose` or `-v` (default: false)
    - Ignore non-flag free-form text after printing the warning described above
    - Stop with a clear error for unknown flags or malformed flag values
@@ -42,7 +42,7 @@ This command is a **thin launcher** for the ralph loop orchestrator. It validate
 
    | Check | Method | On Failure |
    |-------|--------|------------|
-   | Agent CLI installed | Resolve configured `agent_cli` (`copilot` or `codex`) with `which` or `Get-Command` | Print error with install instructions, STOP |
+   | Agent CLI installed | Resolve configured `agent_cli` (`copilot`, `codex`, or `claude`) with `which` or `Get-Command` | Print error with install instructions, STOP |
    | `tasks.md` exists | Search `specs/*/tasks.md` for current feature | Print error, suggest running `/speckit.tasks`, STOP |
    | Git repository | Run `git rev-parse --git-dir` | Print error: "Not a git repository", STOP |
    | Feature branch | Run `git branch --show-current`, verify not `main`/`master` | Print warning but continue |
