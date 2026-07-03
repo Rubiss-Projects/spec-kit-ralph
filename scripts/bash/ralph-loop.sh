@@ -384,19 +384,24 @@ invoke_copilot_iteration() {
     echo -e "\033[36m--- Copilot Agent Output ---\033[0m" >&2
 
     local exit_code=0
-    local output_lines=()
+    local output_file
+    output_file=$(mktemp)
 
+    set +e
     if is_copilot_skills_mode "$invoke_separator"; then
-        while IFS= read -r line; do
+        "$AGENT_CLI" -p "$prompt" --model "$model" --yolo -s 2>&1 | while IFS= read -r line; do
             echo "$line" >&2
-            output_lines+=("$line")
-        done < <("$AGENT_CLI" -p "$prompt" --model "$model" --yolo -s 2>&1) || exit_code=$?
+            printf '%s\n' "$line" >> "$output_file"
+        done
+        exit_code=${PIPESTATUS[0]}
     else
-        while IFS= read -r line; do
+        "$AGENT_CLI" --agent "$agent_name" -p "$prompt" --model "$model" --yolo -s 2>&1 | while IFS= read -r line; do
             echo "$line" >&2
-            output_lines+=("$line")
-        done < <("$AGENT_CLI" --agent "$agent_name" -p "$prompt" --model "$model" --yolo -s 2>&1) || exit_code=$?
+            printf '%s\n' "$line" >> "$output_file"
+        done
+        exit_code=${PIPESTATUS[0]}
     fi
+    set -e
 
     echo -e "\033[36m--- End Agent Output ---\033[0m" >&2
     echo "" >&2
@@ -410,9 +415,9 @@ invoke_copilot_iteration() {
         echo -e "\033[35mDEBUG: $AGENT_CLI exit code = $exit_code\033[0m" >&2
     fi
 
-    # Join output lines for return
     local output
-    output=$(printf '%s\n' "${output_lines[@]}")
+    output=$(cat "$output_file")
+    rm -f "$output_file"
 
     # Return output via stdout, exit code via return
     echo "$output"
@@ -650,7 +655,7 @@ while [[ $iteration -le $MAX_ITERATIONS && "$completed" == "false" && "$INTERRUP
         break
     fi
 
-    if is_agent_resolution_failure "$output"; then
+    if [[ $exit_code -ne 0 ]] && is_agent_resolution_failure "$output"; then
         print_status "$iteration" "failure" "Agent command unavailable"
         echo -e "\033[31mResolved agent command is unavailable. Stopping loop before consuming more iterations.\033[0m"
         fatal_failure=true

@@ -384,6 +384,55 @@ rm -rf "$TMP_COPILOT_DIR"
 
 #endregion
 
+#region Tests: fail-fast resolution guard
+
+section "fail-fast resolution guard"
+
+TMP_FALSE_POSITIVE_REPO=$(mktemp -d)
+TMP_FALSE_POSITIVE_SPEC="$TMP_FALSE_POSITIVE_REPO/specs/001-false-positive"
+mkdir -p "$TMP_FALSE_POSITIVE_SPEC"
+cat > "$TMP_FALSE_POSITIVE_SPEC/tasks.md" << 'TASKS'
+- [ ] T001 Keep working
+TASKS
+
+mkdir -p "$TMP_FALSE_POSITIVE_REPO/ok" "$TMP_FALSE_POSITIVE_REPO/fail"
+FAKE_COPILOT_OK="$TMP_FALSE_POSITIVE_REPO/ok/copilot"
+cat > "$FAKE_COPILOT_OK" << 'FAKECOPILOTOK'
+#!/usr/bin/env bash
+echo "The docs mention an unknown option, but this is normal model output."
+exit 0
+FAKECOPILOTOK
+chmod +x "$FAKE_COPILOT_OK"
+
+set +e
+false_positive_output=$(cd "$TMP_FALSE_POSITIVE_REPO" && bash "$SOURCE_SCRIPT" --feature-name "001-false-positive" --tasks-path "$TMP_FALSE_POSITIVE_SPEC/tasks.md" --spec-dir "$TMP_FALSE_POSITIVE_SPEC" --max-iterations 1 --model "fake-model" --agent-cli "$FAKE_COPILOT_OK" 2>&1)
+false_positive_exit=$?
+set -e
+
+assert_eq "matching output with zero exit reaches iteration limit" "1" "$false_positive_exit"
+assert_true "matching output with zero exit is not fatal" grep -q "ITERATION LIMIT REACHED" <<< "$false_positive_output"
+assert_false "matching output with zero exit does not report unavailable agent" grep -q "Agent command unavailable" <<< "$false_positive_output"
+
+FAKE_COPILOT_FAIL="$TMP_FALSE_POSITIVE_REPO/fail/copilot"
+cat > "$FAKE_COPILOT_FAIL" << 'FAKECOPILOTFAIL'
+#!/usr/bin/env bash
+echo "error: unknown option '--skills'"
+exit 2
+FAKECOPILOTFAIL
+chmod +x "$FAKE_COPILOT_FAIL"
+
+set +e
+fatal_output=$(cd "$TMP_FALSE_POSITIVE_REPO" && bash "$SOURCE_SCRIPT" --feature-name "001-false-positive" --tasks-path "$TMP_FALSE_POSITIVE_SPEC/tasks.md" --spec-dir "$TMP_FALSE_POSITIVE_SPEC" --max-iterations 3 --model "fake-model" --agent-cli "$FAKE_COPILOT_FAIL" 2>&1)
+fatal_exit=$?
+set -e
+
+assert_eq "matching output with nonzero exit fails fast" "1" "$fatal_exit"
+assert_true "matching output with nonzero exit reports unavailable agent" grep -q "Agent command unavailable" <<< "$fatal_output"
+
+rm -rf "$TMP_FALSE_POSITIVE_REPO"
+
+#endregion
+
 #region Tests: invoke_codex_iteration
 
 section "invoke_codex_iteration"
