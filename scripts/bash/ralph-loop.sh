@@ -426,7 +426,7 @@ invoke_copilot_iteration() {
     trap - RETURN
 
     # Return output via stdout, exit code via return
-    echo "$output"
+    printf '%s\n' "$output"
     return $exit_code
 }
 

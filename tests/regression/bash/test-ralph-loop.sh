@@ -379,6 +379,7 @@ for arg in "$@"; do
     printf ' [%s]' "$arg"
 done
 printf '\n'
+printf '%s\n' '-n literal output'
 exit 0
 FAKECOPILOT
 chmod +x "$FAKE_COPILOT"
@@ -391,6 +392,7 @@ TMPDIR="$TMP_COPILOT_DIR"
 copilot_output=$(invoke_copilot_iteration "fake-model" 1 "$TMP_COPILOT_DIR" 2>/dev/null)
 assert_true "dot mode uses --agent" grep -Fq "[--agent] [speckit.ralph.iterate]" <<< "$copilot_output"
 assert_true "dot mode sends plain prompt" grep -Fq "[-p] [Iteration 1 - Complete one work unit from tasks.md]" <<< "$copilot_output"
+assert_true "preserves leading dash output" grep -Fxq -- "-n literal output" <<< "$copilot_output"
 
 mkdir -p "$TMP_COPILOT_DIR/.specify"
 cat > "$TMP_COPILOT_DIR/.specify/integration.json" << 'JSON'
