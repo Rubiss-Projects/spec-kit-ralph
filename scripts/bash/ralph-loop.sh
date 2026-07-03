@@ -386,6 +386,7 @@ invoke_copilot_iteration() {
     local exit_code=0
     local output_file
     output_file="$(mktemp "${TMPDIR:-/tmp}/ralph-copilot-output.XXXXXX")"
+    trap 'rm -f "$output_file"' RETURN
 
     set +e
     if is_copilot_skills_mode "$invoke_separator"; then
@@ -418,6 +419,7 @@ invoke_copilot_iteration() {
     local output
     output=$(cat "$output_file")
     rm -f "$output_file"
+    trap - RETURN
 
     # Return output via stdout, exit code via return
     echo "$output"

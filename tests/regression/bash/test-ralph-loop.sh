@@ -292,7 +292,7 @@ cat > "$TMP_INTEGRATION_REPO/.specify/integration.json" << 'JSON'
 {
   "integration": "copilot",
   "invoke_separator": ".",
-  "invoke_separator": "-"
+  "nested": { "invoke_separator": "-" }
 }
 JSON
 
@@ -372,6 +372,8 @@ chmod +x "$FAKE_COPILOT"
 
 AGENT_CLI="$FAKE_COPILOT"
 VERBOSE=false
+OLD_TMPDIR="${TMPDIR:-}"
+TMPDIR="$TMP_COPILOT_DIR"
 
 copilot_output=$(invoke_copilot_iteration "fake-model" 1 "$TMP_COPILOT_DIR" 2>/dev/null)
 assert_true "dot mode uses --agent" grep -Fq "[--agent] [speckit.ralph.iterate]" <<< "$copilot_output"
@@ -390,6 +392,13 @@ copilot_output=$(invoke_copilot_iteration "fake-model" 2 "$TMP_COPILOT_DIR" 2>/d
 assert_false "skills mode does not use --agent" grep -Fq "[--agent]" <<< "$copilot_output"
 assert_true "skills mode sends slash command prompt" grep -Fq "[-p] [/speckit-ralph-iterate Iteration 2 - Complete one work unit from tasks.md]" <<< "$copilot_output"
 assert_false "skills mode does not pass --skills runtime flag" grep -Fq "[--skills]" <<< "$copilot_output"
+assert_false "removes copilot temp output files" compgen -G "$TMP_COPILOT_DIR/ralph-copilot-output.*"
+
+if [[ -n "$OLD_TMPDIR" ]]; then
+    TMPDIR="$OLD_TMPDIR"
+else
+    unset TMPDIR
+fi
 
 rm -rf "$TMP_COPILOT_DIR"
 
