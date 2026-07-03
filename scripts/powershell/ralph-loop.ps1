@@ -278,6 +278,9 @@ function Read-SpecKitIntegrationConfig {
     if ($integration.raw_options -and (([string]$integration.raw_options).Trim() -split '\s+' -contains "--skills")) {
         $config.invoke_separator = "-"
     }
+    if ($config.invoke_separator -ne "." -and $config.invoke_separator -ne "-") {
+        $config.invoke_separator = "."
+    }
 
     return $config
 }
