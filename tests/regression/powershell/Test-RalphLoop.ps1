@@ -350,6 +350,69 @@ Remove-Item $tmpCopilotDir -Recurse -Force
 
 #endregion
 
+#region Tests: fail-fast resolution guard
+
+Write-Section "fail-fast resolution guard"
+
+$tmpFalsePositiveRepo = Join-Path ([System.IO.Path]::GetTempPath()) "ralph-false-positive-$PID"
+$tmpFalsePositiveSpec = Join-Path $tmpFalsePositiveRepo "specs/001-false-positive"
+New-Item -ItemType Directory -Path $tmpFalsePositiveSpec -Force | Out-Null
+Set-Content -Path (Join-Path $tmpFalsePositiveSpec "tasks.md") -Value "- [ ] T001 Keep working" -Encoding UTF8
+
+$fakeCopilotOkDir = Join-Path $tmpFalsePositiveRepo "ok"
+$fakeCopilotFailDir = Join-Path $tmpFalsePositiveRepo "fail"
+New-Item -ItemType Directory -Path $fakeCopilotOkDir -Force | Out-Null
+New-Item -ItemType Directory -Path $fakeCopilotFailDir -Force | Out-Null
+
+$fakeCopilotOk = Join-Path $fakeCopilotOkDir "copilot"
+@'
+#!/usr/bin/env bash
+echo "The docs mention an unknown option, but this is normal model output."
+exit 0
+'@ | Set-Content -Path $fakeCopilotOk -Encoding UTF8
+& chmod +x $fakeCopilotOk
+
+$falsePositiveOutput = & pwsh -NoLogo -NoProfile -File $SourceScript `
+    -FeatureName "001-false-positive" `
+    -TasksPath (Join-Path $tmpFalsePositiveSpec "tasks.md") `
+    -SpecDir $tmpFalsePositiveSpec `
+    -MaxIterations 1 `
+    -Model "fake-model" `
+    -AgentCli $fakeCopilotOk `
+    -WorkingDirectory $tmpFalsePositiveRepo 2>&1
+$falsePositiveExit = $LASTEXITCODE
+$falsePositiveText = $falsePositiveOutput -join "`n"
+
+Assert-Equal "matching output with zero exit reaches iteration limit" 1 $falsePositiveExit
+Assert-True "matching output with zero exit is not fatal" ($falsePositiveText -match "ITERATION LIMIT REACHED")
+Assert-True "matching output with zero exit does not report unavailable agent" (-not ($falsePositiveText -match "Agent command unavailable"))
+
+$fakeCopilotFail = Join-Path $fakeCopilotFailDir "copilot"
+@'
+#!/usr/bin/env bash
+echo "error: unknown option '--skills'"
+exit 2
+'@ | Set-Content -Path $fakeCopilotFail -Encoding UTF8
+& chmod +x $fakeCopilotFail
+
+$fatalOutput = & pwsh -NoLogo -NoProfile -File $SourceScript `
+    -FeatureName "001-false-positive" `
+    -TasksPath (Join-Path $tmpFalsePositiveSpec "tasks.md") `
+    -SpecDir $tmpFalsePositiveSpec `
+    -MaxIterations 3 `
+    -Model "fake-model" `
+    -AgentCli $fakeCopilotFail `
+    -WorkingDirectory $tmpFalsePositiveRepo 2>&1
+$fatalExit = $LASTEXITCODE
+$fatalText = $fatalOutput -join "`n"
+
+Assert-Equal "matching output with nonzero exit fails fast" 1 $fatalExit
+Assert-True "matching output with nonzero exit reports unavailable agent" ($fatalText -match "Agent command unavailable")
+
+Remove-Item $tmpFalsePositiveRepo -Recurse -Force
+
+#endregion
+
 #region Tests: Initialize-ProgressFile
 
 Write-Section "Initialize-ProgressFile"

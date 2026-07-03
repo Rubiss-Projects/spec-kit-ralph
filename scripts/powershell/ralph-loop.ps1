@@ -371,6 +371,11 @@ function Invoke-CopilotIteration {
         # Ensure UTF-8 so copilot output (em dashes, etc.) renders correctly
         $prevOutputEncoding = $OutputEncoding
         $prevConsoleEncoding = [Console]::OutputEncoding
+        $nativeErrorPreference = Get-Variable -Name PSNativeCommandUseErrorActionPreference -ErrorAction SilentlyContinue
+        if ($nativeErrorPreference) {
+            $prevNativeCommandUseErrorActionPreference = $PSNativeCommandUseErrorActionPreference
+            $PSNativeCommandUseErrorActionPreference = $false
+        }
         $OutputEncoding = [System.Text.Encoding]::UTF8
         [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
         
@@ -398,6 +403,9 @@ function Invoke-CopilotIteration {
         finally {
             $OutputEncoding = $prevOutputEncoding
             [Console]::OutputEncoding = $prevConsoleEncoding
+            if ($nativeErrorPreference) {
+                $PSNativeCommandUseErrorActionPreference = $prevNativeCommandUseErrorActionPreference
+            }
             if ($WorkDir -and (Test-Path $WorkDir)) {
                 Pop-Location
             }
@@ -663,7 +671,7 @@ try {
             break
         }
 
-        if (Test-AgentResolutionFailure -Output $result.Output) {
+        if ($result.ExitCode -ne 0 -and (Test-AgentResolutionFailure -Output $result.Output)) {
             Write-IterationStatus -Iteration $iteration -Status "failure" -Message "Agent command unavailable"
             Write-Host "Resolved agent command is unavailable. Stopping loop before consuming more iterations." -ForegroundColor Red
             $fatalFailure = $true
