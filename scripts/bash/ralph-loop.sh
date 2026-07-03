@@ -426,7 +426,7 @@ invoke_copilot_iteration() {
 
 is_agent_resolution_failure() {
     local output=$1
-    echo "$output" | grep -Eiq 'No such agent|No such skill|Unknown agent|Unknown skill|agent .*not found|skill .*not found|unknown option'
+    printf '%s' "$output" | grep -Eiq 'No such agent|No such skill|Unknown agent|Unknown skill|agent .*not found|skill .*not found|error: unknown option'
 }
 
 invoke_claude_iteration() {

@@ -429,7 +429,7 @@ function Invoke-CopilotIteration {
 function Test-AgentResolutionFailure {
     param([string]$Output)
 
-    return $Output -match '(?i)(No such agent|No such skill|Unknown agent|Unknown skill|agent .*not found|skill .*not found|unknown option)'
+    return $Output -match '(?i)(No such agent|No such skill|Unknown agent|Unknown skill|agent .*not found|skill .*not found|error: unknown option)'
 }
 
 function Invoke-ClaudeIteration {
