@@ -298,8 +298,12 @@ Assert-Equal "agent mode prompt is plain prompt" "Iteration 1 - Complete one wor
 @"
 {
   "integration": "copilot",
-  "raw_options": "--skills",
-  "invoke_separator": "-"
+  "integration_settings": {
+    "copilot": {
+      "raw_options": "--skills",
+      "invoke_separator": "-"
+    }
+  }
 }
 "@ | Set-Content -Path (Join-Path $tmpSpecifyDir "integration.json") -Encoding UTF8
 
@@ -312,7 +316,22 @@ Assert-Equal "resolves copilot skills agent name" "speckit-ralph-iterate" $agent
 @"
 {
   "integration": "copilot",
-  "raw_options": "--skills"
+  "raw_options": "--skills",
+  "invoke_separator": "-"
+}
+"@ | Set-Content -Path (Join-Path $tmpSpecifyDir "integration.json") -Encoding UTF8
+
+$integrationConfig = Read-SpecKitIntegrationConfig -RepoRoot $tmpIntegrationRepo
+Assert-Equal "legacy top-level copilot settings still work" "-" $integrationConfig.invoke_separator
+
+@"
+{
+  "integration": "copilot",
+  "integration_settings": {
+    "copilot": {
+      "raw_options": "--skills"
+    }
+  }
 }
 "@ | Set-Content -Path (Join-Path $tmpSpecifyDir "integration.json") -Encoding UTF8
 
@@ -396,8 +415,12 @@ New-Item -ItemType Directory -Path $tmpSpecifyDir -Force | Out-Null
 @"
 {
   "integration": "copilot",
-  "raw_options": "--skills",
-  "invoke_separator": "-"
+  "integration_settings": {
+    "copilot": {
+      "raw_options": "--skills",
+      "invoke_separator": "-"
+    }
+  }
 }
 "@ | Set-Content -Path (Join-Path $tmpSpecifyDir "integration.json") -Encoding UTF8
 

@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Documented `claude` as a supported `agent_cli` value and marked it as an optional tool requirement
 
 ### Fixed
+- PowerShell Copilot dispatch now reads Spec Kit's nested `integration_settings.copilot` settings, so skills-mode repositories invoke `/speckit-ralph-iterate` instead of the dotted `speckit.ralph.iterate` agent.
 - Agent CLI detection now works on bash 3.2 (the default on macOS); the previous `${var,,}` lowercasing failed with `bad substitution`, causing every `agent_cli` to be reported as unsupported
 - Claude iterations now pass the `speckit.ralph.iterate` command text in the prompt instead of `--agent speckit.ralph.iterate`; Claude Code has no registered agent to select, so the old invocation always failed
 - Completion signal is now recognized only when `<promise>COMPLETE</promise>` stands alone on a line, so agents mentioning the token in prose (e.g. "no `<promise>COMPLETE</promise>`") no longer terminate the loop prematurely

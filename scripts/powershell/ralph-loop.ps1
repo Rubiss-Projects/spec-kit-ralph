@@ -272,10 +272,15 @@ function Read-SpecKitIntegrationConfig {
         return $config
     }
 
-    if ($integration.invoke_separator) {
-        $config.invoke_separator = [string]$integration.invoke_separator
+    $copilotSettings = $integration
+    if ($integration.integration_settings -and $integration.integration_settings.copilot) {
+        $copilotSettings = $integration.integration_settings.copilot
     }
-    if ($integration.raw_options -and (([string]$integration.raw_options).Trim() -split '\s+' -contains "--skills")) {
+
+    if ($copilotSettings.invoke_separator) {
+        $config.invoke_separator = [string]$copilotSettings.invoke_separator
+    }
+    if ($copilotSettings.raw_options -and (([string]$copilotSettings.raw_options).Trim() -split '\s+' -contains "--skills")) {
         $config.invoke_separator = "-"
     }
     if ($config.invoke_separator -ne "." -and $config.invoke_separator -ne "-") {
