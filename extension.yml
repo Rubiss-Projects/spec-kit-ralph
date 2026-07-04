@@ -3,14 +3,14 @@ schema_version: "1.0"
 extension:
   id: "ralph"
   name: "Ralph Loop"
-  version: "1.2.0"
+  version: "1.2.1"
   description: "Autonomous implementation loop using AI agent CLI"
   author: "Rubiss"
   repository: "https://github.com/Rubiss-Projects/spec-kit-ralph"
   license: "MIT"
 
 requires:
-  speckit_version: ">=0.1.0"
+  speckit_version: ">=0.8.5"
   tools:
     - name: "copilot"
       required: false

@@ -27,7 +27,7 @@ Port the ralph loop autonomous implementation system from spec-kit core into a s
 |---|-----------|--------|-------|
 | I | Extension-First Architecture | PASS | Entire project IS an extension with `extension.yml` manifest; commands follow `speckit.ralph.*` pattern; config in `.specify/extensions/ralph/` |
 | II | Context Isolation (NON-NEGOTIABLE) | PASS | Scripts spawn fresh `copilot` process per iteration; no state inheritance; inter-iteration transfer via `progress.md` and `tasks.md` only |
-| III | Spec-Kit Compatibility | PASS | Schema version 1.0; `requires.speckit_version: ">=0.1.0"`; installs via `specify extension add --dev` |
+| III | Spec-Kit Compatibility | PASS | Schema version 1.0; `requires.speckit_version: ">=0.8.5"`; installs via `specify extension add --dev` |
 | IV | Progress Persistence | PASS | `tasks.md` checkboxes for completion; `progress.md` append-only log; `<promise>COMPLETE</promise>` only after verified completion |
 | V | Agent Agnosticism | PASS (with caveat) | Config has `agent_cli` field; v1.0 targets Copilot-only per spec clarification Q3; architecture does not preclude future agents |
 | VI | Graceful Termination | PASS | All 4 termination paths handled: completion (exit 0), iteration limit (exit 1), Ctrl+C (exit 130), consecutive failures (exit 1 with summary) |
