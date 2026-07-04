@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.1] - 2026-07-04
+
+### Fixed
+- Corrected the required Spec Kit version to `>=0.8.5` so installs enforce the Copilot skills-mode integration metadata required by Ralph's dispatch logic.
+- Updated compatibility documentation and direct archive install examples for the `v1.2.1` release.
+
 ## [1.2.0] - 2026-07-04
 
 ### Added

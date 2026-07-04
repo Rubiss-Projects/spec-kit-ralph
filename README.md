@@ -6,7 +6,7 @@ Autonomous implementation loop for [spec-kit](https://github.com/github/spec-kit
 
 | Requirement | Why |
 |---|---|
-| [spec-kit](https://github.com/github/spec-kit) (`specify` CLI) | Extension host — provides project structure and task management |
+| [spec-kit](https://github.com/github/spec-kit) (`specify` CLI) >= 0.8.5 | Extension host — provides project structure, task management, and integration metadata used for skills-mode dispatch |
 | [GitHub Copilot CLI](https://docs.github.com/en/copilot), [OpenAI Codex CLI](https://developers.openai.com/codex/cli), or [Claude Code](https://docs.claude.com/en/docs/claude-code) | Agent CLI used to execute each iteration (`copilot` is the default) |
 | [Git](https://git-scm.com/) | Version control — Ralph commits completed work units automatically |
 
@@ -19,14 +19,14 @@ specify extension add ralph
 ```
 Or install from repository directly
 ```bash
-specify extension add ralph --from https://github.com/Rubiss-Projects/spec-kit-ralph/archive/refs/tags/v1.0.2.zip
+specify extension add ralph --from https://github.com/Rubiss-Projects/spec-kit-ralph/archive/refs/tags/v1.2.1.zip
 ```
 
 Verify the installation:
 
 ```bash
 specify extension list
-# ✓ Ralph Loop (v1.0.2)
+# ✓ Ralph Loop (v1.2.1)
 #   Autonomous implementation loop using AI agent CLI
 #   Commands: 2 | Hooks: 1 | Status: Enabled
 ```

@@ -19,7 +19,7 @@ extension:
   license: "MIT"
 
 requires:
-  speckit_version: ">=0.1.0"
+  speckit_version: ">=0.8.5"
   tools:
     - name: "copilot"
       required: true
@@ -70,5 +70,5 @@ defaults:
 | `provides.commands` has ≥1 entry | 2 entries | YES |
 | Command names match `^speckit\.[a-z0-9-]+\.[a-z0-9-]+$` | `speckit.ralph.run`, `speckit.ralph.iterate` | YES |
 | Command `file` paths are relative | `commands/run.md`, `commands/iterate.md` | YES |
-| `requires.speckit_version` is version specifier | `>=0.1.0` | YES |
+| `requires.speckit_version` is version specifier | `>=0.8.5` | YES |
 | Hook `command` is in `provides.commands` | `speckit.ralph.run` ∈ commands | YES |

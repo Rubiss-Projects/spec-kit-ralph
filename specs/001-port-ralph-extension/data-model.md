@@ -11,7 +11,7 @@ ExtensionManifest ──provides──→ Command (run, iterate)
        │              Template      │
        │                            │
        └──requires──→ speckit       │
-                      (>=0.1.0)     │
+                      (>=0.8.5)     │
                                     │
 RalphSession ──────────────────invokes──→ Iteration ──uses──→ AgentProfile
        │                                      │
@@ -45,7 +45,7 @@ RalphSession ──────────────────invokes──
 | `extension.author` | string | yes | Extension author |
 | `extension.repository` | string | yes | GitHub repo URL |
 | `extension.license` | string | yes | `"MIT"` |
-| `requires.speckit_version` | string | yes | `">=0.1.0"` |
+| `requires.speckit_version` | string | yes | `">=0.8.5"` |
 | `requires.tools[0]` | object | yes | `{name: "copilot", required: true}` |
 | `provides.commands` | array | yes | Two commands: `speckit.ralph.run`, `speckit.ralph.iterate` |
 | `provides.config` | array | yes | One config: `ralph-config.yml` |
