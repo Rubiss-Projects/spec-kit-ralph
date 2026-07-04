@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-07-04
+
 ### Added
 - Official Claude Code support via a dedicated `claude` invocation path (`--dangerously-skip-permissions`) in both Bash and PowerShell orchestrators ([#8](https://github.com/Rubiss-Projects/spec-kit-ralph/issues/8))
 - Regression coverage for Claude CLI detection and the Claude iteration codepath
