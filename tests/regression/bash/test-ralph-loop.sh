@@ -94,6 +94,8 @@ extract_functions() {
     sed -n '/^get_incomplete_task_count()/,/^}/p' "$SOURCE_SCRIPT"
     # Extract initialize_progress_file
     sed -n '/^initialize_progress_file()/,/^}/p' "$SOURCE_SCRIPT"
+    # Extract literal replacement helper
+    sed -n '/^replace_all_literal()/,/^}/p' "$SOURCE_SCRIPT"
     # Extract initialize_memory_file
     sed -n '/^initialize_memory_file()/,/^}/p' "$SOURCE_SCRIPT"
     # Extract get_agent_cli_kind
@@ -602,6 +604,12 @@ assert_true "memory contains gotchas section" grep -q "## Gotchas" "$MEMORY_FILE
 assert_true "memory contains reusable commands section" grep -q "## Reusable Commands" "$MEMORY_FILE"
 assert_true "memory contains do not repeat section" grep -q "## Do Not Repeat" "$MEMORY_FILE"
 assert_true "memory contains current handoff section" grep -q "## Current Handoff" "$MEMORY_FILE"
+
+# Escapes replacement-sensitive characters in feature names
+SPECIAL_MEMORY_FILE="$TMP_MEMORY/ralph-memory-special.md"
+SPECIAL_FEATURE='feature&with\backslash'
+initialize_memory_file "$SPECIAL_MEMORY_FILE" "$SPECIAL_FEATURE" "$MEMORY_TEMPLATE" >/dev/null 2>&1
+assert_true "memory preserves ampersand and backslash in feature name" grep -Fq "Feature: $SPECIAL_FEATURE" "$SPECIAL_MEMORY_FILE"
 
 # Doesn't overwrite existing file
 printf '%s\n' "custom memory" > "$MEMORY_FILE"

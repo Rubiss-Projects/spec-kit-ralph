@@ -238,6 +238,23 @@ EOF
     fi
 }
 
+replace_all_literal() {
+    local input=$1
+    local placeholder=$2
+    local replacement=$3
+    local result=""
+    local rest=$input
+    local prefix
+
+    while [[ "$rest" == *"$placeholder"* ]]; do
+        prefix=${rest%%"$placeholder"*}
+        result+="$prefix$replacement"
+        rest=${rest#*"$placeholder"}
+    done
+
+    printf '%s' "$result$rest"
+}
+
 initialize_memory_file() {
     local path=$1
     local feature=$2
@@ -282,8 +299,8 @@ Started: {{STARTED_AT}}
 EOF
 )
         fi
-        content=${content//\{\{FEATURE_NAME\}\}/$feature}
-        content=${content//\{\{STARTED_AT\}\}/$timestamp}
+        content=$(replace_all_literal "$content" "{{FEATURE_NAME}}" "$feature")
+        content=$(replace_all_literal "$content" "{{STARTED_AT}}" "$timestamp")
         printf '%s\n' "$content" > "$path"
         echo -e "\033[90mCreated memory file: $path\033[0m"
     fi
