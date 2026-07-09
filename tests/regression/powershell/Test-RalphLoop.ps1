@@ -593,6 +593,13 @@ Assert-True "memory contains reusable commands section" ($memoryContent -match "
 Assert-True "memory contains do not repeat section" ($memoryContent -match "## Do Not Repeat")
 Assert-True "memory contains current handoff section" ($memoryContent -match "## Current Handoff")
 
+# Falls back to the built-in template when a configured template cannot be read as a file
+$unreadableMemoryFile = Join-Path $tmpMemoryDir "ralph-memory-unreadable.md"
+Initialize-MemoryFile -Path $unreadableMemoryFile -Feature "fallback-feature" -TemplatePath $tmpMemoryDir
+$unreadableMemoryContent = Get-Content $unreadableMemoryFile -Raw
+Assert-True "unreadable memory template uses fallback" ($unreadableMemoryContent -match "Feature: fallback-feature")
+Assert-True "fallback memory contains codebase patterns section" ($unreadableMemoryContent -match "## Codebase Patterns")
+
 # Doesn't overwrite existing file
 Set-Content -Path $memoryFile -Value "custom memory" -Encoding UTF8
 Initialize-MemoryFile -Path $memoryFile -Feature "other-feature" -TemplatePath $MemoryTemplate

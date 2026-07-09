@@ -237,9 +237,11 @@ function Initialize-MemoryFile {
     
     if (-not (Test-Path $Path)) {
         $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-        if ($TemplatePath -and (Test-Path $TemplatePath)) {
-            $header = Get-Content -Path $TemplatePath -Raw
-        } else {
+        $header = $null
+        if ($TemplatePath) {
+            $header = Get-Content -Path $TemplatePath -Raw -ErrorAction SilentlyContinue
+        }
+        if ([string]::IsNullOrEmpty($header)) {
             $header = @"
 # Ralph Memory
 
