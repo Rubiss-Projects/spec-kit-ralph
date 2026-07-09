@@ -176,8 +176,8 @@ export SPECKIT_RALPH_AGENT_CLI="codex"
   └──────────────┬────────────────┘
                  ▼
   ┌───────────────────────────────┐
-  │  Agent reads tasks.md +       │
-  │  ralph-memory.md, implements  │
+  │  Agent reads ralph-memory.md  │
+  │  + tasks.md, implements       │
   │  ONE work unit, commits       │
   └──────────────┬────────────────┘
                  ▼
@@ -200,7 +200,7 @@ export SPECKIT_RALPH_AGENT_CLI="codex"
 
 ### Memory Files
 
-Ralph uses two files for cross-iteration state:
+Ralph uses two files for cross-iteration state. Successful completion requires a clean git worktree; the orchestrator refuses `<promise>COMPLETE</promise>` if `git status --short` is not clean.
 
 | File | Purpose |
 |---|---|
