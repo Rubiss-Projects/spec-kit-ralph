@@ -146,7 +146,10 @@ assert_true "iterate treats progress as audit trail" grep -q "progress.md.*appen
 assert_true "iterate preserves memory sections" grep -q "Preserve all existing memory sections" "$ITERATE_COMMAND"
 assert_true "iterate records do-not-repeat entries" grep -q "## Do Not Repeat" "$ITERATE_COMMAND"
 assert_true "iterate records current handoff" grep -q "## Current Handoff" "$ITERATE_COMMAND"
-assert_true "iterate forbids bookkeeping-only commits" grep -q "standalone commit.*progress.md.*ralph-memory.md" "$ITERATE_COMMAND"
+memory_step_line=$(grep -n "5\\. \\*\\*Update memory and progress\\*\\*" "$ITERATE_COMMAND" | cut -d: -f1)
+commit_step_line=$(grep -n "6\\. \\*\\*Commit on user story completion\\*\\*" "$ITERATE_COMMAND" | cut -d: -f1)
+assert_true "iterate updates memory before commit" test "$memory_step_line" -lt "$commit_step_line"
+assert_true "iterate forbids bookkeeping-only commits" grep -q "DO NOT create bookkeeping-only commits" "$ITERATE_COMMAND"
 assert_true "iterate requires clean completion" grep -q "Successful completion must leave.*git status --short.*clean" "$ITERATE_COMMAND"
 assert_true "memory template exists" test -f "$MEMORY_TEMPLATE"
 assert_true "memory template has feature placeholder" grep -q "{{FEATURE_NAME}}" "$MEMORY_TEMPLATE"

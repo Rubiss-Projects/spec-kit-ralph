@@ -165,7 +165,10 @@ Assert-True "iterate treats progress as audit trail" ($iterateCommandText -match
 Assert-True "iterate preserves memory sections" ($iterateCommandText -match "Preserve all existing memory sections")
 Assert-True "iterate records do-not-repeat entries" ($iterateCommandText -match "## Do Not Repeat")
 Assert-True "iterate records current handoff" ($iterateCommandText -match "## Current Handoff")
-Assert-True "iterate forbids bookkeeping-only commits" ($iterateCommandText -match "standalone commit.*progress\.md.*ralph-memory\.md")
+$memoryStepIndex = $iterateCommandText.IndexOf("5. **Update memory and progress**")
+$commitStepIndex = $iterateCommandText.IndexOf("6. **Commit on user story completion**")
+Assert-True "iterate updates memory before commit" (($memoryStepIndex -ge 0) -and ($commitStepIndex -gt $memoryStepIndex))
+Assert-True "iterate forbids bookkeeping-only commits" ($iterateCommandText -match "DO NOT create bookkeeping-only commits")
 Assert-True "iterate requires clean completion" ($iterateCommandText -match "Successful completion must leave.*git status --short.*clean")
 Assert-True "memory template exists" (Test-Path $MemoryTemplate)
 $memoryTemplateText = Get-Content $MemoryTemplate -Raw
