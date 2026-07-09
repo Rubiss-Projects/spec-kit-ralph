@@ -165,6 +165,8 @@ Assert-True "iterate treats progress as audit trail" ($iterateCommandText -match
 Assert-True "iterate preserves memory sections" ($iterateCommandText -match "Preserve all existing memory sections")
 Assert-True "iterate records do-not-repeat entries" ($iterateCommandText -match "## Do Not Repeat")
 Assert-True "iterate records current handoff" ($iterateCommandText -match "## Current Handoff")
+Assert-True "iterate forbids bookkeeping-only commits" ($iterateCommandText -match "standalone commit.*progress\.md.*ralph-memory\.md")
+Assert-True "iterate requires clean completion" ($iterateCommandText -match "Successful completion must leave.*git status --short.*clean")
 Assert-True "memory template exists" (Test-Path $MemoryTemplate)
 $memoryTemplateText = Get-Content $MemoryTemplate -Raw
 Assert-True "memory template has feature placeholder" ($memoryTemplateText -match "\{\{FEATURE_NAME\}\}")
@@ -565,6 +567,35 @@ $memoryContent = (Get-Content $memoryFile -Raw).Trim()
 Assert-Equal "does not overwrite existing memory file" "custom memory" $memoryContent
 
 Remove-Item $tmpMemoryDir -Recurse -Force
+
+#endregion
+
+#region Tests: all-complete startup
+
+Write-Section "all-complete startup"
+
+$tmpDoneRepo = Join-Path ([System.IO.Path]::GetTempPath()) "ralph-done-$PID"
+$doneSpec = Join-Path $tmpDoneRepo "specs/001-done"
+New-Item -ItemType Directory -Path $doneSpec -Force | Out-Null
+Set-Content -Path (Join-Path $doneSpec "tasks.md") -Value "- [x] T001 Already done" -Encoding UTF8
+
+$doneOutput = & pwsh -NoLogo -NoProfile -File $SourceScript `
+    -FeatureName "001-done" `
+    -TasksPath (Join-Path $doneSpec "tasks.md") `
+    -SpecDir $doneSpec `
+    -MaxIterations 1 `
+    -Model "fake-model" `
+    -AgentCli "missing-agent" `
+    -WorkingDirectory $tmpDoneRepo 2>&1
+$doneExit = $LASTEXITCODE
+$doneText = $doneOutput -join "`n"
+
+Assert-Equal "all-complete startup exits 0" 0 $doneExit
+Assert-True "all-complete startup emits completion signal" ($doneText -match "<promise>COMPLETE</promise>")
+Assert-True "all-complete startup does not create progress log" (-not (Test-Path (Join-Path $doneSpec "progress.md")))
+Assert-True "all-complete startup does not create memory file" (-not (Test-Path (Join-Path $doneSpec "ralph-memory.md")))
+
+Remove-Item $tmpDoneRepo -Recurse -Force
 
 #endregion
 

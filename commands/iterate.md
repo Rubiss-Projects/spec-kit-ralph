@@ -52,6 +52,7 @@ You **MUST** consider the user input before proceeding (if not empty).
    - Mark each completed task by changing `[ ]` to `[x]` in tasks.md
 
 5. **Commit on user story completion**:
+   - Before committing a completed user story, perform step 6 so `tasks.md`, `progress.md`, and `ralph-memory.md` are included in the same logical work-unit commit
    - When ALL tasks in the current user story are complete (`[x]`), create a commit:
 
      ```sh
@@ -61,6 +62,7 @@ You **MUST** consider the user input before proceeding (if not empty).
 
    - Example: `git commit -m "feat(001-ralph-loop-implement): US-001 Initialize Ralph Command"`
    - If only partial progress, NO commit -- let the next iteration continue
+   - NEVER create a standalone commit whose only purpose is updating `progress.md` or `ralph-memory.md`
 
 6. **Update memory and progress**:
    - Create or update `FEATURE_DIR/ralph-memory.md`
@@ -140,6 +142,11 @@ line of your response, alone on its own line with no other text or backticks aro
 This signals the ralph loop orchestrator to terminate successfully. The orchestrator only
 recognizes the token when it stands alone on a line.
 
+Before outputting this token, run `git status --short` and make sure the worktree is clean.
+If the only remaining changes are `progress.md` or `ralph-memory.md`, either include them in
+the just-created work-unit commit or discard the bookkeeping-only changes. Do not leave a dirty
+worktree after successful Ralph completion.
+
 **If tasks remain**, end your response normally and DO NOT write the token anywhere in your
 response — not even to say you are omitting it. Mentioning `<promise>COMPLETE</promise>` in
 prose while tasks remain would falsely terminate the loop. The next iteration will continue.
@@ -148,6 +155,8 @@ prose while tasks remain would falsely terminate the loop. The next iteration wi
 
 - ALL changes must pass quality checks before marking tasks complete
 - DO NOT commit broken code
+- DO NOT create bookkeeping-only commits for `progress.md` or `ralph-memory.md`
+- Successful completion must leave `git status --short` clean
 - Follow existing code patterns (check `## Codebase Patterns` in ralph-memory.md)
 - Reference plan.md for architecture decisions
 - Run tests if they exist before committing
@@ -168,5 +177,5 @@ Follow the patterns established in the codebase:
 | User story unclear | Ask for clarification in progress entry, mark tasks as blocked |
 | Tests fail | Report failure in progress entry, record command/context in ralph-memory.md, do not mark task complete, no commit |
 | Cannot complete story | Report partial progress, update Current Handoff in ralph-memory.md, commit only if all completed tasks form coherent unit |
-| All tasks done | Commit final story, output `<promise>COMPLETE</promise>` |
+| All tasks done | Commit final story with memory/progress included, verify clean worktree, output `<promise>COMPLETE</promise>` |
 | Dependencies missing | Note in progress file, add durable setup detail to ralph-memory.md, skip to next available task |

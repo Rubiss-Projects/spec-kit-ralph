@@ -675,10 +675,6 @@ function Test-CompletionSignal {
 
 #region Main Loop
 
-# Initialize progress and memory files
-Initialize-ProgressFile -Path $ProgressPath -Feature $FeatureName
-Initialize-MemoryFile -Path $MemoryPath -Feature $FeatureName -TemplatePath $MemoryTemplatePath
-
 # Check initial task count
 $initialTasks = Get-IncompleteTaskCount -Path $TasksPath
 if ($initialTasks -eq 0) {
@@ -686,6 +682,10 @@ if ($initialTasks -eq 0) {
     Write-Host "<promise>COMPLETE</promise>"
     exit 0
 }
+
+# Initialize progress and memory files
+Initialize-ProgressFile -Path $ProgressPath -Feature $FeatureName
+Initialize-MemoryFile -Path $MemoryPath -Feature $FeatureName -TemplatePath $MemoryTemplatePath
 
 Write-Host "Found $initialTasks incomplete task(s)" -ForegroundColor White
 

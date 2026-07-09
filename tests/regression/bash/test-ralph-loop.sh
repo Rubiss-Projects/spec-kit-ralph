@@ -144,6 +144,8 @@ assert_true "iterate treats progress as audit trail" grep -q "progress.md.*appen
 assert_true "iterate preserves memory sections" grep -q "Preserve all existing memory sections" "$ITERATE_COMMAND"
 assert_true "iterate records do-not-repeat entries" grep -q "## Do Not Repeat" "$ITERATE_COMMAND"
 assert_true "iterate records current handoff" grep -q "## Current Handoff" "$ITERATE_COMMAND"
+assert_true "iterate forbids bookkeeping-only commits" grep -q "standalone commit.*progress.md.*ralph-memory.md" "$ITERATE_COMMAND"
+assert_true "iterate requires clean completion" grep -q "Successful completion must leave.*git status --short.*clean" "$ITERATE_COMMAND"
 assert_true "memory template exists" test -f "$MEMORY_TEMPLATE"
 assert_true "memory template has feature placeholder" grep -q "{{FEATURE_NAME}}" "$MEMORY_TEMPLATE"
 assert_true "memory template has timestamp placeholder" grep -q "{{STARTED_AT}}" "$MEMORY_TEMPLATE"
@@ -608,6 +610,29 @@ content=$(cat "$MEMORY_FILE")
 assert_eq "does not overwrite existing memory file" "custom memory" "$content"
 
 rm -rf "$TMP_MEMORY"
+
+#endregion
+
+#region Tests: all-complete startup
+
+section "all-complete startup"
+
+TMP_DONE=$(mktemp -d)
+DONE_SPEC="$TMP_DONE/specs/001-done"
+mkdir -p "$DONE_SPEC"
+printf '%s\n' "- [x] T001 Already done" > "$DONE_SPEC/tasks.md"
+
+set +e
+done_output=$(cd "$TMP_DONE" && bash "$SOURCE_SCRIPT" --feature-name "001-done" --tasks-path "$DONE_SPEC/tasks.md" --spec-dir "$DONE_SPEC" --max-iterations 1 --model "fake-model" --agent-cli "missing-agent" 2>&1)
+done_exit=$?
+set -e
+
+assert_eq "all-complete startup exits 0" "0" "$done_exit"
+assert_true "all-complete startup emits completion signal" grep -q "<promise>COMPLETE</promise>" <<< "$done_output"
+assert_false "all-complete startup does not create progress log" test -e "$DONE_SPEC/progress.md"
+assert_false "all-complete startup does not create memory file" test -e "$DONE_SPEC/ralph-memory.md"
+
+rm -rf "$TMP_DONE"
 
 #endregion
 

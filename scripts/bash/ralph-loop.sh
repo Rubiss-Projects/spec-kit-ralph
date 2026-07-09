@@ -667,10 +667,6 @@ trap cleanup SIGINT SIGTERM
 
 #region Main Loop
 
-# Initialize progress and memory files
-initialize_progress_file "$PROGRESS_PATH" "$FEATURE_NAME"
-initialize_memory_file "$MEMORY_PATH" "$FEATURE_NAME" "$MEMORY_TEMPLATE_PATH"
-
 # Check initial task count
 INITIAL_TASKS=$(get_incomplete_task_count "$TASKS_PATH")
 if [[ "$INITIAL_TASKS" -eq 0 ]]; then
@@ -678,6 +674,10 @@ if [[ "$INITIAL_TASKS" -eq 0 ]]; then
     echo "<promise>COMPLETE</promise>"
     exit 0
 fi
+
+# Initialize progress and memory files
+initialize_progress_file "$PROGRESS_PATH" "$FEATURE_NAME"
+initialize_memory_file "$MEMORY_PATH" "$FEATURE_NAME" "$MEMORY_TEMPLATE_PATH"
 
 echo -e "\033[37mFound $INITIAL_TASKS incomplete task(s)\033[0m"
 
