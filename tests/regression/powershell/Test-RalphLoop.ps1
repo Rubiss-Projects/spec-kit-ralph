@@ -82,6 +82,14 @@ function New-FakeCopilot {
         $path = Join-Path $Directory "copilot.cmd"
         $lines = @("@echo off")
 
+        function ConvertTo-CmdEchoLiteral {
+            param([string]$Value)
+
+            $escaped = $Value.Replace("^", "^^").Replace("%", "%%")
+            $escaped = $escaped.Replace("&", "^&").Replace("<", "^<").Replace(">", "^>").Replace("|", "^|")
+            return "echo($escaped"
+        }
+
         if ($EchoArgs) {
             $lines += @(
                 "setlocal enabledelayedexpansion",
@@ -92,12 +100,13 @@ function New-FakeCopilot {
                 "shift",
                 "goto args_loop",
                 ":args_done",
-                "echo !out!"
+                "echo !out!",
+                "endlocal"
             )
         }
 
         foreach ($line in $OutputLines) {
-            $lines += "echo $line"
+            $lines += ConvertTo-CmdEchoLiteral -Value $line
         }
         $lines += "exit /b $ExitCode"
         Set-Content -Path $path -Value ($lines -join "`r`n") -Encoding ASCII
@@ -174,6 +183,27 @@ Assert-True "memory template exists" (Test-Path $MemoryTemplate)
 $memoryTemplateText = Get-Content $MemoryTemplate -Raw
 Assert-True "memory template has feature placeholder" ($memoryTemplateText -match "\{\{FEATURE_NAME\}\}")
 Assert-True "memory template has timestamp placeholder" ($memoryTemplateText -match "\{\{STARTED_AT\}\}")
+
+#endregion
+
+#region Tests: Windows fake copilot fixture
+
+Write-Section "Windows fake copilot fixture"
+
+$tmpWindowsFakeDir = Join-Path ([System.IO.Path]::GetTempPath()) "ralph-windows-fake-$PID"
+New-Item -ItemType Directory -Path $tmpWindowsFakeDir -Force | Out-Null
+$previousOS = $env:OS
+try {
+    $env:OS = "Windows_NT"
+    $fakeWindowsCopilot = New-FakeCopilot -Directory $tmpWindowsFakeDir -OutputLines @("<promise>COMPLETE</promise>") -ExitCode 0
+    $fakeWindowsCopilotText = Get-Content -Path $fakeWindowsCopilot -Raw
+    Assert-True "windows fake escapes completion token" ($fakeWindowsCopilotText -match "echo\(\^<promise\^>COMPLETE\^</promise\^>")
+    Assert-True "windows fake does not emit raw redirection token" (-not ($fakeWindowsCopilotText -match "(?m)^echo <promise>COMPLETE</promise>"))
+}
+finally {
+    $env:OS = $previousOS
+    Remove-Item $tmpWindowsFakeDir -Recurse -Force
+}
 
 #endregion
 

@@ -694,8 +694,8 @@ function Write-DirtyCompletion {
         $WorkDir = "."
     }
 
-    Write-Host "Completion signal received, but worktree is dirty. Refusing successful completion." -ForegroundColor Red
-    & git -C $WorkDir status --short 2>$null | ForEach-Object { Write-Host $_ }
+    Write-Output "Completion signal received, but worktree is dirty. Refusing successful completion."
+    & git -C $WorkDir status --short 2>$null | ForEach-Object { Write-Output $_ }
 }
 
 #endregion
