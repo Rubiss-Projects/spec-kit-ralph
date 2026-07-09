@@ -18,6 +18,7 @@ $FixtureDir = Join-Path $ScriptDir "..\fixtures"
 $SourceScript = Join-Path $RepoRoot "scripts\powershell\ralph-loop.ps1"
 $RunCommand = Join-Path $RepoRoot "commands\run.md"
 $IterateCommand = Join-Path $RepoRoot "commands\iterate.md"
+$MemoryTemplate = Join-Path $RepoRoot "templates\ralph-memory-template.md"
 
 # Test bookkeeping
 $script:TestsRun = 0
@@ -164,6 +165,10 @@ Assert-True "iterate treats progress as audit trail" ($iterateCommandText -match
 Assert-True "iterate preserves memory sections" ($iterateCommandText -match "Preserve all existing memory sections")
 Assert-True "iterate records do-not-repeat entries" ($iterateCommandText -match "## Do Not Repeat")
 Assert-True "iterate records current handoff" ($iterateCommandText -match "## Current Handoff")
+Assert-True "memory template exists" (Test-Path $MemoryTemplate)
+$memoryTemplateText = Get-Content $MemoryTemplate -Raw
+Assert-True "memory template has feature placeholder" ($memoryTemplateText -match "\{\{FEATURE_NAME\}\}")
+Assert-True "memory template has timestamp placeholder" ($memoryTemplateText -match "\{\{STARTED_AT\}\}")
 
 #endregion
 
@@ -539,11 +544,13 @@ New-Item -ItemType Directory -Path $tmpMemoryDir -Force | Out-Null
 
 # Creates file when missing
 $memoryFile = Join-Path $tmpMemoryDir "ralph-memory.md"
-Initialize-MemoryFile -Path $memoryFile -Feature "test-feature"
+Initialize-MemoryFile -Path $memoryFile -Feature "test-feature" -TemplatePath $MemoryTemplate
 Assert-True "creates memory file" (Test-Path $memoryFile)
 
 $memoryContent = Get-Content $memoryFile -Raw
 Assert-True "memory contains feature name" ($memoryContent -match "Feature: test-feature")
+Assert-True "memory replaces feature placeholder" (-not ($memoryContent -match "\{\{FEATURE_NAME\}\}"))
+Assert-True "memory replaces timestamp placeholder" (-not ($memoryContent -match "\{\{STARTED_AT\}\}"))
 Assert-True "memory contains codebase patterns section" ($memoryContent -match "## Codebase Patterns")
 Assert-True "memory contains decisions section" ($memoryContent -match "## Decisions")
 Assert-True "memory contains gotchas section" ($memoryContent -match "## Gotchas")
@@ -553,7 +560,7 @@ Assert-True "memory contains current handoff section" ($memoryContent -match "##
 
 # Doesn't overwrite existing file
 Set-Content -Path $memoryFile -Value "custom memory" -Encoding UTF8
-Initialize-MemoryFile -Path $memoryFile -Feature "other-feature"
+Initialize-MemoryFile -Path $memoryFile -Feature "other-feature" -TemplatePath $MemoryTemplate
 $memoryContent = (Get-Content $memoryFile -Raw).Trim()
 Assert-Equal "does not overwrite existing memory file" "custom memory" $memoryContent
 

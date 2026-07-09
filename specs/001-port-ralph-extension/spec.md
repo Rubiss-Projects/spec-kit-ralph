@@ -133,7 +133,7 @@ As a spec-kit user, I want the ralph extension to optionally hook into the `afte
 - **FR-005**: Each loop iteration MUST spawn a fresh agent CLI process; no in-memory state may carry over between iterations
 - **FR-006**: Task completion MUST be tracked via `tasks.md` checkbox state (`[ ]` → `[x]`); no separate tracking file is permitted
 - **FR-007**: Iteration history MUST be appended to `specs/{feature}/progress.md` after each iteration with timestamp, work unit, tasks completed, files changed, and concise learnings
-- **FR-016**: Durable cross-iteration implementation memory MUST be maintained in `specs/{feature}/ralph-memory.md` with fixed sections for Codebase Patterns, Decisions, Gotchas, Reusable Commands, Do Not Repeat, and Current Handoff. The file MUST be initialized by both orchestrator scripts, read before selecting work, updated before each iteration exits, and preserved without overwriting existing content
+- **FR-016**: Durable cross-iteration implementation memory MUST be maintained in `specs/{feature}/ralph-memory.md` with fixed sections for Codebase Patterns, Decisions, Gotchas, Reusable Commands, Do Not Repeat, and Current Handoff. The file MUST be initialized by both orchestrator scripts from `templates/ralph-memory-template.md`, read before selecting work, updated before each iteration exits, and preserved without overwriting existing content
 - **FR-008**: The loop MUST terminate when: (a) the agent outputs `<promise>COMPLETE</promise>`, (b) all tasks.md checkboxes are `[x]`, or (c) the maximum iteration count is reached
 - **FR-009**: The loop MUST terminate after 3 consecutive iteration failures with a clear error summary
 - **FR-010**: The loop MUST handle Ctrl+C gracefully, preserving all progress and exiting with code 130

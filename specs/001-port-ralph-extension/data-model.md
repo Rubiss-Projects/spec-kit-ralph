@@ -160,14 +160,14 @@ Started: {timestamp}
 ### 5. Ralph Memory
 
 **File**: `specs/{feature}/ralph-memory.md`
-**Purpose**: Compact durable memory bridge read by each fresh agent context before selecting work. Created by the orchestrator on first run and updated by the agent before exit.
+**Purpose**: Compact durable memory bridge read by each fresh agent context before selecting work. Created by the orchestrator on first run from `templates/ralph-memory-template.md` and updated by the agent before exit.
 
 **Structure**:
 ```markdown
 # Ralph Memory
 
-Feature: {feature_name}
-Started: {timestamp}
+Feature: {{FEATURE_NAME}}
+Started: {{STARTED_AT}}
 
 ## Codebase Patterns
 
@@ -200,7 +200,7 @@ Started: {timestamp}
 - Promote reusable findings into `## Codebase Patterns`
 - Record failed approaches in `## Do Not Repeat`
 - Keep `## Current Handoff` concise and current
-- Created by `Initialize-MemoryFile` / `initialize_memory_file` in orchestrator if first run
+- Created by `Initialize-MemoryFile` / `initialize_memory_file` from `templates/ralph-memory-template.md` in orchestrator if first run
 
 ---
 

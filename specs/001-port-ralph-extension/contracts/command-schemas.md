@@ -124,7 +124,7 @@ Started: {timestamp}
 - Short notes the next fresh agent must know before continuing.
 ```
 
-`ralph-memory.md` is updated in place and never overwritten. `progress.md` remains the append-only audit trail.
+`ralph-memory.md` is initialized from `templates/ralph-memory-template.md`, updated in place, and never overwritten. `progress.md` remains the append-only audit trail.
 
 ### Progress Entry Format
 

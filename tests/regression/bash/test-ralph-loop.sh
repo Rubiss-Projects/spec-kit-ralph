@@ -18,6 +18,7 @@ FIXTURE_DIR="$SCRIPT_DIR/../fixtures"
 SOURCE_SCRIPT="$REPO_ROOT/scripts/bash/ralph-loop.sh"
 RUN_COMMAND="$REPO_ROOT/commands/run.md"
 ITERATE_COMMAND="$REPO_ROOT/commands/iterate.md"
+MEMORY_TEMPLATE="$REPO_ROOT/templates/ralph-memory-template.md"
 
 # Test bookkeeping
 TESTS_RUN=0
@@ -143,6 +144,9 @@ assert_true "iterate treats progress as audit trail" grep -q "progress.md.*appen
 assert_true "iterate preserves memory sections" grep -q "Preserve all existing memory sections" "$ITERATE_COMMAND"
 assert_true "iterate records do-not-repeat entries" grep -q "## Do Not Repeat" "$ITERATE_COMMAND"
 assert_true "iterate records current handoff" grep -q "## Current Handoff" "$ITERATE_COMMAND"
+assert_true "memory template exists" test -f "$MEMORY_TEMPLATE"
+assert_true "memory template has feature placeholder" grep -q "{{FEATURE_NAME}}" "$MEMORY_TEMPLATE"
+assert_true "memory template has timestamp placeholder" grep -q "{{STARTED_AT}}" "$MEMORY_TEMPLATE"
 
 #endregion
 
@@ -583,11 +587,13 @@ TMP_MEMORY=$(mktemp -d)
 
 # Creates file when missing
 MEMORY_FILE="$TMP_MEMORY/ralph-memory.md"
-initialize_memory_file "$MEMORY_FILE" "test-feature" >/dev/null 2>&1
+initialize_memory_file "$MEMORY_FILE" "test-feature" "$MEMORY_TEMPLATE" >/dev/null 2>&1
 assert_true "creates memory file" test -f "$MEMORY_FILE"
 
 # File contains expected memory sections
 assert_true "memory contains feature name" grep -q "Feature: test-feature" "$MEMORY_FILE"
+assert_false "memory replaces feature placeholder" grep -q "{{FEATURE_NAME}}" "$MEMORY_FILE"
+assert_false "memory replaces timestamp placeholder" grep -q "{{STARTED_AT}}" "$MEMORY_FILE"
 assert_true "memory contains codebase patterns section" grep -q "## Codebase Patterns" "$MEMORY_FILE"
 assert_true "memory contains decisions section" grep -q "## Decisions" "$MEMORY_FILE"
 assert_true "memory contains gotchas section" grep -q "## Gotchas" "$MEMORY_FILE"
@@ -597,7 +603,7 @@ assert_true "memory contains current handoff section" grep -q "## Current Handof
 
 # Doesn't overwrite existing file
 printf '%s\n' "custom memory" > "$MEMORY_FILE"
-initialize_memory_file "$MEMORY_FILE" "other-feature" >/dev/null 2>&1
+initialize_memory_file "$MEMORY_FILE" "other-feature" "$MEMORY_TEMPLATE" >/dev/null 2>&1
 content=$(cat "$MEMORY_FILE")
 assert_eq "does not overwrite existing memory file" "custom memory" "$content"
 

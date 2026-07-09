@@ -35,6 +35,7 @@ WORKING_DIRECTORY=""
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 EXTENSION_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 ITERATE_COMMAND_PATH="$EXTENSION_ROOT/commands/iterate.md"
+MEMORY_TEMPLATE_PATH="$EXTENSION_ROOT/templates/ralph-memory-template.md"
 
 # Track which args were explicitly set via CLI
 FEATURE_NAME_EXPLICIT=false
@@ -240,15 +241,20 @@ EOF
 initialize_memory_file() {
     local path=$1
     local feature=$2
+    local template_path=${3:-}
 
     if [[ ! -f "$path" ]]; then
         local timestamp
+        local content
         timestamp=$(date +"%Y-%m-%d %H:%M:%S")
-        cat > "$path" << EOF
+        if [[ -n "$template_path" && -f "$template_path" ]]; then
+            content=$(<"$template_path")
+        else
+            content=$(cat << 'EOF'
 # Ralph Memory
 
-Feature: $feature
-Started: $timestamp
+Feature: {{FEATURE_NAME}}
+Started: {{STARTED_AT}}
 
 ## Codebase Patterns
 
@@ -273,8 +279,12 @@ Started: $timestamp
 ## Current Handoff
 
 - Short notes the next fresh agent must know before continuing.
-
 EOF
+)
+        fi
+        content=${content//\{\{FEATURE_NAME\}\}/$feature}
+        content=${content//\{\{STARTED_AT\}\}/$timestamp}
+        printf '%s\n' "$content" > "$path"
         echo -e "\033[90mCreated memory file: $path\033[0m"
     fi
 }
@@ -659,7 +669,7 @@ trap cleanup SIGINT SIGTERM
 
 # Initialize progress and memory files
 initialize_progress_file "$PROGRESS_PATH" "$FEATURE_NAME"
-initialize_memory_file "$MEMORY_PATH" "$FEATURE_NAME"
+initialize_memory_file "$MEMORY_PATH" "$FEATURE_NAME" "$MEMORY_TEMPLATE_PATH"
 
 # Check initial task count
 INITIAL_TASKS=$(get_incomplete_task_count "$TASKS_PATH")

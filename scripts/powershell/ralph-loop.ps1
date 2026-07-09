@@ -96,6 +96,7 @@ $MemoryPath = Join-Path $SpecDir "ralph-memory.md"
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $ExtensionRoot = Resolve-Path (Join-Path $ScriptDir "..\..") | Select-Object -ExpandProperty Path
 $IterateCommandPath = Join-Path $ExtensionRoot "commands\iterate.md"
+$MemoryTemplatePath = Join-Path $ExtensionRoot "templates\ralph-memory-template.md"
 
 # Load config from extension config file
 function Read-RalphConfig {
@@ -232,15 +233,18 @@ Started: $timestamp
 }
 
 function Initialize-MemoryFile {
-    param([string]$Path, [string]$Feature)
+    param([string]$Path, [string]$Feature, [string]$TemplatePath = "")
     
     if (-not (Test-Path $Path)) {
         $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-        $header = @"
+        if ($TemplatePath -and (Test-Path $TemplatePath)) {
+            $header = Get-Content -Path $TemplatePath -Raw
+        } else {
+            $header = @"
 # Ralph Memory
 
-Feature: $Feature
-Started: $timestamp
+Feature: {{FEATURE_NAME}}
+Started: {{STARTED_AT}}
 
 ## Codebase Patterns
 
@@ -267,6 +271,8 @@ Started: $timestamp
 - Short notes the next fresh agent must know before continuing.
 
 "@
+        }
+        $header = $header.Replace("{{FEATURE_NAME}}", $Feature).Replace("{{STARTED_AT}}", $timestamp)
         Set-Content -Path $Path -Value $header -Encoding UTF8
         Write-Host "Created memory file: $Path" -ForegroundColor DarkGray
     }
@@ -671,7 +677,7 @@ function Test-CompletionSignal {
 
 # Initialize progress and memory files
 Initialize-ProgressFile -Path $ProgressPath -Feature $FeatureName
-Initialize-MemoryFile -Path $MemoryPath -Feature $FeatureName
+Initialize-MemoryFile -Path $MemoryPath -Feature $FeatureName -TemplatePath $MemoryTemplatePath
 
 # Check initial task count
 $initialTasks = Get-IncompleteTaskCount -Path $TasksPath

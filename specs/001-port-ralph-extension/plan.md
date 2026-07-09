@@ -67,6 +67,8 @@ spec-kit-ralph/                          # Extension root (= repo root)
 ├── commands/
 │   ├── run.md                           # speckit.ralph.run — thin launcher
 │   └── iterate.md                       # speckit.ralph.iterate — single iteration
+├── templates/
+│   └── ralph-memory-template.md         # Initial ralph-memory.md template
 ├── scripts/
 │   ├── powershell/
 │   │   └── ralph-loop.ps1               # PowerShell orchestrator (ported from core)
