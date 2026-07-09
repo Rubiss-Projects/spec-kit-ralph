@@ -648,7 +648,9 @@ test_worktree_clean() {
     [[ -z "$work_dir" ]] && work_dir="."
 
     git -C "$work_dir" rev-parse --is-inside-work-tree >/dev/null 2>&1 || return 1
-    [[ -z "$(git -C "$work_dir" status --porcelain 2>/dev/null)" ]]
+    local status
+    status=$(git -C "$work_dir" status --porcelain 2>/dev/null) || return 1
+    [[ -z "$status" ]]
 }
 
 report_dirty_completion() {

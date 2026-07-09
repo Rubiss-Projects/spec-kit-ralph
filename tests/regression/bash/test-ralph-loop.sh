@@ -118,6 +118,8 @@ extract_functions() {
     sed -n '/^invoke_claude_iteration()/,/^}/p' "$SOURCE_SCRIPT"
     # Extract test_completion_signal
     sed -n '/^test_completion_signal()/,/^}/p' "$SOURCE_SCRIPT"
+    # Extract test_worktree_clean
+    sed -n '/^test_worktree_clean()/,/^}/p' "$SOURCE_SCRIPT"
     # Extract load_ralph_config
     sed -n '/^load_ralph_config()/,/^}/p' "$SOURCE_SCRIPT"
 }
@@ -621,6 +623,32 @@ content=$(cat "$MEMORY_FILE")
 assert_eq "does not overwrite existing memory file" "custom memory" "$content"
 
 rm -rf "$TMP_MEMORY"
+
+#endregion
+
+#region Tests: test_worktree_clean
+
+section "test_worktree_clean"
+
+TMP_WORKTREE=$(mktemp -d)
+git -C "$TMP_WORKTREE" init >/dev/null 2>&1
+printf '%s\n' "tracked" > "$TMP_WORKTREE/file.txt"
+git -C "$TMP_WORKTREE" add .
+git -C "$TMP_WORKTREE" -c user.name="Ralph Test" -c user.email="ralph@example.com" commit -m "test fixture" >/dev/null 2>&1
+
+assert_true "clean repo is clean" test_worktree_clean "$TMP_WORKTREE"
+
+printf '%s\n' "dirty" > "$TMP_WORKTREE/dirty.txt"
+assert_false "dirty repo is not clean" test_worktree_clean "$TMP_WORKTREE"
+rm "$TMP_WORKTREE/dirty.txt"
+
+set +e
+GIT_INDEX_FILE="$TMP_WORKTREE/.git" test_worktree_clean "$TMP_WORKTREE"
+status_failure_result=$?
+set -e
+assert_eq "git status failure is not clean" "1" "$status_failure_result"
+
+rm -rf "$TMP_WORKTREE"
 
 #endregion
 
