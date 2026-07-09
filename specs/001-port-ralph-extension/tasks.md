@@ -91,7 +91,7 @@ No standalone implementation tasks — US1 is the integration checkpoint verifie
 
 - [x] T010 [US4] Create commands/iterate.md per specs/001-port-ralph-extension/contracts/command-schemas.md at commands/iterate.md — port from source repo templates/commands/ralph.md (adapt per research R6: update frontmatter script references to use ../../scripts/bash/check-prerequisites.sh and ../../scripts/powershell/check-prerequisites.ps1 with --json --require-tasks --include-tasks flags, keep scope constraint, outline steps, progress format, stop conditions, quality gates, error handling). Source: C:\Users\Rubis\Projects\spec-kit\templates\commands\ralph.md
 
-**Checkpoint**: Iterate command defined. US4 acceptance scenarios 1-4 satisfied. US3 (Progress Tracking and Memory) also satisfied — progress.md format and ralph-memory.md handoff sections are specified in iterate command instructions and initialized by scripts from templates/ralph-memory-template.md.
+**Checkpoint**: Iterate command defined. US4 acceptance scenarios 1-4 satisfied. US3 (Progress Tracking) also satisfied — progress.md format is specified in iterate command instructions and Initialize-ProgressFile function in scripts.
 
 ---
 
@@ -119,7 +119,7 @@ No standalone implementation tasks — US1 is the integration checkpoint verifie
 
 - **US1 (Install)**: Satisfied when extension.yml (T004) + config template (T005) + all referenced command files (T009, T010) exist. Verified by T012.
 - **US2 (Run Loop)**: Core implementation. Scripts (T006, T007) + iterate command behavior (T008) + run command (T009). Independent of US4.
-- **US3 (Progress Tracking and Memory)**: Cross-cutting — satisfied by scripts' Initialize-ProgressFile and Initialize-MemoryFile functions (T006/T007), templates/ralph-memory-template.md, and iterate command's progress report and memory handoff format (T010). No standalone tasks.
+- **US3 (Progress Tracking)**: Cross-cutting — satisfied by scripts' Initialize-ProgressFile function (T006/T007) + iterate command's progress report format (T010). No standalone tasks.
 - **US4 (Iterate Command)**: Single command file (T010). Independent of US2 scripts (can be written and tested separately).
 - **US5 (Config)**: Cross-cutting — satisfied by config template (T005) + script config loading (T006/T007) + env var overrides. No standalone tasks.
 - **US6 (Hooks)**: Cross-cutting — satisfied by `hooks.after_tasks` section in extension.yml (T004). No standalone tasks.

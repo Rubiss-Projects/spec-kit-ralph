@@ -44,18 +44,18 @@ As a developer with completed spec, plan, and tasks phases, I want to run a sing
 
 ### User Story 3 - Progress Tracking and Cross-Iteration Learning (Priority: P2)
 
-As a developer, I want the ralph loop to maintain both an audit log and a compact durable memory file across iterations so that each fresh agent context can learn from previous iterations without relying on in-memory state.
+As a developer, I want the ralph loop to maintain a progress log across iterations so that each fresh agent context can learn from previous iterations without relying on in-memory state.
 
 **Why this priority**: Progress persistence is what makes the ralph loop resumable and debuggable. Without it, context isolation (Principle II) would cause repeated mistakes across iterations.
 
-**Independent Test**: Can be tested by running 2-3 iterations and verifying that `progress.md` contains chronological entries with timestamps, tasks completed, files changed, and learnings; and that `ralph-memory.md` contains durable codebase patterns, decisions, gotchas, reusable commands, avoided approaches, and current handoff notes.
+**Independent Test**: Can be tested by running 2-3 iterations and verifying that `progress.md` contains chronological entries with timestamps, tasks completed, files changed, and learnings; and that the codebase patterns section is populated.
 
 **Acceptance Scenarios**:
 
 1. **Given** a ralph loop iteration completes a work unit, **When** the iteration ends, **Then** the system appends a progress entry to `specs/{feature}/progress.md` with: timestamp, work unit attempted, tasks completed, files changed, and learnings discovered
-2. **Given** a new ralph loop iteration starts, **When** the agent prompt is constructed, **Then** it includes instructions to read `ralph-memory.md` for durable codebase patterns and prior context
-3. **Given** multiple iterations have run, **When** I inspect `ralph-memory.md`, **Then** I see structured sections for codebase patterns, decisions, gotchas, reusable commands, do-not-repeat notes, and current handoff
-4. **Given** a previously interrupted ralph loop, **When** I restart it, **Then** it reads `tasks.md` checkbox state and `ralph-memory.md` to pick up where it left off without re-doing completed work
+2. **Given** a new ralph loop iteration starts, **When** the agent prompt is constructed, **Then** it includes instructions to read the progress file for codebase patterns and prior context
+3. **Given** multiple iterations have run, **When** I inspect `progress.md`, **Then** I see a chronological log with a `## Codebase Patterns` section at the top that accumulates discovered conventions
+4. **Given** a previously interrupted ralph loop, **When** I restart it, **Then** it reads `tasks.md` checkbox state and `progress.md` to pick up where it left off without re-doing completed work
 
 ---
 
@@ -120,7 +120,6 @@ As a spec-kit user, I want the ralph extension to optionally hook into the `afte
 - What happens when the extension is installed alongside other spec-kit extensions? → Must not conflict; commands are namespaced under `speckit.ralph.*`
 - What happens when the user runs the ralph loop on a branch that does not match any specs directory? → Fall back to the most recent (highest-numbered) spec directory
 - What happens when progress.md already exists from a prior run? → Append to it; never overwrite existing entries
-- What happens when ralph-memory.md already exists from a prior run? → Preserve it and update existing sections; never overwrite existing entries
 
 ## Requirements *(mandatory)*
 
@@ -132,8 +131,7 @@ As a spec-kit user, I want the ralph extension to optionally hook into the `afte
 - **FR-004**: Extension MUST include both PowerShell (`ralph-loop.ps1`) and Bash (`ralph-loop.sh`) orchestrator scripts for cross-platform support
 - **FR-005**: Each loop iteration MUST spawn a fresh agent CLI process; no in-memory state may carry over between iterations
 - **FR-006**: Task completion MUST be tracked via `tasks.md` checkbox state (`[ ]` → `[x]`); no separate tracking file is permitted
-- **FR-007**: Iteration history MUST be appended to `specs/{feature}/progress.md` after each iteration with timestamp, work unit, tasks completed, files changed, and concise learnings
-- **FR-016**: Durable cross-iteration implementation memory MUST be maintained in `specs/{feature}/ralph-memory.md` with fixed sections for Codebase Patterns, Decisions, Gotchas, Reusable Commands, Do Not Repeat, and Current Handoff. The file MUST be initialized by both orchestrator scripts from `templates/ralph-memory-template.md`, read before selecting work, updated before each iteration exits, and preserved without overwriting existing content
+- **FR-007**: Iteration history MUST be appended to `specs/{feature}/progress.md` after each iteration with timestamp, work unit, tasks completed, files changed, and learnings
 - **FR-008**: The loop MUST terminate when: (a) the agent outputs `<promise>COMPLETE</promise>`, (b) all tasks.md checkboxes are `[x]`, or (c) the maximum iteration count is reached
 - **FR-009**: The loop MUST terminate after 3 consecutive iteration failures with a clear error summary
 - **FR-010**: The loop MUST handle Ctrl+C gracefully, preserving all progress and exiting with code 130
@@ -148,8 +146,7 @@ As a spec-kit user, I want the ralph extension to optionally hook into the `afte
 - **Extension Manifest**: The `extension.yml` file declaring the extension's identity, commands, hooks, configuration, and compatibility requirements
 - **Ralph Session**: A single execution of the ralph loop from start to termination; characterized by iteration count, start/end time, and final status (completed, interrupted, failed, iteration-limit-reached)
 - **Iteration**: One invocation of the agent CLI within a session; has a number, work unit attempted, outcome (success/failure), and duration
-- **Progress Log**: Append-only markdown file (`progress.md`) tracking all iterations as an audit trail
-- **Ralph Memory**: Compact durable markdown file (`ralph-memory.md`) carrying cross-iteration implementation knowledge for fresh agent contexts
+- **Progress Log**: Append-only markdown file (`progress.md`) tracking all iterations with a codebase patterns section for cross-iteration learning
 - **Iteration Command**: The `speckit.ralph.iterate` command definition that constrains agent behavior to one work unit per invocation
 - **Extension Configuration**: User-customizable settings (default model, max iterations, agent CLI binary) stored in the extension config directory
 

@@ -85,46 +85,11 @@ Note: The `../../scripts/` paths are relative to the extension's `commands/` dir
 ### Required Behavior (agent instructions)
 
 1. **Setup**: Run prerequisites script, parse feature directory and available docs
-2. **Read context**: `ralph-memory.md` (durable memory), `progress.md` (audit/recent history), `tasks.md` (task list), `plan.md` (architecture), optionally `data-model.md`, `contracts/`, `research.md`
+2. **Read context**: `progress.md` (patterns), `tasks.md` (task list), `plan.md` (architecture), optionally `data-model.md`, `contracts/`, `research.md`
 3. **Identify scope**: Find FIRST incomplete work unit (phase/story/task group). Work ONLY within that scope
 4. **Implement tasks**: Complete in dependency order, TDD when appropriate, mark `[x]` in tasks.md
 5. **Commit on completion**: If all tasks in work unit complete → `git add -A && git commit -m "feat({feature}): {work unit}"`
-6. **Update memory and progress**: Preserve/update `ralph-memory.md`; append iteration entry to `progress.md` with format below
-
-### Ralph Memory Format
-
-```markdown
-# Ralph Memory
-
-Feature: {feature}
-Started: {timestamp}
-
-## Codebase Patterns
-
-- Durable repo conventions and APIs discovered across iterations.
-
-## Decisions
-
-- Decision, rationale, and affected files.
-
-## Gotchas
-
-- Unexpected behavior, environment quirks, failing commands, generated-file rules.
-
-## Reusable Commands
-
-- Known-good test/lint/build commands and required environment variables.
-
-## Do Not Repeat
-
-- Failed approaches or paths already ruled out.
-
-## Current Handoff
-
-- Short notes the next fresh agent must know before continuing.
-```
-
-`ralph-memory.md` is initialized from `templates/ralph-memory-template.md`, updated in place, and never overwritten. `progress.md` remains the append-only audit trail.
+6. **Update progress**: Append iteration entry to `progress.md` with format below
 
 ### Progress Entry Format
 
@@ -139,7 +104,7 @@ Started: {timestamp}
 **Files Changed**:
 - path/to/file.ext (created/modified/deleted)
 **Learnings**:
-- concise iteration-specific notes; durable discoveries added to ralph-memory.md
+- patterns discovered
 ---
 ```
 

@@ -101,11 +101,10 @@ export GH_TOKEN="your-token"
 1. Orchestrator validates prerequisites
 2. For each iteration:
    - Spawns fresh `copilot --agent speckit.ralph.iterate` process
-   - Agent reads `tasks.md` and `ralph-memory.md`
+   - Agent reads `tasks.md` and `progress.md`
    - Agent identifies first incomplete work unit
    - Agent implements tasks, marks `[x]` in `tasks.md`
    - Agent commits completed work units
-   - Agent updates durable handoff context in `ralph-memory.md`
    - Agent appends progress entry to `progress.md`
 3. Loop terminates when:
    - All tasks complete → exit 0
@@ -116,10 +115,10 @@ export GH_TOKEN="your-token"
 
 ## Resuming After Interruption
 
-Simply re-run the command. The loop reads `tasks.md` checkbox state and `ralph-memory.md` to pick up where it left off:
+Simply re-run the command. The loop reads `tasks.md` checkbox state and `progress.md` to pick up where it left off:
 
 ```
 /speckit.ralph.run
 ```
 
-Already-completed tasks (`[x]`) are skipped. The memory file provides compact context from prior iterations, and the progress log remains available as the historical audit trail.
+Already-completed tasks (`[x]`) are skipped. The progress log provides context from prior iterations.

@@ -68,7 +68,7 @@ The `run.md` command must not perform implementation work. It validates prerequi
 
 ### `speckit.ralph.iterate` (single iteration)  
 - **Role**: Agent-facing command invoked BY the orchestrator script for each iteration
-- **Behavior**: Read tasks.md and ralph-memory.md → identify first incomplete work unit → implement it → update tasks.md checkboxes → update ralph-memory.md → append to progress.md → commit if work unit complete
+- **Behavior**: Read tasks.md → identify first incomplete work unit → implement it → update tasks.md checkboxes → append to progress.md → commit if work unit complete
 - **Invoked by**: `copilot --agent speckit.ralph.iterate -p "Iteration N"` from the orchestrator script
 
 ### Pipeline Flow
@@ -87,8 +87,6 @@ User ──→ /speckit.ralph.run ──→ validate ──→ ralph-loop.ps1/sh
                                               │  command   │
                                               │     │      │
                                               │  tasks.md  │
-                                              │ ralph-     │
-                                              │ memory.md  │
                                               │ progress.md│
                                               └────────────┘
 ```
