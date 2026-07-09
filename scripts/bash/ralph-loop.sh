@@ -643,6 +643,22 @@ test_completion_signal() {
     printf '%s\n' "$output" | grep -Eq '^[[:space:]`]*<promise>COMPLETE</promise>[[:space:]`]*$'
 }
 
+test_worktree_clean() {
+    local work_dir=$1
+    [[ -z "$work_dir" ]] && work_dir="."
+
+    git -C "$work_dir" rev-parse --is-inside-work-tree >/dev/null 2>&1 || return 1
+    [[ -z "$(git -C "$work_dir" status --porcelain 2>/dev/null)" ]]
+}
+
+report_dirty_completion() {
+    local work_dir=$1
+    [[ -z "$work_dir" ]] && work_dir="."
+
+    echo -e "\033[31mCompletion signal received, but worktree is dirty. Refusing successful completion.\033[0m"
+    git -C "$work_dir" status --short 2>/dev/null || true
+}
+
 print_summary() {
     local iterations_run=$1
     local status_label=$2
@@ -721,8 +737,14 @@ while [[ $iteration -le $MAX_ITERATIONS && "$completed" == "false" && "$INTERRUP
 
     # Check for completion signal
     if test_completion_signal "$output"; then
-        print_status "$iteration" "success" "COMPLETE signal received"
-        completed=true
+        if test_worktree_clean "$WORKING_DIRECTORY"; then
+            print_status "$iteration" "success" "COMPLETE signal received"
+            completed=true
+        else
+            print_status "$iteration" "failure" "COMPLETE signal received with dirty worktree"
+            report_dirty_completion "$WORKING_DIRECTORY"
+            fatal_failure=true
+        fi
         break
     fi
 
@@ -751,8 +773,14 @@ while [[ $iteration -le $MAX_ITERATIONS && "$completed" == "false" && "$INTERRUP
     # Check remaining tasks
     remaining_tasks=$(get_incomplete_task_count "$TASKS_PATH")
     if [[ "$remaining_tasks" -eq 0 ]]; then
-        echo -e "\033[32mAll tasks complete!\033[0m"
-        completed=true
+        if test_worktree_clean "$WORKING_DIRECTORY"; then
+            echo -e "\033[32mAll tasks complete!\033[0m"
+            completed=true
+        else
+            print_status "$iteration" "failure" "All tasks complete but worktree is dirty"
+            report_dirty_completion "$WORKING_DIRECTORY"
+            fatal_failure=true
+        fi
         break
     fi
 

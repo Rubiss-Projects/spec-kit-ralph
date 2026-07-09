@@ -192,10 +192,10 @@ export SPECKIT_RALPH_AGENT_CLI="codex"
 ### Iteration Cycle
 
 1. The orchestrator spawns a **fresh** configured agent CLI process each iteration.
-2. The agent reads `tasks.md` to find the first incomplete work unit (phase, user story, or task group).
-3. It reads `ralph-memory.md` for compact durable context from previous fresh iterations.
-4. It implements tasks within that single work unit, marks them `[x]` in `tasks.md`, and commits on completion.
-5. It updates `ralph-memory.md` with durable discoveries and appends an iteration entry to `progress.md` with files changed and lessons learned.
+2. The agent reads `ralph-memory.md` for compact durable context from previous fresh iterations.
+3. It reads `tasks.md` to find the first incomplete work unit (phase, user story, or task group).
+4. It implements tasks within that single work unit and marks them `[x]` in `tasks.md`.
+5. It updates `ralph-memory.md` with durable discoveries, appends an iteration entry to `progress.md`, and commits on completion.
 6. Control returns to the orchestrator, which checks termination conditions and loops.
 
 ### Memory Files

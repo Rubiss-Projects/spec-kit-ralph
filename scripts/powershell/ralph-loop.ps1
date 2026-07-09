@@ -671,6 +671,33 @@ function Test-CompletionSignal {
     return $Output -match '(?m)^[\s`]*<promise>COMPLETE</promise>[\s`]*$'
 }
 
+function Test-WorktreeClean {
+    param([string]$WorkDir)
+
+    if (-not $WorkDir) {
+        $WorkDir = "."
+    }
+
+    & git -C $WorkDir rev-parse --is-inside-work-tree *> $null
+    if ($LASTEXITCODE -ne 0) {
+        return $false
+    }
+
+    $status = & git -C $WorkDir status --porcelain 2>$null
+    return $LASTEXITCODE -eq 0 -and -not $status
+}
+
+function Write-DirtyCompletion {
+    param([string]$WorkDir)
+
+    if (-not $WorkDir) {
+        $WorkDir = "."
+    }
+
+    Write-Host "Completion signal received, but worktree is dirty. Refusing successful completion." -ForegroundColor Red
+    & git -C $WorkDir status --short 2>$null | ForEach-Object { Write-Host $_ }
+}
+
 #endregion
 
 #region Main Loop
@@ -719,8 +746,14 @@ try {
         
         # Check for completion signal
         if (Test-CompletionSignal -Output $result.Output) {
-            Write-IterationStatus -Iteration $iteration -Status "success" -Message "COMPLETE signal received"
-            $completed = $true
+            if (Test-WorktreeClean -WorkDir $WorkingDirectory) {
+                Write-IterationStatus -Iteration $iteration -Status "success" -Message "COMPLETE signal received"
+                $completed = $true
+            } else {
+                Write-IterationStatus -Iteration $iteration -Status "failure" -Message "COMPLETE signal received with dirty worktree"
+                Write-DirtyCompletion -WorkDir $WorkingDirectory
+                $fatalFailure = $true
+            }
             break
         }
 
@@ -749,8 +782,14 @@ try {
         # Check remaining tasks
         $remainingTasks = Get-IncompleteTaskCount -Path $TasksPath
         if ($remainingTasks -eq 0) {
-            Write-Host "All tasks complete!" -ForegroundColor Green
-            $completed = $true
+            if (Test-WorktreeClean -WorkDir $WorkingDirectory) {
+                Write-Host "All tasks complete!" -ForegroundColor Green
+                $completed = $true
+            } else {
+                Write-IterationStatus -Iteration $iteration -Status "failure" -Message "All tasks complete but worktree is dirty"
+                Write-DirtyCompletion -WorkDir $WorkingDirectory
+                $fatalFailure = $true
+            }
             break
         }
         

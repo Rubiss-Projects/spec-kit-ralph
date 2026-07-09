@@ -624,6 +624,41 @@ rm -rf "$TMP_MEMORY"
 
 #endregion
 
+#region Tests: dirty completion guard
+
+section "dirty completion guard"
+
+TMP_DIRTY=$(mktemp -d)
+DIRTY_SPEC="$TMP_DIRTY/specs/001-dirty"
+mkdir -p "$DIRTY_SPEC" "$TMP_DIRTY/bin"
+printf '%s\n' "- [ ] T001 Incomplete task" > "$DIRTY_SPEC/tasks.md"
+printf '%s\n' "# Ralph Progress Log" > "$DIRTY_SPEC/progress.md"
+printf '%s\n' "# Ralph Memory" > "$DIRTY_SPEC/ralph-memory.md"
+git -C "$TMP_DIRTY" init >/dev/null 2>&1
+git -C "$TMP_DIRTY" add .
+git -C "$TMP_DIRTY" -c user.name="Ralph Test" -c user.email="ralph@example.com" commit -m "test fixture" >/dev/null 2>&1
+printf '%s\n' "dirty" > "$TMP_DIRTY/dirty.txt"
+
+FAKE_COMPLETE="$TMP_DIRTY/bin/copilot"
+cat > "$FAKE_COMPLETE" << 'FAKECOMPLETE'
+#!/usr/bin/env bash
+printf '%s\n' "<promise>COMPLETE</promise>"
+exit 0
+FAKECOMPLETE
+chmod +x "$FAKE_COMPLETE"
+
+set +e
+dirty_output=$(cd "$TMP_DIRTY" && bash "$SOURCE_SCRIPT" --feature-name "001-dirty" --tasks-path "$DIRTY_SPEC/tasks.md" --spec-dir "$DIRTY_SPEC" --max-iterations 1 --model "fake-model" --agent-cli "$FAKE_COMPLETE" 2>&1)
+dirty_exit=$?
+set -e
+
+assert_eq "dirty completion exits 1" "1" "$dirty_exit"
+assert_true "dirty completion refuses success" grep -q "worktree is dirty" <<< "$dirty_output"
+
+rm -rf "$TMP_DIRTY"
+
+#endregion
+
 #region Tests: all-complete startup
 
 section "all-complete startup"

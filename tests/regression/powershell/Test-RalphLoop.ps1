@@ -573,6 +573,43 @@ Remove-Item $tmpMemoryDir -Recurse -Force
 
 #endregion
 
+#region Tests: dirty completion guard
+
+Write-Section "dirty completion guard"
+
+$tmpDirtyRepo = Join-Path ([System.IO.Path]::GetTempPath()) "ralph-dirty-$PID"
+$dirtySpec = Join-Path $tmpDirtyRepo "specs/001-dirty"
+$dirtyBin = Join-Path $tmpDirtyRepo "bin"
+New-Item -ItemType Directory -Path $dirtySpec -Force | Out-Null
+New-Item -ItemType Directory -Path $dirtyBin -Force | Out-Null
+Set-Content -Path (Join-Path $dirtySpec "tasks.md") -Value "- [ ] T001 Incomplete task" -Encoding UTF8
+Set-Content -Path (Join-Path $dirtySpec "progress.md") -Value "# Ralph Progress Log" -Encoding UTF8
+Set-Content -Path (Join-Path $dirtySpec "ralph-memory.md") -Value "# Ralph Memory" -Encoding UTF8
+& git -C $tmpDirtyRepo init *> $null
+& git -C $tmpDirtyRepo add .
+& git -C $tmpDirtyRepo -c "user.name=Ralph Test" -c "user.email=ralph@example.com" commit -m "test fixture" *> $null
+Set-Content -Path (Join-Path $tmpDirtyRepo "dirty.txt") -Value "dirty" -Encoding UTF8
+
+$fakeComplete = New-FakeCopilot -Directory $dirtyBin -OutputLines @("<promise>COMPLETE</promise>") -ExitCode 0
+
+$dirtyOutput = & pwsh -NoLogo -NoProfile -File $SourceScript `
+    -FeatureName "001-dirty" `
+    -TasksPath (Join-Path $dirtySpec "tasks.md") `
+    -SpecDir $dirtySpec `
+    -MaxIterations 1 `
+    -Model "fake-model" `
+    -AgentCli $fakeComplete `
+    -WorkingDirectory $tmpDirtyRepo 2>&1
+$dirtyExit = $LASTEXITCODE
+$dirtyText = $dirtyOutput -join "`n"
+
+Assert-Equal "dirty completion exits 1" 1 $dirtyExit
+Assert-True "dirty completion refuses success" ($dirtyText -match "worktree is dirty")
+
+Remove-Item $tmpDirtyRepo -Recurse -Force
+
+#endregion
+
 #region Tests: all-complete startup
 
 Write-Section "all-complete startup"
