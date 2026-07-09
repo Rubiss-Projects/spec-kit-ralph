@@ -177,7 +177,7 @@ export SPECKIT_RALPH_AGENT_CLI="codex"
                  ▼
   ┌───────────────────────────────┐
   │  Agent reads tasks.md +       │
-  │  progress.md, implements      │
+  │  ralph-memory.md, implements  │
   │  ONE work unit, commits       │
   └──────────────┬────────────────┘
                  ▼
@@ -193,9 +193,19 @@ export SPECKIT_RALPH_AGENT_CLI="codex"
 
 1. The orchestrator spawns a **fresh** configured agent CLI process each iteration.
 2. The agent reads `tasks.md` to find the first incomplete work unit (phase, user story, or task group).
-3. It implements tasks within that single work unit, marks them `[x]` in `tasks.md`, and commits on completion.
-4. It appends an iteration entry to `progress.md` with files changed and lessons learned.
-5. Control returns to the orchestrator, which checks termination conditions and loops.
+3. It reads `ralph-memory.md` for compact durable context from previous fresh iterations.
+4. It implements tasks within that single work unit, marks them `[x]` in `tasks.md`, and commits on completion.
+5. It updates `ralph-memory.md` with durable discoveries and appends an iteration entry to `progress.md` with files changed and lessons learned.
+6. Control returns to the orchestrator, which checks termination conditions and loops.
+
+### Memory Files
+
+Ralph uses two files for cross-iteration state:
+
+| File | Purpose |
+|---|---|
+| `progress.md` | Append-only audit trail of iterations, completed tasks, commits, changed files, and concise learnings |
+| `ralph-memory.md` | Compact durable memory bridge for fresh agents: codebase patterns, decisions, gotchas, reusable commands, avoided approaches, and current handoff notes |
 
 ### Termination Conditions
 
@@ -209,7 +219,7 @@ export SPECKIT_RALPH_AGENT_CLI="codex"
 
 ## Resuming After Interruption
 
-Ralph is designed to be interrupted and resumed safely. Each iteration is self-contained: tasks are marked `[x]` in `tasks.md` and progress is logged in `progress.md` as work completes.
+Ralph is designed to be interrupted and resumed safely. Each iteration is self-contained: tasks are marked `[x]` in `tasks.md`, durable handoff context is kept in `ralph-memory.md`, and progress is logged in `progress.md` as work completes.
 
 To resume, simply re-run the command:
 
@@ -217,7 +227,7 @@ To resume, simply re-run the command:
 /speckit.ralph.run
 ```
 
-Or re-run the script directly. The orchestrator reads the current checkbox state in `tasks.md` and skips completed tasks. The `progress.md` log gives the agent context from prior iterations.
+Or re-run the script directly. The orchestrator reads the current checkbox state in `tasks.md` and skips completed tasks. The `ralph-memory.md` file gives the agent compact context from prior iterations, while `progress.md` remains available as the historical audit trail.
 
 ## Extension Structure
 

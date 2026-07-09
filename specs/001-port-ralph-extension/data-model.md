@@ -17,6 +17,8 @@ RalphSession ──────────────────invokes──
        │                                      │
        ├── tracks ──→ ProgressLog             │
        │              (progress.md)           │
+       ├── carries ─→ RalphMemory             │
+       │              (ralph-memory.md)       │
        ├── reads  ──→ TaskFile                │
        │              (tasks.md)         marks complete
        │                                      │
@@ -96,7 +98,7 @@ RUNNING ──all tasks done──→ COMPLETED (exit 0)
 
 ### 3. Iteration
 
-**Concept**: One invocation of the agent CLI within a session. Runtime state tracked by the orchestrator script; outcomes recorded in `progress.md` by the agent.
+**Concept**: One invocation of the agent CLI within a session. Runtime state tracked by the orchestrator script; outcomes recorded in `progress.md` and durable discoveries maintained in `ralph-memory.md` by the agent.
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -107,19 +109,20 @@ RUNNING ──all tasks done──→ COMPLETED (exit 0)
 | `completion_signal` | bool | Whether agent output contained `<promise>COMPLETE</promise>` |
 | `tasks_completed` | list | Task IDs marked `[x]` during this iteration |
 | `files_changed` | list | File paths created/modified/deleted |
-| `learnings` | list | Patterns or gotchas discovered |
+| `learnings` | list | Concise iteration-specific notes |
 
 **Invariants**:
 - At most one work unit per iteration (scope constraint)
 - Commit only when all tasks in work unit are complete
 - Progress entry appended after every iteration (success or failure)
+- Durable implementation discoveries updated in `ralph-memory.md` before exit
 
 ---
 
 ### 4. Progress Log
 
 **File**: `specs/{feature}/progress.md`
-**Purpose**: Append-only markdown log enabling cross-iteration learning. Created by the agent during iteration; read by subsequent iterations.
+**Purpose**: Append-only markdown audit log of iteration history. Created by the orchestrator on first run and appended by the agent during iteration.
 
 **Structure**:
 ```markdown
@@ -127,10 +130,6 @@ RUNNING ──all tasks done──→ COMPLETED (exit 0)
 
 Feature: {feature_name}
 Started: {timestamp}
-
-## Codebase Patterns
-
-[Accumulated patterns — updated by agent across iterations]
 
 ---
 
@@ -143,7 +142,7 @@ Started: {timestamp}
 **Files Changed**:
 - path/to/file.ext (created/modified/deleted)
 **Learnings**:
-- patterns discovered
+- concise iteration-specific notes; durable discoveries added to ralph-memory.md
 
 ---
 
@@ -153,13 +152,59 @@ Started: {timestamp}
 
 **Rules**:
 - NEVER overwrite existing entries
-- Codebase Patterns section at top — updated across iterations
 - Each iteration section separated by `---`
 - Created by `Initialize-ProgressFile` / `initialize_progress_file` in orchestrator if first run
 
 ---
 
-### 5. Extension Configuration
+### 5. Ralph Memory
+
+**File**: `specs/{feature}/ralph-memory.md`
+**Purpose**: Compact durable memory bridge read by each fresh agent context before selecting work. Created by the orchestrator on first run and updated by the agent before exit.
+
+**Structure**:
+```markdown
+# Ralph Memory
+
+Feature: {feature_name}
+Started: {timestamp}
+
+## Codebase Patterns
+
+- Durable repo conventions and APIs discovered across iterations.
+
+## Decisions
+
+- Decision, rationale, and affected files.
+
+## Gotchas
+
+- Unexpected behavior, environment quirks, failing commands, generated-file rules.
+
+## Reusable Commands
+
+- Known-good test/lint/build commands and required environment variables.
+
+## Do Not Repeat
+
+- Failed approaches or paths already ruled out.
+
+## Current Handoff
+
+- Short notes the next fresh agent must know before continuing.
+```
+
+**Rules**:
+- NEVER overwrite existing memory
+- Preserve the fixed section headings
+- Promote reusable findings into `## Codebase Patterns`
+- Record failed approaches in `## Do Not Repeat`
+- Keep `## Current Handoff` concise and current
+- Created by `Initialize-MemoryFile` / `initialize_memory_file` in orchestrator if first run
+
+---
+
+### 6. Extension Configuration
 
 **Template File**: `ralph-config.template.yml`
 **Installed Location**: `.specify/extensions/ralph/ralph-config.yml`
@@ -186,7 +231,7 @@ Started: {timestamp}
 
 ---
 
-### 6. Registered Iteration Command
+### 7. Registered Iteration Command
 
 **File (extension source)**: `commands/iterate.md`
 **Runtime usage**: Invoked by the orchestrator through the configured agent CLI, e.g. `copilot --agent speckit.ralph.iterate`.
@@ -197,7 +242,7 @@ Started: {timestamp}
 |---------|---------|
 | Scope Constraint | AT MOST one work unit per invocation |
 | User Input | `$ARGUMENTS` (iteration prompt from orchestrator) |
-| Outline (11 steps) | Prerequisites → context → scope → implement → commit → progress |
+| Outline (11 steps) | Prerequisites → memory/context → scope → implement → commit → memory/progress |
 | Progress Report Format | Standardized markdown template for progress.md entries |
 | Stop Conditions | `<promise>COMPLETE</promise>` when all tasks done |
 | Quality Gates | Tests must pass, no broken commits |
@@ -207,7 +252,7 @@ Started: {timestamp}
 
 ---
 
-### 7. Task File
+### 8. Task File
 
 **File**: `specs/{feature}/tasks.md`
 **Purpose**: Source of truth for task completion. Not created by the extension — created by `/speckit.tasks`.
@@ -224,7 +269,7 @@ Started: {timestamp}
 
 ---
 
-### 8. Command Files
+### 9. Command Files
 
 #### `commands/run.md` (speckit.ralph.run)
 

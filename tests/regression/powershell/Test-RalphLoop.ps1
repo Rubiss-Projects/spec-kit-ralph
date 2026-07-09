@@ -17,6 +17,7 @@ $RepoRoot = Resolve-Path (Join-Path $ScriptDir "..\..\..") | Select-Object -Expa
 $FixtureDir = Join-Path $ScriptDir "..\fixtures"
 $SourceScript = Join-Path $RepoRoot "scripts\powershell\ralph-loop.ps1"
 $RunCommand = Join-Path $RepoRoot "commands\run.md"
+$IterateCommand = Join-Path $RepoRoot "commands\iterate.md"
 
 # Test bookkeeping
 $script:TestsRun = 0
@@ -150,6 +151,19 @@ Assert-True "run treats input as launcher arguments only" ($runCommandText -matc
 Assert-True "run ignores free-form implementation requests" ($runCommandText -match "Free-form requests such as")
 Assert-True "run forbids inline implementation" ($runCommandText -match "MUST NOT.*implement tasks")
 Assert-True "run warns that ignored text comes from tasks.md scope" ($runCommandText -match "Ralph selects work from.*tasks.md")
+
+#endregion
+
+#region Tests: iterate command memory contract
+
+Write-Section "iterate command memory contract"
+
+$iterateCommandText = Get-Content $IterateCommand -Raw
+Assert-True "iterate reads ralph memory first" ($iterateCommandText -match "ralph-memory\.md.*cross-iteration memory bridge")
+Assert-True "iterate treats progress as audit trail" ($iterateCommandText -match "progress\.md.*append-only audit trail")
+Assert-True "iterate preserves memory sections" ($iterateCommandText -match "Preserve all existing memory sections")
+Assert-True "iterate records do-not-repeat entries" ($iterateCommandText -match "## Do Not Repeat")
+Assert-True "iterate records current handoff" ($iterateCommandText -match "## Current Handoff")
 
 #endregion
 
@@ -504,7 +518,7 @@ Assert-True "creates progress file" (Test-Path $progressFile)
 
 $content = Get-Content $progressFile -Raw
 Assert-True "contains feature name" ($content -match "Feature: test-feature")
-Assert-True "contains codebase patterns section" ($content -match "## Codebase Patterns")
+Assert-True "progress file does not contain memory sections" (-not ($content -match "## Codebase Patterns"))
 
 # Doesn't overwrite existing file
 Set-Content -Path $progressFile -Value "custom content" -Encoding UTF8
@@ -513,6 +527,37 @@ $content = (Get-Content $progressFile -Raw).Trim()
 Assert-Equal "does not overwrite existing file" "custom content" $content
 
 Remove-Item $tmpDir -Recurse -Force
+
+#endregion
+
+#region Tests: Initialize-MemoryFile
+
+Write-Section "Initialize-MemoryFile"
+
+$tmpMemoryDir = Join-Path ([System.IO.Path]::GetTempPath()) "ralph-memory-$PID"
+New-Item -ItemType Directory -Path $tmpMemoryDir -Force | Out-Null
+
+# Creates file when missing
+$memoryFile = Join-Path $tmpMemoryDir "ralph-memory.md"
+Initialize-MemoryFile -Path $memoryFile -Feature "test-feature"
+Assert-True "creates memory file" (Test-Path $memoryFile)
+
+$memoryContent = Get-Content $memoryFile -Raw
+Assert-True "memory contains feature name" ($memoryContent -match "Feature: test-feature")
+Assert-True "memory contains codebase patterns section" ($memoryContent -match "## Codebase Patterns")
+Assert-True "memory contains decisions section" ($memoryContent -match "## Decisions")
+Assert-True "memory contains gotchas section" ($memoryContent -match "## Gotchas")
+Assert-True "memory contains reusable commands section" ($memoryContent -match "## Reusable Commands")
+Assert-True "memory contains do not repeat section" ($memoryContent -match "## Do Not Repeat")
+Assert-True "memory contains current handoff section" ($memoryContent -match "## Current Handoff")
+
+# Doesn't overwrite existing file
+Set-Content -Path $memoryFile -Value "custom memory" -Encoding UTF8
+Initialize-MemoryFile -Path $memoryFile -Feature "other-feature"
+$memoryContent = (Get-Content $memoryFile -Raw).Trim()
+Assert-Equal "does not overwrite existing memory file" "custom memory" $memoryContent
+
+Remove-Item $tmpMemoryDir -Recurse -Force
 
 #endregion
 

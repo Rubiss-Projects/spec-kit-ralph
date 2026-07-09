@@ -92,6 +92,7 @@ $RepoRoot = $WorkingDirectory
 $TasksPath = [System.IO.Path]::GetFullPath($TasksPath)
 $SpecDir = [System.IO.Path]::GetFullPath($SpecDir)
 $ProgressPath = Join-Path $SpecDir "progress.md"
+$MemoryPath = Join-Path $SpecDir "ralph-memory.md"
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $ExtensionRoot = Resolve-Path (Join-Path $ScriptDir "..\..") | Select-Object -ExpandProperty Path
 $IterateCommandPath = Join-Path $ExtensionRoot "commands\iterate.md"
@@ -222,15 +223,52 @@ function Initialize-ProgressFile {
 Feature: $Feature
 Started: $timestamp
 
-## Codebase Patterns
-
-[Patterns discovered during implementation - updated by agent]
-
 ---
 
 "@
         Set-Content -Path $Path -Value $header -Encoding UTF8
         Write-Host "Created progress log: $Path" -ForegroundColor DarkGray
+    }
+}
+
+function Initialize-MemoryFile {
+    param([string]$Path, [string]$Feature)
+    
+    if (-not (Test-Path $Path)) {
+        $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+        $header = @"
+# Ralph Memory
+
+Feature: $Feature
+Started: $timestamp
+
+## Codebase Patterns
+
+- Durable repo conventions and APIs discovered across iterations.
+
+## Decisions
+
+- Decision, rationale, and affected files.
+
+## Gotchas
+
+- Unexpected behavior, environment quirks, failing commands, generated-file rules.
+
+## Reusable Commands
+
+- Known-good test/lint/build commands and required environment variables.
+
+## Do Not Repeat
+
+- Failed approaches or paths already ruled out.
+
+## Current Handoff
+
+- Short notes the next fresh agent must know before continuing.
+
+"@
+        Set-Content -Path $Path -Value $header -Encoding UTF8
+        Write-Host "Created memory file: $Path" -ForegroundColor DarkGray
     }
 }
 
@@ -329,7 +367,7 @@ function New-IterationPrompt {
     if (Test-Path $IterateCommandPath) {
         $commandText = Get-Content -Path $IterateCommandPath -Raw
     } else {
-        $commandText = "Complete at most one work unit from tasks.md. Mark completed tasks, update progress.md, commit only when the current user story is complete, and output <promise>COMPLETE</promise> when all tasks are done."
+        $commandText = "Complete at most one work unit from tasks.md. Mark completed tasks, update ralph-memory.md and progress.md, commit only when the current user story is complete, and output <promise>COMPLETE</promise> when all tasks are done."
     }
 
     return @"
@@ -631,8 +669,9 @@ function Test-CompletionSignal {
 
 #region Main Loop
 
-# Initialize progress file
+# Initialize progress and memory files
 Initialize-ProgressFile -Path $ProgressPath -Feature $FeatureName
+Initialize-MemoryFile -Path $MemoryPath -Feature $FeatureName
 
 # Check initial task count
 $initialTasks = Get-IncompleteTaskCount -Path $TasksPath

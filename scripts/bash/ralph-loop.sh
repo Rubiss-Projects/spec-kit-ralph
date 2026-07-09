@@ -112,6 +112,7 @@ REPO_ROOT="$(pwd)"
 TASKS_PATH="$(realpath "$TASKS_PATH")"
 SPEC_DIR="$(realpath "$SPEC_DIR")"
 PROGRESS_PATH="$SPEC_DIR/progress.md"
+MEMORY_PATH="$SPEC_DIR/ralph-memory.md"
 
 # Paths for spec files
 SPEC_PATH="$SPEC_DIR/spec.md"
@@ -229,14 +230,52 @@ initialize_progress_file() {
 Feature: $feature
 Started: $timestamp
 
-## Codebase Patterns
-
-[Patterns discovered during implementation - updated by agent]
-
 ---
 
 EOF
         echo -e "\033[90mCreated progress log: $path\033[0m"
+    fi
+}
+
+initialize_memory_file() {
+    local path=$1
+    local feature=$2
+
+    if [[ ! -f "$path" ]]; then
+        local timestamp
+        timestamp=$(date +"%Y-%m-%d %H:%M:%S")
+        cat > "$path" << EOF
+# Ralph Memory
+
+Feature: $feature
+Started: $timestamp
+
+## Codebase Patterns
+
+- Durable repo conventions and APIs discovered across iterations.
+
+## Decisions
+
+- Decision, rationale, and affected files.
+
+## Gotchas
+
+- Unexpected behavior, environment quirks, failing commands, generated-file rules.
+
+## Reusable Commands
+
+- Known-good test/lint/build commands and required environment variables.
+
+## Do Not Repeat
+
+- Failed approaches or paths already ruled out.
+
+## Current Handoff
+
+- Short notes the next fresh agent must know before continuing.
+
+EOF
+        echo -e "\033[90mCreated memory file: $path\033[0m"
     fi
 }
 
@@ -337,7 +376,7 @@ build_iteration_prompt() {
     if [[ -f "$ITERATE_COMMAND_PATH" ]]; then
         command_text=$(cat "$ITERATE_COMMAND_PATH")
     else
-        command_text="Complete at most one work unit from tasks.md. Mark completed tasks, update progress.md, commit only when the current user story is complete, and output <promise>COMPLETE</promise> when all tasks are done."
+        command_text="Complete at most one work unit from tasks.md. Mark completed tasks, update ralph-memory.md and progress.md, commit only when the current user story is complete, and output <promise>COMPLETE</promise> when all tasks are done."
     fi
 
     cat << EOF
@@ -618,8 +657,9 @@ trap cleanup SIGINT SIGTERM
 
 #region Main Loop
 
-# Initialize progress file
+# Initialize progress and memory files
 initialize_progress_file "$PROGRESS_PATH" "$FEATURE_NAME"
+initialize_memory_file "$MEMORY_PATH" "$FEATURE_NAME"
 
 # Check initial task count
 INITIAL_TASKS=$(get_incomplete_task_count "$TASKS_PATH")

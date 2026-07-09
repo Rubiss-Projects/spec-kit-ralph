@@ -17,6 +17,7 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 FIXTURE_DIR="$SCRIPT_DIR/../fixtures"
 SOURCE_SCRIPT="$REPO_ROOT/scripts/bash/ralph-loop.sh"
 RUN_COMMAND="$REPO_ROOT/commands/run.md"
+ITERATE_COMMAND="$REPO_ROOT/commands/iterate.md"
 
 # Test bookkeeping
 TESTS_RUN=0
@@ -92,6 +93,8 @@ extract_functions() {
     sed -n '/^get_incomplete_task_count()/,/^}/p' "$SOURCE_SCRIPT"
     # Extract initialize_progress_file
     sed -n '/^initialize_progress_file()/,/^}/p' "$SOURCE_SCRIPT"
+    # Extract initialize_memory_file
+    sed -n '/^initialize_memory_file()/,/^}/p' "$SOURCE_SCRIPT"
     # Extract get_agent_cli_kind
     sed -n '/^get_agent_cli_kind()/,/^}/p' "$SOURCE_SCRIPT"
     # Extract Spec Kit integration helpers
@@ -128,6 +131,18 @@ assert_true "run treats input as launcher arguments only" grep -q "launcher argu
 assert_true "run ignores free-form implementation requests" grep -q "Free-form requests such as" "$RUN_COMMAND"
 assert_true "run forbids inline implementation" grep -q "MUST NOT.*implement tasks" "$RUN_COMMAND"
 assert_true "run warns that ignored text comes from tasks.md scope" grep -q "Ralph selects work from.*tasks.md" "$RUN_COMMAND"
+
+#endregion
+
+#region Tests: iterate command memory contract
+
+section "iterate command memory contract"
+
+assert_true "iterate reads ralph memory first" grep -q "ralph-memory.md.*cross-iteration memory bridge" "$ITERATE_COMMAND"
+assert_true "iterate treats progress as audit trail" grep -q "progress.md.*append-only audit trail" "$ITERATE_COMMAND"
+assert_true "iterate preserves memory sections" grep -q "Preserve all existing memory sections" "$ITERATE_COMMAND"
+assert_true "iterate records do-not-repeat entries" grep -q "## Do Not Repeat" "$ITERATE_COMMAND"
+assert_true "iterate records current handoff" grep -q "## Current Handoff" "$ITERATE_COMMAND"
 
 #endregion
 
@@ -546,9 +561,9 @@ PROGRESS_FILE="$TMP_PROGRESS/progress.md"
 initialize_progress_file "$PROGRESS_FILE" "test-feature" >/dev/null 2>&1
 assert_true "creates progress file" test -f "$PROGRESS_FILE"
 
-# File contains expected header content
+# File contains expected audit header content
 assert_true "contains feature name" grep -q "Feature: test-feature" "$PROGRESS_FILE"
-assert_true "contains codebase patterns section" grep -q "## Codebase Patterns" "$PROGRESS_FILE"
+assert_false "progress file does not contain memory sections" grep -q "## Codebase Patterns" "$PROGRESS_FILE"
 
 # Doesn't overwrite existing file
 printf '%s\n' "custom content" > "$PROGRESS_FILE"
@@ -557,6 +572,36 @@ content=$(cat "$PROGRESS_FILE")
 assert_eq "does not overwrite existing file" "custom content" "$content"
 
 rm -rf "$TMP_PROGRESS"
+
+#endregion
+
+#region Tests: initialize_memory_file
+
+section "initialize_memory_file"
+
+TMP_MEMORY=$(mktemp -d)
+
+# Creates file when missing
+MEMORY_FILE="$TMP_MEMORY/ralph-memory.md"
+initialize_memory_file "$MEMORY_FILE" "test-feature" >/dev/null 2>&1
+assert_true "creates memory file" test -f "$MEMORY_FILE"
+
+# File contains expected memory sections
+assert_true "memory contains feature name" grep -q "Feature: test-feature" "$MEMORY_FILE"
+assert_true "memory contains codebase patterns section" grep -q "## Codebase Patterns" "$MEMORY_FILE"
+assert_true "memory contains decisions section" grep -q "## Decisions" "$MEMORY_FILE"
+assert_true "memory contains gotchas section" grep -q "## Gotchas" "$MEMORY_FILE"
+assert_true "memory contains reusable commands section" grep -q "## Reusable Commands" "$MEMORY_FILE"
+assert_true "memory contains do not repeat section" grep -q "## Do Not Repeat" "$MEMORY_FILE"
+assert_true "memory contains current handoff section" grep -q "## Current Handoff" "$MEMORY_FILE"
+
+# Doesn't overwrite existing file
+printf '%s\n' "custom memory" > "$MEMORY_FILE"
+initialize_memory_file "$MEMORY_FILE" "other-feature" >/dev/null 2>&1
+content=$(cat "$MEMORY_FILE")
+assert_eq "does not overwrite existing memory file" "custom memory" "$content"
+
+rm -rf "$TMP_MEMORY"
 
 #endregion
 

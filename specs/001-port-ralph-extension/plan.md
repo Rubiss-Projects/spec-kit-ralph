@@ -11,7 +11,7 @@ Port the ralph loop autonomous implementation system from spec-kit core into a s
 
 **Language/Version**: Markdown (command files), PowerShell 5.1+/7+ (Windows orchestrator), Bash 4+ (Unix orchestrator), YAML (manifest + config)
 **Primary Dependencies**: spec-kit extension system (schema v1.0), GitHub Copilot CLI (`copilot` binary)
-**Storage**: File-based — `tasks.md` (checkbox state), `progress.md` (iteration log), YAML config
+**Storage**: File-based — `tasks.md` (checkbox state), `progress.md` (iteration audit log), `ralph-memory.md` (durable cross-iteration memory), YAML config
 **Testing**: Manual via `specify extension add --dev`; automated manifest validation via `specify_cli.extensions.ExtensionManifest`
 **Target Platform**: Windows (PowerShell), macOS/Linux (Bash) — both must produce identical behavior
 **Project Type**: spec-kit extension
@@ -26,9 +26,9 @@ Port the ralph loop autonomous implementation system from spec-kit core into a s
 | # | Principle | Status | Notes |
 |---|-----------|--------|-------|
 | I | Extension-First Architecture | PASS | Entire project IS an extension with `extension.yml` manifest; commands follow `speckit.ralph.*` pattern; config in `.specify/extensions/ralph/` |
-| II | Context Isolation (NON-NEGOTIABLE) | PASS | Scripts spawn fresh `copilot` process per iteration; no state inheritance; inter-iteration transfer via `progress.md` and `tasks.md` only |
+| II | Context Isolation (NON-NEGOTIABLE) | PASS | Scripts spawn fresh `copilot` process per iteration; no state inheritance; inter-iteration transfer via `tasks.md`, `progress.md`, and `ralph-memory.md` only |
 | III | Spec-Kit Compatibility | PASS | Schema version 1.0; `requires.speckit_version: ">=0.8.5"`; installs via `specify extension add --dev` |
-| IV | Progress Persistence | PASS | `tasks.md` checkboxes for completion; `progress.md` append-only log; `<promise>COMPLETE</promise>` only after verified completion |
+| IV | Progress Persistence | PASS | `tasks.md` checkboxes for completion; `progress.md` append-only log; `ralph-memory.md` compact handoff; `<promise>COMPLETE</promise>` only after verified completion |
 | V | Agent Agnosticism | PASS (with caveat) | Config has `agent_cli` field; v1.0 targets Copilot-only per spec clarification Q3; architecture does not preclude future agents |
 | VI | Graceful Termination | PASS | All 4 termination paths handled: completion (exit 0), iteration limit (exit 1), Ctrl+C (exit 130), consecutive failures (exit 1 with summary) |
 
