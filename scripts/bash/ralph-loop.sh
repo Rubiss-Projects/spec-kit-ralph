@@ -653,6 +653,45 @@ test_worktree_clean() {
     [[ -z "$status" ]]
 }
 
+get_git_head() {
+    local work_dir=$1
+    [[ -z "$work_dir" ]] && work_dir="."
+
+    git -C "$work_dir" rev-parse --verify HEAD 2>/dev/null || true
+}
+
+test_only_bookkeeping_dirty() {
+    local work_dir=$1
+    local progress_path=$2
+    local memory_path=$3
+    local all_status
+    local bookkeeping_status
+    [[ -z "$work_dir" ]] && work_dir="."
+
+    all_status=$(git -C "$work_dir" status --porcelain --untracked-files=all 2>/dev/null) || return 1
+    [[ -n "$all_status" ]] || return 1
+    bookkeeping_status=$(git -C "$work_dir" status --porcelain --untracked-files=all -- "$progress_path" "$memory_path" 2>/dev/null) || return 1
+    [[ "$all_status" == "$bookkeeping_status" ]]
+}
+
+amend_iteration_bookkeeping() {
+    local work_dir=$1
+    local iteration_start_head=$2
+    local progress_path=$3
+    local memory_path=$4
+    local current_head
+    [[ -z "$work_dir" ]] && work_dir="."
+
+    [[ -n "$iteration_start_head" ]] || return 1
+    current_head=$(get_git_head "$work_dir")
+    [[ -n "$current_head" && "$current_head" != "$iteration_start_head" ]] || return 1
+    test_only_bookkeeping_dirty "$work_dir" "$progress_path" "$memory_path" || return 1
+
+    git -C "$work_dir" add -- "$progress_path" "$memory_path" >/dev/null 2>&1 || return 1
+    git -C "$work_dir" commit --amend --no-edit >/dev/null 2>&1 || return 1
+    echo -e "\033[90mAmended iteration commit with final progress and memory updates.\033[0m"
+}
+
 report_dirty_completion() {
     local work_dir=$1
     [[ -z "$work_dir" ]] && work_dir="."
@@ -727,6 +766,7 @@ fatal_failure=false
 while [[ $iteration -le $MAX_ITERATIONS && "$completed" == "false" && "$INTERRUPTED" == "false" && "$circuit_breaker" == "false" && "$fatal_failure" == "false" ]]; do
     print_header "$iteration" "$MAX_ITERATIONS"
     print_status "$iteration" "running" "Starting iteration"
+    iteration_start_head=$(get_git_head "$WORKING_DIRECTORY")
 
     # Invoke configured agent CLI with speckit.ralph.iterate behavior
     set +e
@@ -741,6 +781,9 @@ while [[ $iteration -le $MAX_ITERATIONS && "$completed" == "false" && "$INTERRUP
     if test_completion_signal "$output"; then
         if test_worktree_clean "$WORKING_DIRECTORY"; then
             print_status "$iteration" "success" "COMPLETE signal received"
+            completed=true
+        elif amend_iteration_bookkeeping "$WORKING_DIRECTORY" "$iteration_start_head" "$PROGRESS_PATH" "$MEMORY_PATH"; then
+            print_status "$iteration" "success" "COMPLETE signal received after amending bookkeeping"
             completed=true
         else
             print_status "$iteration" "failure" "COMPLETE signal received with dirty worktree"
@@ -776,6 +819,9 @@ while [[ $iteration -le $MAX_ITERATIONS && "$completed" == "false" && "$INTERRUP
     remaining_tasks=$(get_incomplete_task_count "$TASKS_PATH")
     if [[ "$remaining_tasks" -eq 0 ]]; then
         if test_worktree_clean "$WORKING_DIRECTORY"; then
+            echo -e "\033[32mAll tasks complete!\033[0m"
+            completed=true
+        elif amend_iteration_bookkeeping "$WORKING_DIRECTORY" "$iteration_start_head" "$PROGRESS_PATH" "$MEMORY_PATH"; then
             echo -e "\033[32mAll tasks complete!\033[0m"
             completed=true
         else

@@ -120,6 +120,10 @@ extract_functions() {
     sed -n '/^test_completion_signal()/,/^}/p' "$SOURCE_SCRIPT"
     # Extract test_worktree_clean
     sed -n '/^test_worktree_clean()/,/^}/p' "$SOURCE_SCRIPT"
+    # Extract bookkeeping amend helpers
+    sed -n '/^get_git_head()/,/^}/p' "$SOURCE_SCRIPT"
+    sed -n '/^test_only_bookkeeping_dirty()/,/^}/p' "$SOURCE_SCRIPT"
+    sed -n '/^amend_iteration_bookkeeping()/,/^}/p' "$SOURCE_SCRIPT"
     # Extract load_ralph_config
     sed -n '/^load_ralph_config()/,/^}/p' "$SOURCE_SCRIPT"
 }
@@ -671,6 +675,88 @@ set -e
 assert_eq "git status failure is not clean" "1" "$status_failure_result"
 
 rm -rf "$TMP_WORKTREE"
+
+#endregion
+
+#region Tests: amend_iteration_bookkeeping
+
+section "amend_iteration_bookkeeping"
+
+TMP_AMEND=$(mktemp -d)
+AMEND_SPEC="$TMP_AMEND/specs/001-amend"
+mkdir -p "$AMEND_SPEC"
+printf '%s\n' "- [ ] T001 Incomplete task" > "$AMEND_SPEC/tasks.md"
+printf '%s\n' "# Ralph Progress Log" > "$AMEND_SPEC/progress.md"
+printf '%s\n' "# Ralph Memory" > "$AMEND_SPEC/ralph-memory.md"
+git -C "$TMP_AMEND" init >/dev/null 2>&1
+git -C "$TMP_AMEND" config user.name "Ralph Test"
+git -C "$TMP_AMEND" config user.email "ralph@example.com"
+git -C "$TMP_AMEND" add .
+git -C "$TMP_AMEND" commit -m "test fixture" >/dev/null 2>&1
+amend_start_head=$(git -C "$TMP_AMEND" rev-parse HEAD)
+
+printf '%s\n' "feature work" > "$TMP_AMEND/work.txt"
+printf '%s\n' "- [x] T001 Incomplete task" > "$AMEND_SPEC/tasks.md"
+git -C "$TMP_AMEND" add .
+git -C "$TMP_AMEND" commit -m "feat: work unit" >/dev/null 2>&1
+printf '%s\n' "final progress" >> "$AMEND_SPEC/progress.md"
+printf '%s\n' "final memory" >> "$AMEND_SPEC/ralph-memory.md"
+
+assert_true "bookkeeping-only dirt is detected" test_only_bookkeeping_dirty "$TMP_AMEND" "$AMEND_SPEC/progress.md" "$AMEND_SPEC/ralph-memory.md"
+assert_true "bookkeeping changes amend iteration commit" amend_iteration_bookkeeping "$TMP_AMEND" "$amend_start_head" "$AMEND_SPEC/progress.md" "$AMEND_SPEC/ralph-memory.md"
+amend_status=$(git -C "$TMP_AMEND" status --porcelain)
+assert_eq "bookkeeping amend leaves worktree clean" "" "$amend_status"
+assert_true "amended commit includes progress" git -C "$TMP_AMEND" show --name-only --format= HEAD -- "$AMEND_SPEC/progress.md"
+assert_true "amended commit includes memory" git -C "$TMP_AMEND" show --name-only --format= HEAD -- "$AMEND_SPEC/ralph-memory.md"
+
+rm -rf "$TMP_AMEND"
+
+#endregion
+
+#region Tests: bookkeeping completion recovery
+
+section "bookkeeping completion recovery"
+
+TMP_RECOVERY=$(mktemp -d)
+RECOVERY_SPEC="$TMP_RECOVERY/specs/001-recovery"
+RECOVERY_BIN="$TMP_RECOVERY/bin"
+mkdir -p "$RECOVERY_SPEC" "$RECOVERY_BIN"
+printf '%s\n' "- [ ] T001 Incomplete task" > "$RECOVERY_SPEC/tasks.md"
+printf '%s\n' "# Ralph Progress Log" > "$RECOVERY_SPEC/progress.md"
+printf '%s\n' "# Ralph Memory" > "$RECOVERY_SPEC/ralph-memory.md"
+git -C "$TMP_RECOVERY" init >/dev/null 2>&1
+git -C "$TMP_RECOVERY" config user.name "Ralph Test"
+git -C "$TMP_RECOVERY" config user.email "ralph@example.com"
+git -C "$TMP_RECOVERY" add .
+git -C "$TMP_RECOVERY" commit -m "test fixture" >/dev/null 2>&1
+
+FAKE_RECOVERY="$RECOVERY_BIN/copilot"
+cat > "$FAKE_RECOVERY" << FAKE_RECOVERY_SCRIPT
+#!/usr/bin/env bash
+set -e
+printf '%s\n' "feature work" > "$TMP_RECOVERY/work.txt"
+printf '%s\n' "- [x] T001 Incomplete task" > "$RECOVERY_SPEC/tasks.md"
+printf '%s\n' "progress before commit" >> "$RECOVERY_SPEC/progress.md"
+printf '%s\n' "memory before commit" >> "$RECOVERY_SPEC/ralph-memory.md"
+git -C "$TMP_RECOVERY" add .
+git -C "$TMP_RECOVERY" commit -m "feat: work unit" >/dev/null
+printf '%s\n' "final progress after commit" >> "$RECOVERY_SPEC/progress.md"
+printf '%s\n' "final memory after commit" >> "$RECOVERY_SPEC/ralph-memory.md"
+printf '%s\n' "<promise>COMPLETE</promise>"
+FAKE_RECOVERY_SCRIPT
+chmod +x "$FAKE_RECOVERY"
+
+set +e
+recovery_output=$(cd "$TMP_RECOVERY" && bash "$SOURCE_SCRIPT" --feature-name "001-recovery" --tasks-path "$RECOVERY_SPEC/tasks.md" --spec-dir "$RECOVERY_SPEC" --max-iterations 1 --model "fake-model" --agent-cli "$FAKE_RECOVERY" 2>&1)
+recovery_exit=$?
+set -e
+recovery_status=$(git -C "$TMP_RECOVERY" status --porcelain)
+
+assert_eq "bookkeeping recovery exits 0" "0" "$recovery_exit"
+assert_true "bookkeeping recovery amends commit" grep -q "amending bookkeeping" <<< "$recovery_output"
+assert_eq "bookkeeping recovery leaves worktree clean" "" "$recovery_status"
+
+rm -rf "$TMP_RECOVERY"
 
 #endregion
 

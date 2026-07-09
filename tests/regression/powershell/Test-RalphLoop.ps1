@@ -610,6 +610,43 @@ Remove-Item $tmpMemoryDir -Recurse -Force
 
 #endregion
 
+#region Tests: Invoke-BookkeepingAmend
+
+Write-Section "Invoke-BookkeepingAmend"
+
+$tmpAmendRepo = Join-Path ([System.IO.Path]::GetTempPath()) "ralph-amend-$PID"
+$amendSpec = Join-Path $tmpAmendRepo "specs/001-amend"
+New-Item -ItemType Directory -Path $amendSpec -Force | Out-Null
+Set-Content -Path (Join-Path $amendSpec "tasks.md") -Value "- [ ] T001 Incomplete task" -Encoding UTF8
+Set-Content -Path (Join-Path $amendSpec "progress.md") -Value "# Ralph Progress Log" -Encoding UTF8
+Set-Content -Path (Join-Path $amendSpec "ralph-memory.md") -Value "# Ralph Memory" -Encoding UTF8
+& git -C $tmpAmendRepo init *> $null
+& git -C $tmpAmendRepo config user.name "Ralph Test"
+& git -C $tmpAmendRepo config user.email "ralph@example.com"
+& git -C $tmpAmendRepo add .
+& git -C $tmpAmendRepo commit -m "test fixture" *> $null
+$amendStartHead = & git -C $tmpAmendRepo rev-parse HEAD
+
+Set-Content -Path (Join-Path $tmpAmendRepo "work.txt") -Value "feature work" -Encoding UTF8
+Set-Content -Path (Join-Path $amendSpec "tasks.md") -Value "- [x] T001 Incomplete task" -Encoding UTF8
+& git -C $tmpAmendRepo add .
+& git -C $tmpAmendRepo commit -m "feat: work unit" *> $null
+Add-Content -Path (Join-Path $amendSpec "progress.md") -Value "final progress"
+Add-Content -Path (Join-Path $amendSpec "ralph-memory.md") -Value "final memory"
+
+Assert-True "bookkeeping-only dirt is detected" (Test-OnlyBookkeepingDirty -WorkDir $tmpAmendRepo -ProgressFile (Join-Path $amendSpec "progress.md") -MemoryFile (Join-Path $amendSpec "ralph-memory.md"))
+Assert-True "bookkeeping changes amend iteration commit" (Invoke-BookkeepingAmend -WorkDir $tmpAmendRepo -IterationStartHead $amendStartHead -ProgressFile (Join-Path $amendSpec "progress.md") -MemoryFile (Join-Path $amendSpec "ralph-memory.md"))
+$amendStatus = @(& git -C $tmpAmendRepo status --porcelain)
+Assert-Equal "bookkeeping amend leaves worktree clean" 0 $amendStatus.Count
+$amendedProgressFiles = @(& git -C $tmpAmendRepo show --name-only --format= HEAD -- (Join-Path $amendSpec "progress.md"))
+$amendedMemoryFiles = @(& git -C $tmpAmendRepo show --name-only --format= HEAD -- (Join-Path $amendSpec "ralph-memory.md"))
+Assert-True "amended commit includes progress" (($amendedProgressFiles -match "progress\.md").Count -gt 0)
+Assert-True "amended commit includes memory" (($amendedMemoryFiles -match "ralph-memory\.md").Count -gt 0)
+
+Remove-Item $tmpAmendRepo -Recurse -Force
+
+#endregion
+
 #region Tests: dirty completion guard
 
 Write-Section "dirty completion guard"

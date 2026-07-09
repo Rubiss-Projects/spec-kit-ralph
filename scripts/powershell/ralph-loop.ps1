@@ -689,6 +689,81 @@ function Test-WorktreeClean {
     return $LASTEXITCODE -eq 0 -and -not $status
 }
 
+function Get-GitHead {
+    param([string]$WorkDir)
+
+    if (-not $WorkDir) {
+        $WorkDir = "."
+    }
+
+    $head = & git -C $WorkDir rev-parse --verify HEAD 2>$null
+    if ($LASTEXITCODE -ne 0) {
+        return ""
+    }
+
+    return [string]$head
+}
+
+function Test-OnlyBookkeepingDirty {
+    param(
+        [string]$WorkDir,
+        [string]$ProgressFile,
+        [string]$MemoryFile
+    )
+
+    if (-not $WorkDir) {
+        $WorkDir = "."
+    }
+
+    $allStatus = @(& git -C $WorkDir status --porcelain --untracked-files=all 2>$null)
+    if ($LASTEXITCODE -ne 0 -or $allStatus.Count -eq 0) {
+        return $false
+    }
+
+    $bookkeepingStatus = @(& git -C $WorkDir status --porcelain --untracked-files=all -- $ProgressFile $MemoryFile 2>$null)
+    if ($LASTEXITCODE -ne 0) {
+        return $false
+    }
+
+    return (($allStatus -join "`n") -eq ($bookkeepingStatus -join "`n"))
+}
+
+function Invoke-BookkeepingAmend {
+    param(
+        [string]$WorkDir,
+        [string]$IterationStartHead,
+        [string]$ProgressFile,
+        [string]$MemoryFile
+    )
+
+    if (-not $WorkDir) {
+        $WorkDir = "."
+    }
+    if (-not $IterationStartHead) {
+        return $false
+    }
+
+    $currentHead = Get-GitHead -WorkDir $WorkDir
+    if (-not $currentHead -or $currentHead -eq $IterationStartHead) {
+        return $false
+    }
+    if (-not (Test-OnlyBookkeepingDirty -WorkDir $WorkDir -ProgressFile $ProgressFile -MemoryFile $MemoryFile)) {
+        return $false
+    }
+
+    & git -C $WorkDir add -- $ProgressFile $MemoryFile *> $null
+    if ($LASTEXITCODE -ne 0) {
+        return $false
+    }
+    & git -C $WorkDir commit --amend --no-edit *> $null
+    if ($LASTEXITCODE -ne 0) {
+        return $false
+    }
+
+    Write-Host "Amended iteration commit with final progress and memory updates." -ForegroundColor DarkGray
+    return $true
+}
+
 function Write-DirtyCompletion {
     param([string]$WorkDir)
 
@@ -736,6 +811,7 @@ try {
         $lastIterationRun = $iteration
         Write-RalphHeader -Iteration $iteration -Max $MaxIterations
         Write-IterationStatus -Iteration $iteration -Status "running" -Message "Starting iteration"
+        $iterationStartHead = Get-GitHead -WorkDir $WorkingDirectory
         
         # Invoke configured agent CLI with speckit.ralph.iterate behavior
         $verboseSwitch = @{}
@@ -750,6 +826,9 @@ try {
         if (Test-CompletionSignal -Output $result.Output) {
             if (Test-WorktreeClean -WorkDir $WorkingDirectory) {
                 Write-IterationStatus -Iteration $iteration -Status "success" -Message "COMPLETE signal received"
+                $completed = $true
+            } elseif (Invoke-BookkeepingAmend -WorkDir $WorkingDirectory -IterationStartHead $iterationStartHead -ProgressFile $ProgressPath -MemoryFile $MemoryPath) {
+                Write-IterationStatus -Iteration $iteration -Status "success" -Message "COMPLETE signal received after amending bookkeeping"
                 $completed = $true
             } else {
                 Write-IterationStatus -Iteration $iteration -Status "failure" -Message "COMPLETE signal received with dirty worktree"
@@ -785,6 +864,9 @@ try {
         $remainingTasks = Get-IncompleteTaskCount -Path $TasksPath
         if ($remainingTasks -eq 0) {
             if (Test-WorktreeClean -WorkDir $WorkingDirectory) {
+                Write-Host "All tasks complete!" -ForegroundColor Green
+                $completed = $true
+            } elseif (Invoke-BookkeepingAmend -WorkDir $WorkingDirectory -IterationStartHead $iterationStartHead -ProgressFile $ProgressPath -MemoryFile $MemoryPath) {
                 Write-Host "All tasks complete!" -ForegroundColor Green
                 $completed = $true
             } else {
