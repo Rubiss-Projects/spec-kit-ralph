@@ -616,6 +616,20 @@ SPECIAL_FEATURE='feature&with\backslash'
 initialize_memory_file "$SPECIAL_MEMORY_FILE" "$SPECIAL_FEATURE" "$MEMORY_TEMPLATE" >/dev/null 2>&1
 assert_true "memory preserves ampersand and backslash in feature name" grep -Fq "Feature: $SPECIAL_FEATURE" "$SPECIAL_MEMORY_FILE"
 
+# Falls back to the built-in template when a configured template cannot be read
+UNREADABLE_TEMPLATE="$TMP_MEMORY/unreadable-template.md"
+UNREADABLE_MEMORY_FILE="$TMP_MEMORY/ralph-memory-unreadable.md"
+printf '%s\n' "# Unreadable Template" > "$UNREADABLE_TEMPLATE"
+chmod 000 "$UNREADABLE_TEMPLATE"
+set +e
+initialize_memory_file "$UNREADABLE_MEMORY_FILE" "fallback-feature" "$UNREADABLE_TEMPLATE" >/dev/null 2>&1
+unreadable_result=$?
+set -e
+chmod 600 "$UNREADABLE_TEMPLATE"
+assert_eq "unreadable memory template does not fail" "0" "$unreadable_result"
+assert_true "unreadable memory template uses fallback" grep -q "Feature: fallback-feature" "$UNREADABLE_MEMORY_FILE"
+assert_true "fallback memory contains codebase patterns section" grep -q "## Codebase Patterns" "$UNREADABLE_MEMORY_FILE"
+
 # Doesn't overwrite existing file
 printf '%s\n' "custom memory" > "$MEMORY_FILE"
 initialize_memory_file "$MEMORY_FILE" "other-feature" "$MEMORY_TEMPLATE" >/dev/null 2>&1
