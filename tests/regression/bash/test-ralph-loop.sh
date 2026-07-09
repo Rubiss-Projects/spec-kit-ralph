@@ -630,6 +630,14 @@ assert_eq "unreadable memory template does not fail" "0" "$unreadable_result"
 assert_true "unreadable memory template uses fallback" grep -q "Feature: fallback-feature" "$UNREADABLE_MEMORY_FILE"
 assert_true "fallback memory contains codebase patterns section" grep -q "## Codebase Patterns" "$UNREADABLE_MEMORY_FILE"
 
+# Falls back to the built-in template when a configured template is empty
+EMPTY_TEMPLATE="$TMP_MEMORY/empty-template.md"
+EMPTY_MEMORY_FILE="$TMP_MEMORY/ralph-memory-empty.md"
+: > "$EMPTY_TEMPLATE"
+initialize_memory_file "$EMPTY_MEMORY_FILE" "empty-template-feature" "$EMPTY_TEMPLATE" >/dev/null 2>&1
+assert_true "empty memory template uses fallback" grep -q "Feature: empty-template-feature" "$EMPTY_MEMORY_FILE"
+assert_true "empty fallback memory contains codebase patterns section" grep -q "## Codebase Patterns" "$EMPTY_MEMORY_FILE"
+
 # Doesn't overwrite existing file
 printf '%s\n' "custom memory" > "$MEMORY_FILE"
 initialize_memory_file "$MEMORY_FILE" "other-feature" "$MEMORY_TEMPLATE" >/dev/null 2>&1

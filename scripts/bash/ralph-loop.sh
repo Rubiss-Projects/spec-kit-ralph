@@ -264,7 +264,7 @@ initialize_memory_file() {
         local timestamp
         local content
         timestamp=$(date +"%Y-%m-%d %H:%M:%S")
-        if [[ -n "$template_path" && -r "$template_path" ]] && content=$(<"$template_path"); then
+        if [[ -n "$template_path" && -r "$template_path" ]] && content=$(<"$template_path") && [[ -n "$content" ]]; then
             :
         else
             content=$(cat << 'EOF'
