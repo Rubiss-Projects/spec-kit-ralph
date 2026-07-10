@@ -70,6 +70,7 @@ This command is a **thin launcher** for the ralph loop orchestrator. It validate
    - Detect platform and run the appropriate script in a **visible, non-hidden terminal** so the user can monitor progress directly
    - **Do NOT wait** for the script to finish — launch it and exit immediately
    - Do NOT perform any task implementation in the current agent session
+   - The launched orchestrator resolves the installed `templates/ralph-memory.md`, creates or validates the feature's `ralph-memory.md` before task selection, and blocks malformed memory without invoking an agent
    - Execute with resolved parameters:
 
      **PowerShell**:
@@ -96,7 +97,7 @@ This command exits as soon as the orchestrator script is launched. It does **not
 | Command completes normally | Orchestrator was launched successfully — user should monitor the terminal |
 | Command fails during validation | A prerequisite check failed — see error message for details |
 
-The orchestrator script itself has its own exit codes (0 = all tasks complete, 1 = limit/failure, 130 = interrupted). The user will see these directly in the terminal where the script is running.
+The orchestrator script itself has its own exit codes. Exit `0` means the full completion gate passed: no tasks remain, memory has the exact terminal handoff, coordinated commit history is valid, and `git status --short --untracked-files=all` is empty. Exit `1` includes malformed memory, inconsistent completion signals, dirty completion (with every porcelain path reported), protocol violations, iteration limits, and other failures. Exit `130` means interrupted. The orchestrator does not launch a cleanup iteration or mutate Git to repair a blocked completion. The user sees this result in the launched terminal.
 
 ## Notes
 

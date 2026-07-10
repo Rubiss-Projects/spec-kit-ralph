@@ -73,7 +73,9 @@ function New-FakeCopilot {
         [string[]]$OutputLines = @(),
         [int]$ExitCode = 0,
         [switch]$EchoArgs,
-        [string]$RequiredFile = ""
+        [string]$RequiredFile = "",
+        [string]$InvocationLog = "",
+        [string]$PowerShellScript = ""
     )
 
     $isWindowsRunner = ($env:OS -eq "Windows_NT") -or ($PSVersionTable.PSEdition -eq "Desktop")
@@ -81,6 +83,16 @@ function New-FakeCopilot {
     if ($isWindowsRunner) {
         $path = Join-Path $Directory "copilot.cmd"
         $lines = @("@echo off")
+
+        if ($InvocationLog) {
+            $lines += "echo invoked>>`"$InvocationLog`""
+        }
+        if ($PowerShellScript) {
+            $lines += @(
+                "powershell.exe -NoLogo -NoProfile -File `"$PowerShellScript`"",
+                "exit /b %errorlevel%"
+            )
+        }
 
         if ($EchoArgs) {
             $lines += @(
@@ -113,6 +125,18 @@ function New-FakeCopilot {
 
     $path = Join-Path $Directory "copilot"
     $lines = @("#!/usr/bin/env bash")
+
+    if ($InvocationLog) {
+        $escapedInvocationLog = $InvocationLog -replace "'", "'\''"
+        $lines += "printf '%s\n' 'invoked' >> '$escapedInvocationLog'"
+    }
+    if ($PowerShellScript) {
+        $escapedPowerShellScript = $PowerShellScript -replace "'", "'\''"
+        $lines += @(
+            "pwsh -NoLogo -NoProfile -File '$escapedPowerShellScript'",
+            'exit $?'
+        )
+    }
 
     if ($EchoArgs) {
         $lines += @(
@@ -400,6 +424,366 @@ $postconditionFunction = $functionDefs | Where-Object { $_.Name -eq "Test-RalphI
 Assert-True "postcondition validator contains no mutating Git command" (-not ($postconditionFunction.Extent.Text -match '(?im)&\s+git\b[^\r\n]*\s+(add|commit|reset|rebase|revert|checkout|stash)(?:\s|$)'))
 
 Remove-Item $incompleteRepo.Root -Recurse -Force
+
+#endregion
+
+#region Tests: centralized completion gate
+
+Write-Section "centralized completion gate"
+
+$handoffValidationActive = Test-RalphMemoryFile `
+    -Path (Join-Path $FixtureDir "ralph-memory-valid-active.md") `
+    -Feature "test-feature" `
+    -TemplatePath $MemoryTemplate `
+    -RequireCompletedHandoff
+Assert-True "active memory is invalid for completion" (-not $handoffValidationActive.IsValid)
+Assert-True "active memory reports handoff-invalid" (($handoffValidationActive.Defects | Where-Object { $_ -like 'handoff-invalid:*' }).Count -eq 1)
+
+$handoffValidationComplete = Test-RalphMemoryFile `
+    -Path (Join-Path $FixtureDir "ralph-memory-valid-complete.md") `
+    -Feature "test-feature" `
+    -TemplatePath $MemoryTemplate `
+    -RequireCompletedHandoff
+Assert-True "exact terminal handoff is valid for completion" $handoffValidationComplete.IsValid
+
+$handoffValidationMalformed = Test-RalphMemoryFile `
+    -Path (Join-Path $FixtureDir "ralph-memory-malformed.md") `
+    -Feature "test-feature" `
+    -TemplatePath $MemoryTemplate `
+    -RequireCompletedHandoff
+Assert-True "malformed completion validation aggregates handoff-invalid" (($handoffValidationMalformed.Defects | Where-Object { $_ -like 'handoff-invalid:*' }).Count -eq 1)
+foreach ($category in $expectedCategories) {
+    Assert-True "malformed completion retains $category" (($handoffValidationMalformed.Defects | Where-Object { $_ -like "${category}:*" }).Count -gt 0)
+}
+
+$extraHandoffPath = Join-Path ([System.IO.Path]::GetTempPath()) "ralph-extra-handoff-$PID.md"
+Copy-Item (Join-Path $FixtureDir "ralph-memory-valid-complete.md") $extraHandoffPath
+Add-Content -Path $extraHandoffPath -Value "- stale extra instruction" -Encoding UTF8
+$extraHandoffValidation = Test-RalphMemoryFile `
+    -Path $extraHandoffPath `
+    -Feature "test-feature" `
+    -TemplatePath $MemoryTemplate `
+    -RequireCompletedHandoff
+Assert-True "extra terminal handoff content is rejected" (-not $extraHandoffValidation.IsValid)
+Assert-True "extra terminal handoff content reports handoff-invalid" (($extraHandoffValidation.Defects | Where-Object { $_ -like 'handoff-invalid:*' }).Count -eq 1)
+Remove-Item $extraHandoffPath -Force
+
+$completionFunction = $functionDefs | Where-Object { $_.Name -eq "Test-RalphCompletionGate" } | Select-Object -First 1
+Assert-True "completion gate contains no mutating Git command" (-not ($completionFunction.Extent.Text -match '(?im)&\s+git\b[^\r\n]*\s+(add|commit|reset|rebase|revert|checkout|stash)(?:\s|$)'))
+
+# Initial clean completion succeeds without invoking an agent and leaves Git
+# history, index, and worktree byte-for-byte equivalent.
+$initialRepo = New-TransactionTestRepository -Name "ralph-initial-complete"
+Set-Content -Path $initialRepo.TasksPath -Value "- [x] T001 Complete transaction" -Encoding UTF8
+Copy-Item (Join-Path $FixtureDir "ralph-memory-valid-complete.md") $initialRepo.MemoryPath -Force
+Add-Content -Path $initialRepo.ProgressPath -Value "`nFeature completed." -Encoding UTF8
+Add-Content -Path $initialRepo.SubstantivePath -Value "`nfinal substantive work" -Encoding UTF8
+Invoke-TestGit -Repository $initialRepo.Root -Arguments @("add", ".") | Out-Null
+Invoke-TestGit -Repository $initialRepo.Root -Arguments @("commit", "-q", "-m", "test: complete feature") | Out-Null
+$initialCliDir = Join-Path ([System.IO.Path]::GetTempPath()) "ralph-initial-cli-$PID"
+New-Item -ItemType Directory -Path $initialCliDir -Force | Out-Null
+$initialLog = Join-Path $initialCliDir "invocations.log"
+$initialCli = New-FakeCopilot -Directory $initialCliDir -OutputLines @("AGENT_INVOKED") -InvocationLog $initialLog
+$initialHead = (Invoke-TestGit -Repository $initialRepo.Root -Arguments @("rev-parse", "HEAD") | Select-Object -First 1).Trim()
+$initialHistory = (Invoke-TestGit -Repository $initialRepo.Root -Arguments @("rev-list", "--count", "HEAD") | Select-Object -First 1).Trim()
+
+$initialOutput = & pwsh -NoLogo -NoProfile -File $SourceScript `
+    -FeatureName "test-feature" `
+    -TasksPath $initialRepo.TasksPath `
+    -SpecDir $initialRepo.SpecDir `
+    -MaxIterations 3 `
+    -Model "fake-model" `
+    -AgentCli $initialCli `
+    -WorkingDirectory $initialRepo.Root 2>&1
+$initialExit = $LASTEXITCODE
+$initialText = $initialOutput -join "`n"
+
+Assert-Equal "initial clean completion exits zero" 0 $initialExit
+Assert-True "initial clean completion emits completion signal" ($initialText -match '<promise>COMPLETE</promise>')
+Assert-True "initial clean completion invokes no agent" (-not (Test-Path $initialLog))
+Assert-Equal "initial clean completion preserves HEAD" $initialHead ((Invoke-TestGit -Repository $initialRepo.Root -Arguments @("rev-parse", "HEAD") | Select-Object -First 1).Trim())
+Assert-Equal "initial clean completion preserves history" $initialHistory ((Invoke-TestGit -Repository $initialRepo.Root -Arguments @("rev-list", "--count", "HEAD") | Select-Object -First 1).Trim())
+Assert-Equal "initial clean completion preserves clean status" "" ((Invoke-TestGit -Repository $initialRepo.Root -Arguments @("status", "--short", "--untracked-files=all")) -join "`n")
+
+# Every dirty porcelain line blocks all-complete state immediately. The gate
+# reports all paths, invokes no agent, and performs no cleanup or history edit.
+Add-Content -Path $initialRepo.SubstantivePath -Value "`ndirty tracked path" -Encoding UTF8
+New-Item -ItemType Directory -Path (Join-Path $initialRepo.Root "nested") -Force | Out-Null
+Set-Content -Path (Join-Path $initialRepo.Root "untracked-one.txt") -Value "one" -Encoding UTF8
+Set-Content -Path (Join-Path $initialRepo.Root "nested/untracked-two.txt") -Value "two" -Encoding UTF8
+$dirtyLines = @(Invoke-TestGit -Repository $initialRepo.Root -Arguments @("status", "--short", "--untracked-files=all"))
+$dirtyHead = (Invoke-TestGit -Repository $initialRepo.Root -Arguments @("rev-parse", "HEAD") | Select-Object -First 1).Trim()
+$dirtyHistory = (Invoke-TestGit -Repository $initialRepo.Root -Arguments @("rev-list", "--count", "HEAD") | Select-Object -First 1).Trim()
+
+$dirtyOutput = & pwsh -NoLogo -NoProfile -File $SourceScript `
+    -FeatureName "test-feature" `
+    -TasksPath $initialRepo.TasksPath `
+    -SpecDir $initialRepo.SpecDir `
+    -MaxIterations 3 `
+    -Model "fake-model" `
+    -AgentCli $initialCli `
+    -WorkingDirectory $initialRepo.Root 2>&1
+$dirtyExit = $LASTEXITCODE
+$dirtyText = $dirtyOutput -join "`n"
+
+Assert-Equal "dirty all-complete state exits one" 1 $dirtyExit
+foreach ($dirtyLine in $dirtyLines) {
+    Assert-True "dirty completion reports $dirtyLine" ($dirtyText -match [regex]::Escape([string]$dirtyLine))
+}
+Assert-True "dirty all-complete state invokes no agent" (-not (Test-Path $initialLog))
+Assert-Equal "dirty completion preserves HEAD" $dirtyHead ((Invoke-TestGit -Repository $initialRepo.Root -Arguments @("rev-parse", "HEAD") | Select-Object -First 1).Trim())
+Assert-Equal "dirty completion preserves history" $dirtyHistory ((Invoke-TestGit -Repository $initialRepo.Root -Arguments @("rev-list", "--count", "HEAD") | Select-Object -First 1).Trim())
+Assert-Equal "dirty completion preserves all porcelain state" ($dirtyLines -join "`n") ((Invoke-TestGit -Repository $initialRepo.Root -Arguments @("status", "--short", "--untracked-files=all")) -join "`n")
+
+Remove-Item $initialRepo.Root -Recurse -Force
+Remove-Item $initialCliDir -Recurse -Force
+
+# Initial validation must not manufacture a missing audit file. Even with a
+# clean repository, the absent active state artifact blocks completion.
+$missingProgressRoot = Join-Path ([System.IO.Path]::GetTempPath()) "ralph-missing-progress-$PID"
+$missingProgressSpec = Join-Path $missingProgressRoot "specs/test-feature"
+New-Item -ItemType Directory -Path $missingProgressSpec -Force | Out-Null
+New-Item -ItemType Directory -Path (Join-Path $missingProgressRoot "src") -Force | Out-Null
+Invoke-TestGit -Repository $missingProgressRoot -Arguments @("init", "-q") | Out-Null
+Invoke-TestGit -Repository $missingProgressRoot -Arguments @("config", "user.email", "ralph-tests@example.invalid") | Out-Null
+Invoke-TestGit -Repository $missingProgressRoot -Arguments @("config", "user.name", "Ralph Tests") | Out-Null
+$missingProgressTasks = Join-Path $missingProgressSpec "tasks.md"
+$missingProgressMemory = Join-Path $missingProgressSpec "ralph-memory.md"
+$missingProgressPath = Join-Path $missingProgressSpec "progress.md"
+Set-Content -Path $missingProgressTasks -Value "- [x] T001 Complete transaction" -Encoding UTF8
+Copy-Item (Join-Path $FixtureDir "ralph-memory-valid-complete.md") $missingProgressMemory
+Set-Content -Path (Join-Path $missingProgressRoot "src/work.txt") -Value "completed without audit" -Encoding UTF8
+Invoke-TestGit -Repository $missingProgressRoot -Arguments @("add", ".") | Out-Null
+Invoke-TestGit -Repository $missingProgressRoot -Arguments @("commit", "-q", "-m", "test: missing progress") | Out-Null
+$missingProgressCliDir = Join-Path ([System.IO.Path]::GetTempPath()) "ralph-missing-progress-cli-$PID"
+New-Item -ItemType Directory -Path $missingProgressCliDir -Force | Out-Null
+$missingProgressLog = Join-Path $missingProgressCliDir "invocations.log"
+$missingProgressCli = New-FakeCopilot -Directory $missingProgressCliDir -OutputLines @("AGENT_INVOKED") -InvocationLog $missingProgressLog
+
+$missingProgressOutput = & pwsh -NoLogo -NoProfile -File $SourceScript `
+    -FeatureName "test-feature" `
+    -TasksPath $missingProgressTasks `
+    -SpecDir $missingProgressSpec `
+    -MaxIterations 3 `
+    -Model "fake-model" `
+    -AgentCli $missingProgressCli `
+    -WorkingDirectory $missingProgressRoot 2>&1
+$missingProgressExit = $LASTEXITCODE
+$missingProgressText = $missingProgressOutput -join "`n"
+
+Assert-Equal "missing progress blocks initial completion" 1 $missingProgressExit
+Assert-True "missing progress reports coordinated commit defect" ($missingProgressText -match 'coordinated-commit-invalid:')
+Assert-True "blocked initial completion does not create progress" (-not (Test-Path $missingProgressPath))
+Assert-True "blocked missing-progress completion invokes no agent" (-not (Test-Path $missingProgressLog))
+
+Remove-Item $missingProgressRoot -Recurse -Force
+Remove-Item $missingProgressCliDir -Recurse -Force
+
+# The latest active-state commit must itself be coordinated and substantive;
+# an older valid baseline cannot mask a bookkeeping-only final state commit.
+$initialCommitRepo = New-TransactionTestRepository -Name "ralph-initial-incomplete-commit"
+Set-Content -Path $initialCommitRepo.TasksPath -Value "- [x] T001 Complete transaction" -Encoding UTF8
+Copy-Item (Join-Path $FixtureDir "ralph-memory-valid-complete.md") $initialCommitRepo.MemoryPath -Force
+Invoke-TestGit -Repository $initialCommitRepo.Root -Arguments @("add", "specs/test-feature/tasks.md", "specs/test-feature/ralph-memory.md") | Out-Null
+Invoke-TestGit -Repository $initialCommitRepo.Root -Arguments @("commit", "-q", "-m", "test: incomplete active state") | Out-Null
+$initialCommitCliDir = Join-Path ([System.IO.Path]::GetTempPath()) "ralph-initial-incomplete-cli-$PID"
+New-Item -ItemType Directory -Path $initialCommitCliDir -Force | Out-Null
+$initialCommitLog = Join-Path $initialCommitCliDir "invocations.log"
+$initialCommitCli = New-FakeCopilot -Directory $initialCommitCliDir -OutputLines @("AGENT_INVOKED") -InvocationLog $initialCommitLog
+$initialCommitHead = (Invoke-TestGit -Repository $initialCommitRepo.Root -Arguments @("rev-parse", "HEAD") | Select-Object -First 1).Trim()
+
+$initialCommitOutput = & pwsh -NoLogo -NoProfile -File $SourceScript `
+    -FeatureName "test-feature" `
+    -TasksPath $initialCommitRepo.TasksPath `
+    -SpecDir $initialCommitRepo.SpecDir `
+    -MaxIterations 3 `
+    -Model "fake-model" `
+    -AgentCli $initialCommitCli `
+    -WorkingDirectory $initialCommitRepo.Root 2>&1
+$initialCommitExit = $LASTEXITCODE
+$initialCommitText = $initialCommitOutput -join "`n"
+
+Assert-Equal "incomplete initial active-state commit exits one" 1 $initialCommitExit
+Assert-True "incomplete initial active-state commit reports bookkeeping-only" ($initialCommitText -match 'bookkeeping-only:')
+Assert-True "incomplete initial active-state commit reports coordinated artifact defect" ($initialCommitText -match 'coordinated-commit-invalid:')
+Assert-True "incomplete initial active-state commit invokes no agent" (-not (Test-Path $initialCommitLog))
+Assert-Equal "incomplete initial commit validation preserves HEAD" $initialCommitHead ((Invoke-TestGit -Repository $initialCommitRepo.Root -Arguments @("rev-parse", "HEAD") | Select-Object -First 1).Trim())
+
+Remove-Item $initialCommitRepo.Root -Recurse -Force
+Remove-Item $initialCommitCliDir -Recurse -Force
+
+# All tasks with a stale handoff is inconsistent even when Git is clean.
+$staleRepo = New-TransactionTestRepository -Name "ralph-stale-handoff"
+Set-Content -Path $staleRepo.TasksPath -Value "- [x] T001 Complete transaction" -Encoding UTF8
+Invoke-TestGit -Repository $staleRepo.Root -Arguments @("add", ".") | Out-Null
+Invoke-TestGit -Repository $staleRepo.Root -Arguments @("commit", "-q", "-m", "test: stale handoff") | Out-Null
+$staleCliDir = Join-Path ([System.IO.Path]::GetTempPath()) "ralph-stale-cli-$PID"
+New-Item -ItemType Directory -Path $staleCliDir -Force | Out-Null
+$staleLog = Join-Path $staleCliDir "invocations.log"
+$staleCli = New-FakeCopilot -Directory $staleCliDir -OutputLines @("AGENT_INVOKED") -InvocationLog $staleLog
+$staleHead = (Invoke-TestGit -Repository $staleRepo.Root -Arguments @("rev-parse", "HEAD") | Select-Object -First 1).Trim()
+
+$staleOutput = & pwsh -NoLogo -NoProfile -File $SourceScript `
+    -FeatureName "test-feature" `
+    -TasksPath $staleRepo.TasksPath `
+    -SpecDir $staleRepo.SpecDir `
+    -MaxIterations 3 `
+    -Model "fake-model" `
+    -AgentCli $staleCli `
+    -WorkingDirectory $staleRepo.Root 2>&1
+$staleExit = $LASTEXITCODE
+$staleText = $staleOutput -join "`n"
+
+Assert-Equal "stale all-complete handoff exits one" 1 $staleExit
+Assert-True "stale all-complete handoff reports handoff-invalid" ($staleText -match 'handoff-invalid:')
+Assert-True "stale all-complete handoff invokes no agent" (-not (Test-Path $staleLog))
+Assert-Equal "stale handoff validation preserves HEAD" $staleHead ((Invoke-TestGit -Repository $staleRepo.Root -Arguments @("rev-parse", "HEAD") | Select-Object -First 1).Trim())
+
+Remove-Item $staleRepo.Root -Recurse -Force
+Remove-Item $staleCliDir -Recurse -Force
+
+# A successful post-agent candidate performs one coordinated commit, passes the
+# same gate, and receives no reconciliation iteration.
+$postRepo = New-TransactionTestRepository -Name "ralph-post-complete"
+$postCliDir = Join-Path ([System.IO.Path]::GetTempPath()) "ralph-post-cli-$PID"
+New-Item -ItemType Directory -Path $postCliDir -Force | Out-Null
+$postAction = Join-Path $postCliDir "complete.ps1"
+$postLog = Join-Path $postCliDir "invocations.log"
+$postRepoLiteral = $postRepo.Root.Replace("'", "''")
+$postTasksLiteral = $postRepo.TasksPath.Replace("'", "''")
+$postMemoryLiteral = $postRepo.MemoryPath.Replace("'", "''")
+$postCompleteFixtureLiteral = (Join-Path $FixtureDir "ralph-memory-valid-complete.md").Replace("'", "''")
+$postProgressLiteral = $postRepo.ProgressPath.Replace("'", "''")
+$postSourceLiteral = $postRepo.SubstantivePath.Replace("'", "''")
+@"
+`$ErrorActionPreference = 'Stop'
+Set-Content -Path '$postTasksLiteral' -Value '- [x] T001 Complete transaction' -Encoding UTF8
+Copy-Item '$postCompleteFixtureLiteral' '$postMemoryLiteral' -Force
+Add-Content -Path '$postProgressLiteral' -Value "`nCompleted iteration." -Encoding UTF8
+Add-Content -Path '$postSourceLiteral' -Value "`nsubstantive completion" -Encoding UTF8
+& git -C '$postRepoLiteral' add .
+if (`$LASTEXITCODE -ne 0) { exit `$LASTEXITCODE }
+& git -C '$postRepoLiteral' commit -q -m 'feat: completed work unit'
+if (`$LASTEXITCODE -ne 0) { exit `$LASTEXITCODE }
+Write-Output '<promise>COMPLETE</promise>'
+"@ | Set-Content -Path $postAction -Encoding UTF8
+$postCli = New-FakeCopilot -Directory $postCliDir -InvocationLog $postLog -PowerShellScript $postAction
+$postHistoryBefore = [int]((Invoke-TestGit -Repository $postRepo.Root -Arguments @("rev-list", "--count", "HEAD") | Select-Object -First 1).Trim())
+
+$postOutput = & pwsh -NoLogo -NoProfile -File $SourceScript `
+    -FeatureName "test-feature" `
+    -TasksPath $postRepo.TasksPath `
+    -SpecDir $postRepo.SpecDir `
+    -MaxIterations 3 `
+    -Model "fake-model" `
+    -AgentCli $postCli `
+    -WorkingDirectory $postRepo.Root 2>&1
+$postExit = $LASTEXITCODE
+
+Assert-Equal "post-agent clean completion exits zero" 0 $postExit
+Assert-Equal "post-agent clean completion invokes one iteration" 1 (@(Get-Content $postLog).Count)
+Assert-Equal "post-agent clean completion adds exactly one commit" ($postHistoryBefore + 1) ([int]((Invoke-TestGit -Repository $postRepo.Root -Arguments @("rev-list", "--count", "HEAD") | Select-Object -First 1).Trim()))
+Assert-Equal "post-agent clean completion leaves repository clean" "" ((Invoke-TestGit -Repository $postRepo.Root -Arguments @("status", "--short", "--untracked-files=all")) -join "`n")
+
+# Restore an active coordinated baseline, then let one final work unit commit
+# successfully while leaving multiple new dirty paths. The gate must report all
+# paths, fail immediately, and add no repair/reconciliation commit.
+Set-Content -Path $postRepo.TasksPath -Value "- [ ] T001 Complete transaction" -Encoding UTF8
+Copy-Item (Join-Path $FixtureDir "ralph-memory-valid-active.md") $postRepo.MemoryPath -Force
+Add-Content -Path $postRepo.ProgressPath -Value "`nActive baseline for dirty completion." -Encoding UTF8
+Add-Content -Path $postRepo.SubstantivePath -Value "`nactive dirty baseline" -Encoding UTF8
+Invoke-TestGit -Repository $postRepo.Root -Arguments @("add", ".") | Out-Null
+Invoke-TestGit -Repository $postRepo.Root -Arguments @("commit", "-q", "-m", "test: active dirty baseline") | Out-Null
+Remove-Item $postLog -Force
+$dirtyPostAction = Join-Path $postCliDir "complete-dirty.ps1"
+$dirtyOneLiteral = (Join-Path $postRepo.Root "dirty-one.txt").Replace("'", "''")
+$dirtyTwoLiteral = (Join-Path $postRepo.Root "dirty-two.txt").Replace("'", "''")
+$dirtyPostText = [System.IO.File]::ReadAllText($postAction).Replace(
+    "Write-Output '<promise>COMPLETE</promise>'",
+    "Set-Content -Path '$dirtyOneLiteral' -Value 'one' -Encoding UTF8`nSet-Content -Path '$dirtyTwoLiteral' -Value 'two' -Encoding UTF8`nWrite-Output '<promise>COMPLETE</promise>'"
+)
+[System.IO.File]::WriteAllText($dirtyPostAction, $dirtyPostText, (New-Object System.Text.UTF8Encoding($false)))
+$dirtyPostCli = New-FakeCopilot -Directory $postCliDir -InvocationLog $postLog -PowerShellScript $dirtyPostAction
+$dirtyPostHistoryBefore = [int]((Invoke-TestGit -Repository $postRepo.Root -Arguments @("rev-list", "--count", "HEAD") | Select-Object -First 1).Trim())
+
+$dirtyPostOutput = & pwsh -NoLogo -NoProfile -File $SourceScript `
+    -FeatureName "test-feature" `
+    -TasksPath $postRepo.TasksPath `
+    -SpecDir $postRepo.SpecDir `
+    -MaxIterations 3 `
+    -Model "fake-model" `
+    -AgentCli $dirtyPostCli `
+    -WorkingDirectory $postRepo.Root 2>&1
+$dirtyPostExit = $LASTEXITCODE
+$dirtyPostText = $dirtyPostOutput -join "`n"
+
+Assert-Equal "dirty post-agent completion exits one" 1 $dirtyPostExit
+Assert-True "dirty post-agent completion reports first path" ($dirtyPostText -match [regex]::Escape("dirty-path: ?? dirty-one.txt"))
+Assert-True "dirty post-agent completion reports second path" ($dirtyPostText -match [regex]::Escape("dirty-path: ?? dirty-two.txt"))
+Assert-Equal "dirty post-agent completion invokes no next iteration" 1 (@(Get-Content $postLog).Count)
+Assert-Equal "dirty post-agent gate creates no repair commit" ($dirtyPostHistoryBefore + 1) ([int]((Invoke-TestGit -Repository $postRepo.Root -Arguments @("rev-list", "--count", "HEAD") | Select-Object -First 1).Trim()))
+
+Remove-Item $postRepo.Root -Recurse -Force
+Remove-Item $postCliDir -Recurse -Force
+
+# A completion token cannot override failure, remaining tasks, or active
+# handoff. Both invalid candidates terminate immediately with no next iteration.
+$completionParityTexts = @($dirtyText, $initialCommitText, $staleText, $dirtyPostText)
+foreach ($tokenCase in @(
+    [pscustomobject]@{ Name = "failed-agent-token"; ExitCode = 7; Expected = "agent-result-invalid:" },
+    [pscustomobject]@{ Name = "remaining-task-token"; ExitCode = 0; Expected = "tasks-incomplete:" }
+)) {
+    $tokenRepo = New-TransactionTestRepository -Name "ralph-$($tokenCase.Name)"
+    $tokenCliDir = Join-Path ([System.IO.Path]::GetTempPath()) "ralph-$($tokenCase.Name)-cli-$PID"
+    New-Item -ItemType Directory -Path $tokenCliDir -Force | Out-Null
+    $tokenLog = Join-Path $tokenCliDir "invocations.log"
+    $tokenCli = New-FakeCopilot `
+        -Directory $tokenCliDir `
+        -OutputLines @("TOKEN_CASE_$($tokenCase.Name)", "<promise>COMPLETE</promise>") `
+        -ExitCode $tokenCase.ExitCode `
+        -InvocationLog $tokenLog
+    $tokenHead = (Invoke-TestGit -Repository $tokenRepo.Root -Arguments @("rev-parse", "HEAD") | Select-Object -First 1).Trim()
+    $tokenStatus = (Invoke-TestGit -Repository $tokenRepo.Root -Arguments @("status", "--short", "--untracked-files=all")) -join "`n"
+
+    $tokenOutput = & pwsh -NoLogo -NoProfile -File $SourceScript `
+        -FeatureName "test-feature" `
+        -TasksPath $tokenRepo.TasksPath `
+        -SpecDir $tokenRepo.SpecDir `
+        -MaxIterations 3 `
+        -Model "fake-model" `
+        -AgentCli $tokenCli `
+        -WorkingDirectory $tokenRepo.Root `
+        -DetailedOutput 2>&1
+    $tokenExit = $LASTEXITCODE
+    $tokenText = $tokenOutput -join "`n"
+    $completionParityTexts += $tokenText
+
+    Assert-Equal "$($tokenCase.Name) exits one" 1 $tokenExit
+    Assert-True "$($tokenCase.Name) reports $($tokenCase.Expected)" ($tokenText -match [regex]::Escape($tokenCase.Expected))
+    Assert-Equal "$($tokenCase.Name) invokes no next iteration" 1 (@(Get-Content $tokenLog).Count)
+    Assert-Equal "$($tokenCase.Name) preserves HEAD" $tokenHead ((Invoke-TestGit -Repository $tokenRepo.Root -Arguments @("rev-parse", "HEAD") | Select-Object -First 1).Trim())
+    Assert-Equal "$($tokenCase.Name) preserves status" $tokenStatus ((Invoke-TestGit -Repository $tokenRepo.Root -Arguments @("status", "--short", "--untracked-files=all")) -join "`n")
+
+    Remove-Item $tokenRepo.Root -Recurse -Force
+    Remove-Item $tokenCliDir -Recurse -Force
+}
+
+$expectedCompletionCategories = @(
+    "agent-result-invalid",
+    "bookkeeping-only",
+    "commit-postcondition-invalid",
+    "coordinated-commit-invalid",
+    "dirty-path",
+    "handoff-invalid",
+    "tasks-incomplete"
+)
+$completionCategoryPattern = '(?m)^(agent-result-invalid|bookkeeping-only|commit-postcondition-invalid|coordinated-commit-invalid|dirty-path|handoff-invalid|tasks-incomplete):'
+$actualCompletionCategories = @(
+    [regex]::Matches(($completionParityTexts -join "`n"), $completionCategoryPattern) |
+        ForEach-Object { $_.Groups[1].Value } |
+        Sort-Object -Unique
+)
+Assert-Equal "completion parity exposes the canonical diagnostic categories" ($expectedCompletionCategories -join "`n") ($actualCompletionCategories -join "`n")
 
 #endregion
 

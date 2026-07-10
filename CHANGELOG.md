@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Added a packaged canonical `templates/ralph-memory.md` and cross-platform create-new initialization with aggregate, byte-preserving validation for malformed feature memory.
+- Added read-only coordinated-commit and bookkeeping-only validation for work-unit history.
+
+### Changed
+- Fresh iterations now read compact `ralph-memory.md` before tasks and design artifacts; `progress.md` is append-only audit history and only optional recent context.
+- Completed work now persists task state, durable memory, and audit before one substantive commit. Failed or no-work attempts retain useful memory/audit changes without advancing `HEAD`.
+- Completion now requires zero tasks, the exact terminal handoff, valid coordinated history, and an empty repository-wide `git status --short --untracked-files=all`; dirty or inconsistent states stop immediately without repair or another agent iteration.
+
 ## [1.2.1] - 2026-07-04
 
 ### Fixed

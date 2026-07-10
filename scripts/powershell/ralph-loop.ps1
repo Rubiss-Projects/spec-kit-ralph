@@ -381,11 +381,43 @@ function Test-RalphMemoryFile {
     param(
         [string]$Path,
         [string]$Feature,
-        [string]$TemplatePath
+        [string]$TemplatePath,
+        [switch]$RequireCompletedHandoff
     )
 
     $templateContract = Get-RalphMemoryTemplateContract -Path $TemplatePath
-    return Get-RalphMemoryFileValidation -Path $Path -Feature $Feature -TemplateContract $templateContract
+    $validation = Get-RalphMemoryFileValidation -Path $Path -Feature $Feature -TemplateContract $templateContract
+    if (-not $RequireCompletedHandoff) {
+        return $validation
+    }
+
+    $defects = New-Object System.Collections.Generic.List[string]
+    foreach ($defect in $validation.Defects) {
+        $defects.Add($defect)
+    }
+
+    $handoffValid = $false
+    try {
+        $raw = [System.IO.File]::ReadAllText($Path)
+        $handoffMatches = [regex]::Matches($raw, '(?ms)^## Current Handoff\r?\n(.*?)(?=^## |\z)')
+        if ($handoffMatches.Count -eq 1) {
+            $handoffBody = $handoffMatches[0].Groups[1].Value.Replace("`r`n", "`n").Replace("`r", "`n")
+            $handoffBody = $handoffBody.TrimEnd([char[]]"`n")
+            $handoffValid = $handoffBody -eq "`n- Feature complete; no handoff required."
+        }
+    }
+    catch {
+        $handoffValid = $false
+    }
+
+    if (-not $handoffValid) {
+        $defects.Add("handoff-invalid: Current Handoff must contain only '- Feature complete; no handoff required.'")
+    }
+
+    return [pscustomobject]@{
+        IsValid = ($defects.Count -eq 0)
+        Defects = @($defects.ToArray())
+    }
 }
 
 function Prepare-RalphMemory {
@@ -643,6 +675,63 @@ function Test-RalphIterationPostconditions {
         Defects = @($defects.ToArray())
         BeforeHead = $BeforeSnapshot.Head
         AfterHead = $afterSnapshot.Head
+    }
+}
+
+function Test-RalphInitialCommitPostconditions {
+    param(
+        [string]$RepoRoot,
+        [string]$TasksPath,
+        [string]$SpecDir
+    )
+
+    $defects = New-Object System.Collections.Generic.List[string]
+    $stateArtifacts = @(
+        ConvertTo-RalphGitPath -RepoRoot $RepoRoot -Path $TasksPath
+        ConvertTo-RalphGitPath -RepoRoot $RepoRoot -Path (Join-Path $SpecDir "ralph-memory.md")
+        ConvertTo-RalphGitPath -RepoRoot $RepoRoot -Path (Join-Path $SpecDir "progress.md")
+    )
+
+    if (-not (Test-RalphGitRepository -RepoRoot $RepoRoot)) {
+        $defects.Add("coordinated-commit-invalid: completion requires a Git worktree")
+        return [pscustomobject]@{
+            IsValid = $false
+            Defects = @($defects.ToArray())
+        }
+    }
+
+    $commitOutput = @(& git -C $RepoRoot log -1 --format=%H -- @stateArtifacts 2>$null)
+    if ($LASTEXITCODE -ne 0 -or $commitOutput.Count -eq 0) {
+        $defects.Add("coordinated-commit-invalid: no commit contains the active feature state artifacts")
+        return [pscustomobject]@{
+            IsValid = $false
+            Defects = @($defects.ToArray())
+        }
+    }
+
+    $commitId = ([string]($commitOutput | Select-Object -First 1)).Trim()
+    $changedPaths = @(& git -C $RepoRoot diff-tree --root --no-commit-id --name-only -r $commitId 2>$null | Where-Object { $_ })
+    if ($LASTEXITCODE -ne 0) {
+        $defects.Add("coordinated-commit-invalid: cannot inspect commit $commitId")
+        return [pscustomobject]@{
+            IsValid = $false
+            Defects = @($defects.ToArray())
+        }
+    }
+
+    $substantivePaths = @($changedPaths | Where-Object { $stateArtifacts -notcontains $_ })
+    if ($substantivePaths.Count -eq 0) {
+        $defects.Add("bookkeeping-only: commit $commitId contains no substantive path")
+    }
+    foreach ($stateArtifact in $stateArtifacts) {
+        if ($changedPaths -notcontains $stateArtifact) {
+            $defects.Add("coordinated-commit-invalid: commit $commitId is missing coordinated state artifact $stateArtifact")
+        }
+    }
+
+    return [pscustomobject]@{
+        IsValid = ($defects.Count -eq 0)
+        Defects = @($defects.ToArray())
     }
 }
 
@@ -1058,6 +1147,77 @@ function Test-CompletionSignal {
     return $Output -match '(?m)^[\s`]*<promise>COMPLETE</promise>[\s`]*$'
 }
 
+function Test-RalphCompletionGate {
+    param(
+        [string]$RepoRoot,
+        [string]$TasksPath,
+        [string]$SpecDir,
+        [string]$Feature,
+        [string]$TemplatePath,
+        [switch]$AgentResultPresent,
+        [int]$AgentExitCode = 0,
+        $CommitPostconditions = $null
+    )
+
+    $defects = New-Object System.Collections.Generic.List[string]
+    $dirtyPaths = New-Object System.Collections.Generic.List[string]
+
+    if ($AgentResultPresent -and $AgentExitCode -ne 0) {
+        $defects.Add("agent-result-invalid: completion signal cannot override agent exit code $AgentExitCode")
+    }
+
+    $incompleteTasks = Get-IncompleteTaskCount -Path $TasksPath
+    if ($incompleteTasks -ne 0) {
+        $defects.Add("tasks-incomplete: completion requires zero incomplete tasks; found $incompleteTasks")
+    }
+
+    $memoryValidation = Test-RalphMemoryFile `
+        -Path (Join-Path $SpecDir "ralph-memory.md") `
+        -Feature $Feature `
+        -TemplatePath $TemplatePath `
+        -RequireCompletedHandoff
+    foreach ($defect in $memoryValidation.Defects) {
+        $defects.Add($defect)
+    }
+
+    if ($null -ne $CommitPostconditions -and -not $CommitPostconditions.IsValid) {
+        foreach ($defect in $CommitPostconditions.Defects) {
+            $defects.Add($defect)
+        }
+        $defects.Add("commit-postcondition-invalid: iteration history failed coordinated commit validation")
+    }
+
+    $gitStatusExit = 1
+    $statusOutput = @()
+    try {
+        $statusOutput = @(& git -C $RepoRoot status --short --untracked-files=all 2>&1)
+        $gitStatusExit = $LASTEXITCODE
+    }
+    catch {
+        $statusOutput = @($_.Exception.Message)
+        $gitStatusExit = 1
+    }
+
+    if ($gitStatusExit -ne 0) {
+        $defects.Add("git-status-invalid: git status --short --untracked-files=all exited $gitStatusExit")
+    } else {
+        foreach ($statusLine in $statusOutput) {
+            $pathLine = ([string]$statusLine).TrimEnd()
+            if ($pathLine) {
+                $dirtyPaths.Add($pathLine)
+                $defects.Add("dirty-path: $pathLine")
+            }
+        }
+    }
+
+    return [pscustomobject]@{
+        IsValid = ($defects.Count -eq 0)
+        Defects = @($defects.ToArray())
+        DirtyPaths = @($dirtyPaths.ToArray())
+        GitStatusExit = $gitStatusExit
+    }
+}
+
 #endregion
 
 #region Main Loop
@@ -1066,15 +1226,37 @@ function Test-CompletionSignal {
 if (-not (Prepare-RalphMemory -Path $MemoryPath -TemplatePath $MemoryTemplatePath -Feature $FeatureName)) {
     exit 1
 }
-Initialize-ProgressFile -Path $ProgressPath -Feature $FeatureName
 
 # Check initial task count
 $initialTasks = Get-IncompleteTaskCount -Path $TasksPath
 if ($initialTasks -eq 0) {
-    Write-Host "All tasks are already complete!" -ForegroundColor Green
-    Write-Host "<promise>COMPLETE</promise>"
-    exit 0
+    $initialPostconditions = Test-RalphInitialCommitPostconditions `
+        -RepoRoot $RepoRoot `
+        -TasksPath $TasksPath `
+        -SpecDir $SpecDir
+    $initialCompletion = Test-RalphCompletionGate `
+        -RepoRoot $RepoRoot `
+        -TasksPath $TasksPath `
+        -SpecDir $SpecDir `
+        -Feature $FeatureName `
+        -TemplatePath $MemoryTemplatePath `
+        -CommitPostconditions $initialPostconditions
+    if ($initialCompletion.IsValid) {
+        Write-Host "All tasks are already complete!" -ForegroundColor Green
+        Write-Host "<promise>COMPLETE</promise>"
+        exit 0
+    }
+
+    Write-Host "Completion blocked by inconsistent repository state:" -ForegroundColor Red
+    foreach ($defect in $initialCompletion.Defects) {
+        Write-Host $defect -ForegroundColor Red
+    }
+    exit 1
 }
+
+# New progress logs are initialized only while work remains. Initial completion
+# validation is read-only and must not create a missing audit artifact.
+Initialize-ProgressFile -Path $ProgressPath -Feature $FeatureName
 
 Write-Host "Found $initialTasks incomplete task(s)" -ForegroundColor White
 
@@ -1121,19 +1303,41 @@ try {
             -TasksPath $TasksPath `
             -SpecDir $SpecDir `
             -AgentExitCode $result.ExitCode
+
+        $completionSignal = Test-CompletionSignal -Output $result.Output
+        $remainingTasks = Get-IncompleteTaskCount -Path $TasksPath
+        if ($completionSignal -or $remainingTasks -eq 0) {
+            $completion = Test-RalphCompletionGate `
+                -RepoRoot $RepoRoot `
+                -TasksPath $TasksPath `
+                -SpecDir $SpecDir `
+                -Feature $FeatureName `
+                -TemplatePath $MemoryTemplatePath `
+                -AgentResultPresent `
+                -AgentExitCode $result.ExitCode `
+                -CommitPostconditions $postconditions
+
+            if ($completion.IsValid) {
+                $completionMessage = if ($completionSignal) { "COMPLETE signal validated" } else { "All tasks complete and validated" }
+                Write-IterationStatus -Iteration $iteration -Status "success" -Message $completionMessage
+                $completed = $true
+                break
+            }
+
+            Write-IterationStatus -Iteration $iteration -Status "failure" -Message "Completion gate rejected candidate"
+            foreach ($defect in $completion.Defects) {
+                Write-Host $defect -ForegroundColor Red
+            }
+            $fatalFailure = $true
+            break
+        }
+
         if (-not $postconditions.IsValid) {
             Write-IterationStatus -Iteration $iteration -Status "failure" -Message "Commit postcondition violation"
             foreach ($defect in $postconditions.Defects) {
                 Write-Host $defect -ForegroundColor Red
             }
             $fatalFailure = $true
-            break
-        }
-        
-        # Check for completion signal
-        if (Test-CompletionSignal -Output $result.Output) {
-            Write-IterationStatus -Iteration $iteration -Status "success" -Message "COMPLETE signal received"
-            $completed = $true
             break
         }
 
@@ -1157,14 +1361,6 @@ try {
         } else {
             $consecutiveFailures = 0
             Write-IterationStatus -Iteration $iteration -Status "success" -Message "Iteration completed"
-        }
-        
-        # Check remaining tasks
-        $remainingTasks = Get-IncompleteTaskCount -Path $TasksPath
-        if ($remainingTasks -eq 0) {
-            Write-Host "All tasks complete!" -ForegroundColor Green
-            $completed = $true
-            break
         }
         
         Write-Host "$remainingTasks task(s) remaining" -ForegroundColor DarkGray

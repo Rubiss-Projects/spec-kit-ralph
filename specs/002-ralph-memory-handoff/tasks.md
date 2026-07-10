@@ -101,19 +101,19 @@
 
 > Write these tests first and confirm the new cases fail before implementation.
 
-- [ ] T020 [P] [US3] Add Bash completion-gate tests for initial/post-agent clean success, dirty-path aggregation, stale handoff, failed-agent token, remaining-task token, no-next-iteration behavior, and unchanged history in `tests/regression/bash/test-ralph-loop.sh`
-- [ ] T021 [P] [US3] Add equivalent PowerShell completion-gate and history-preservation tests in `tests/regression/powershell/Test-RalphLoop.ps1`
+- [x] T020 [P] [US3] Add Bash completion-gate tests for initial/post-agent clean success, dirty-path aggregation, stale handoff, failed-agent token, remaining-task token, no-next-iteration behavior, and unchanged history in `tests/regression/bash/test-ralph-loop.sh`
+- [x] T021 [P] [US3] Add equivalent PowerShell completion-gate and history-preservation tests in `tests/regression/powershell/Test-RalphLoop.ps1`
 
 ### Implementation for User Story 3
 
-- [ ] T022 [P] [US3] Require the exact terminal `Current Handoff` before the final substantive commit and prohibit premature completion signaling in `commands/iterate.md`
-- [ ] T023 [P] [US3] Centralize initial, signal, and post-iteration success behind task, memory, commit, handoff, and `git status --short --untracked-files=all` validation in `scripts/bash/ralph-loop.sh`
-- [ ] T024 [P] [US3] Implement the parity centralized completion gate, aggregate dirty diagnostics, and immediate non-zero termination in `scripts/powershell/ralph-loop.ps1`
-- [ ] T025 [US3] Add final cross-platform result/exit/diagnostic parity assertions while preserving existing completion-signal regressions in `tests/regression/bash/test-ralph-loop.sh` and `tests/regression/powershell/Test-RalphLoop.ps1`
-- [ ] T026 [P] [US3] Document initialization, malformed-memory failure, memory-first context, failed-attempt persistence, audit-only progress, and strict completion in `README.md`
-- [ ] T027 [P] [US3] Record the durable memory handoff and clean-completion behavior under `Unreleased` without editing released sections in `CHANGELOG.md`
-- [ ] T028 [P] [US3] Align launcher preflight and orchestrator exit descriptions with memory validation and dirty completion in `commands/run.md`
-- [ ] T029 [US3] Run the US3 clean/dirty/inconsistent completion scenarios and documentation assertions in `tests/regression/bash/test-ralph-loop.sh`, `tests/regression/powershell/Test-RalphLoop.ps1`, `README.md`, and `commands/run.md`
+- [x] T022 [P] [US3] Require the exact terminal `Current Handoff` before the final substantive commit and prohibit premature completion signaling in `commands/iterate.md`
+- [x] T023 [P] [US3] Centralize initial, signal, and post-iteration success behind task, memory, commit, handoff, and `git status --short --untracked-files=all` validation in `scripts/bash/ralph-loop.sh`
+- [x] T024 [P] [US3] Implement the parity centralized completion gate, aggregate dirty diagnostics, and immediate non-zero termination in `scripts/powershell/ralph-loop.ps1`
+- [x] T025 [US3] Add final cross-platform result/exit/diagnostic parity assertions while preserving existing completion-signal regressions in `tests/regression/bash/test-ralph-loop.sh` and `tests/regression/powershell/Test-RalphLoop.ps1`
+- [x] T026 [P] [US3] Document initialization, malformed-memory failure, memory-first context, failed-attempt persistence, audit-only progress, and strict completion in `README.md`
+- [x] T027 [P] [US3] Record the durable memory handoff and clean-completion behavior under `Unreleased` without editing released sections in `CHANGELOG.md`
+- [x] T028 [P] [US3] Align launcher preflight and orchestrator exit descriptions with memory validation and dirty completion in `commands/run.md`
+- [x] T029 [US3] Run the US3 clean/dirty/inconsistent completion scenarios and documentation assertions in `tests/regression/bash/test-ralph-loop.sh`, `tests/regression/powershell/Test-RalphLoop.ps1`, `README.md`, and `commands/run.md`
 
 **Checkpoint**: All three user stories are independently verifiable and both supported orchestration paths enforce the same transparent completion contract.
 

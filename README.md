@@ -1,6 +1,6 @@
 # Ralph Loop
 
-Autonomous implementation loop for [spec-kit](https://github.com/github/spec-kit). Ralph repeatedly spawns a fresh AI agent that reads your `tasks.md`, implements the next work unit, commits the result, and loops until every task is done.
+Autonomous implementation loop for [spec-kit](https://github.com/github/spec-kit). Ralph repeatedly spawns a fresh AI agent that resumes from compact durable memory, implements the next work unit, and loops until every task is committed and the repository is clean.
 
 ## Prerequisites
 
@@ -162,54 +162,57 @@ export SPECKIT_RALPH_AGENT_CLI="codex"
 ```
 ┌─────────────────────────────────────────┐
 │           ralph-loop starts             │
-│  validate prerequisites, load config    │
+│  prepare + validate ralph-memory.md      │
 └──────────────────┬──────────────────────┘
                    ▼
-          ┌────────────────┐
-          │ Any tasks left?│──No──▶ exit 0 (COMPLETED)
-          └───────┬────────┘
-                  │ Yes
-                  ▼
+          ┌────────────────────┐
+          │ Any tasks left?    │──No──▶ strict completion gate
+          └─────────┬──────────┘
+                    │ Yes
+                    ▼
   ┌───────────────────────────────┐
-  │  Spawn fresh agent process    │
-  │  configured agent CLI runs    │
+  │ Spawn fresh agent process     │
+  │ memory first, tasks second    │
   └──────────────┬────────────────┘
                  ▼
   ┌───────────────────────────────┐
-  │  Agent reads tasks.md +       │
-  │  progress.md, implements      │
-  │  ONE work unit, commits       │
+  │ Implement and validate ONE    │
+  │ work unit                     │
   └──────────────┬────────────────┘
                  ▼
-       ┌──────────────────┐
-       │ Check termination│
-       │   conditions     │
-       └────────┬─────────┘
-                ▼
-        back to "Any tasks left?"
+  ┌───────────────────────────────┐
+  │ Persist tasks + memory +      │
+  │ audit, then substantive commit│
+  └──────────────┬────────────────┘
+                 ▼
+       validate history and loop
 ```
 
 ### Iteration Cycle
 
-1. The orchestrator spawns a **fresh** configured agent CLI process each iteration.
-2. The agent reads `tasks.md` to find the first incomplete work unit (phase, user story, or task group).
-3. It implements tasks within that single work unit, marks them `[x]` in `tasks.md`, and commits on completion.
-4. It appends an iteration entry to `progress.md` with files changed and lessons learned.
-5. Control returns to the orchestrator, which checks termination conditions and loops.
+1. The orchestrator creates a missing `ralph-memory.md` from the installed canonical template, or validates the existing file without rewriting it. A malformed file reports all structural defects, remains byte-for-byte unchanged, and blocks agent invocation.
+2. Each **fresh** agent reads `ralph-memory.md` first, then `tasks.md` and design artifacts. Recent `progress.md` entries are optional audit context, not durable memory.
+3. The agent implements and validates one work unit. Durable patterns, decisions, gotchas, commands, failed approaches, and the next handoff are compacted in memory.
+4. For completed work, the agent updates tasks and memory, appends progress, then creates one substantive commit containing implementation, `tasks.md`, `ralph-memory.md`, and `progress.md`. The audit uses `This work-unit commit`; it never requires a future hash or a bookkeeping amend.
+5. Failed or no-work attempts leave tasks and `HEAD` unchanged. Useful memory and audit updates remain uncommitted and join the next substantive commit.
+6. The orchestrator validates history without repairing it, then either launches the next fresh context or evaluates strict completion.
 
 ### Termination Conditions
 
 | Condition | Exit Code | Meaning |
 |---|---|---|
-| All tasks in `tasks.md` marked `[x]` | `0` | Success — nothing left to do |
-| Agent outputs `<promise>COMPLETE</promise>` | `0` | Agent confirmed all work is done |
+| Zero tasks, valid terminal handoff, valid coordinated history, clean repository | `0` | Completion contract passed |
+| Zero tasks but stale handoff, invalid memory, invalid commit, Git error, or any dirty path | `1` | Blocked immediately; all relevant diagnostics are printed and no agent is launched |
+| Completion signal with remaining tasks or a failed agent | `1` | Inconsistent protocol; the signal cannot force success |
 | Max iterations reached | `1` | Safety limit — increase `max_iterations` if needed |
 | 3 consecutive failures | `1` | Circuit breaker — agent is stuck |
 | Ctrl+C | `130` | User interrupted the loop |
 
+The terminal `Current Handoff` must contain only `- Feature complete; no handoff required.`. Completion also requires `git status --short --untracked-files=all` to succeed with no output. Ralph reports dirty paths and stops; it does not stage, amend, reset, stash, or launch a cleanup iteration.
+
 ## Resuming After Interruption
 
-Ralph is designed to be interrupted and resumed safely. Each iteration is self-contained: tasks are marked `[x]` in `tasks.md` and progress is logged in `progress.md` as work completes.
+Ralph is designed to be interrupted and resumed safely. `tasks.md` records authoritative task state, `ralph-memory.md` carries compact durable context and the next handoff, and committed files carry implementation state. `progress.md` is append-only chronological audit history.
 
 To resume, simply re-run the command:
 
@@ -217,7 +220,7 @@ To resume, simply re-run the command:
 /speckit.ralph.run
 ```
 
-Or re-run the script directly. The orchestrator reads the current checkbox state in `tasks.md` and skips completed tasks. The `progress.md` log gives the agent context from prior iterations.
+Or re-run the script directly. The orchestrator validates memory before selection, reads the current checkbox state, and skips completed tasks. A failed attempt's uncommitted memory/audit record is preserved for the next substantive work-unit commit.
 
 ## Extension Structure
 
@@ -232,6 +235,8 @@ spec-kit-ralph/
 │   │   └── ralph-loop.ps1         # PowerShell orchestrator
 │   └── bash/
 │       └── ralph-loop.sh          # Bash orchestrator
+├── templates/
+│   └── ralph-memory.md             # Canonical durable-memory template
 ├── ralph-config.yml               # Installed project config
 ├── ralph-config.template.yml      # Config template
 ├── README.md

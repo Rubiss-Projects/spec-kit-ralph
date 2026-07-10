@@ -101,8 +101,17 @@ Append the new record after every existing byte in `progress.md`. Do not reorgan
 
 ## Stop Conditions
 
-**If ALL tasks in tasks.md are complete** (`[x]`), output the following as the final
-line of your response, alone on its own line with no other text or backticks around it:
+Output the completion signal only after the final substantive work-unit transaction has
+passed every quality check and all of these statements are true:
+
+- Every task in `tasks.md` is complete (`[x]`)
+- `ralph-memory.md` is structurally valid
+- `Current Handoff` contains exactly one entry and no other content: `- Feature complete; no handoff required.`
+- The final substantive commit includes the implementation plus `tasks.md`, `ralph-memory.md`, and `progress.md`
+- `git status --short --untracked-files=all` succeeds and emits no lines
+
+Then output the following as the final line of your response, alone on its own line with
+no other text or backticks around it:
 
 ```text
 <promise>COMPLETE</promise>
@@ -111,9 +120,11 @@ line of your response, alone on its own line with no other text or backticks aro
 This signals the ralph loop orchestrator to terminate successfully. The orchestrator only
 recognizes the token when it stands alone on a line.
 
-**If tasks remain**, end your response normally and DO NOT write the token anywhere in your
-response — not even to say you are omitting it. Mentioning `<promise>COMPLETE</promise>` in
-prose while tasks remain would falsely terminate the loop. The next iteration will continue.
+If any completion condition fails—including remaining tasks, a failed quality check, an
+invalid or stale handoff, an incomplete commit, or a dirty path—end your response normally
+and DO NOT write the token anywhere in your response. Do not mention the token in prose.
+The orchestrator independently validates the same conditions and will reject a premature
+signal rather than allowing it to override a failed iteration or inconsistent state.
 
 ## Quality Gates
 
@@ -139,5 +150,5 @@ Follow the patterns established in the codebase:
 | User story unclear | Ask for clarification in progress entry, mark tasks as blocked |
 | Tests fail | Report failure, do not mark task complete, no commit |
 | Cannot complete story | Persist useful memory/audit context, leave `HEAD` unchanged, and make no commit |
-| All tasks done | Commit final story, output `<promise>COMPLETE</promise>` |
+| All tasks done | Persist the terminal handoff, create the coordinated final substantive commit, verify the clean completion gate, then output the completion signal |
 | Dependencies missing | Note in progress file, skip to next available task |
