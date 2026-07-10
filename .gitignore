@@ -2,12 +2,60 @@
 .DS_Store
 Thumbs.db
 
-# Editor
+# Editors and local IDE state
 .vscode/
+.idea/
 *.swp
 *.swo
 *~
 
-# Environment
+# Environment, credentials, and machine-local overrides
 .env
 .env.*
+!.env.example
+*.local
+*.local.*
+
+# Codex and agent-local state
+.codex/
+.codex-*
+.claude/
+.claude-*
+.agents/skills/
+.github/skills/
+.claude/skills/
+
+# Ralph local run artifacts
+scripts/ralph/.last-branch
+.codex-*
+
+# Local/installed agent skills
+.agents/skills/
+.github/skills/
+.claude/skills/
+
+scripts/ralph/*
+!scripts/ralph/archive/
+!scripts/ralph/archive/**
+!scripts/ralph/prd.json
+
+# Spec Kit local state; keep project specs and memory tracked
+.specify/*
+.specify/extensions/
+!.specify/
+!.specify/memory/
+!.specify/memory/**
+
+!specs/
+!specs/**
+
+# Logs, caches, and temporary outputs
+*.log
+*.tmp
+*.temp
+*.bak
+*.orig
+*.rej
+.cache/
+tmp/
+temp/
