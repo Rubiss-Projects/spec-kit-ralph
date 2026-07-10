@@ -45,14 +45,28 @@ You **MUST** consider the user input before proceeding (if not empty).
    - Work ONLY on tasks within that single user story
    - Example: If "US-001: Initialize Ralph Command" has incomplete tasks, work only on US-001
 
-4. **Implement tasks**:
+4. **Implement and validate tasks**:
    - Complete tasks in dependency order (non-[P] before parallel [P] where noted)
    - Follow TDD when appropriate: write tests first, then implementation
    - Run quality checks after each task (typecheck, lint, test as appropriate)
-   - Mark each completed task by changing `[ ]` to `[x]` in tasks.md
+   - Do not change task state until the corresponding substantive result passes its quality checks
 
-5. **Commit on user story completion**:
-   - When ALL tasks in the current user story are complete (`[x]`), create a commit:
+5. **Persist the iteration outcome before any commit**:
+   - When ALL tasks in the selected user story are substantively complete and validated:
+     1. Mark the completed tasks by changing `[ ]` to `[x]` in `tasks.md`
+     2. Preserve and compact durable discoveries in `ralph-memory.md`; replace `Current Handoff` with only the information needed by the next iteration
+     3. If no task remains anywhere in `tasks.md`, replace the handoff content with exactly `- Feature complete; no handoff required.`
+     4. Append the Progress Report below with `**Commit**: This work-unit commit`
+     5. Stage substantive files together with `tasks.md`, `ralph-memory.md`, and `progress.md`
+   - When the selected work unit fails, produces no work, or remains partial:
+     - Do not create a commit
+     - Leave `HEAD` unchanged
+     - Leave `tasks.md` byte-for-byte unchanged for a failed or no-work attempt; a validated partial result may mark only its completed tasks
+     - Preserve useful failure knowledge in `ralph-memory.md` and append the Progress Report with `**Commit**: No commit - no completed work unit`
+     - Leave those state changes uncommitted so the next substantive work-unit commit includes them
+
+6. **Create one substantive commit only after coordinated persistence**:
+   - When ALL tasks in the selected user story are complete (`[x]`), create exactly one commit:
 
      ```sh
      git add -A
@@ -60,13 +74,9 @@ You **MUST** consider the user input before proceeding (if not empty).
      ```
 
    - Example: `git commit -m "feat(001-ralph-loop-implement): US-001 Initialize Ralph Command"`
-   - If only partial progress, NO commit -- let the next iteration continue
-
-6. **Update progress log**:
-   - Create or append to `FEATURE_DIR/progress.md`
-   - Keep this file as append-only chronological audit history
-   - Put durable discoveries in the matching `ralph-memory.md` section; keep `Learnings` below concise and point to memory when detail is durable
-   - Use the Progress Report Format below
+   - Never create a commit containing only `tasks.md`, `ralph-memory.md`, and/or `progress.md`
+   - Never amend or create a follow-up bookkeeping commit to insert a commit hash into the audit log
+   - After committing, leave no bookkeeping change outside the commit
 
 ## Progress Report Format
 
@@ -74,19 +84,20 @@ APPEND to FEATURE_DIR/progress.md:
 
 ```markdown
 ---
-## Iteration [N] - [Current Date/Time]
-**User Story**: [US-XXX title or "Partial progress on US-XXX"]
-**Tasks Completed**: 
+## Iteration [N] - [YYYY-MM-DD HH:MM]
+**Work Unit**: [US-XXX title or failed/partial description]
+**Tasks Completed**:
 - [x] Task ID: description
-- [x] Task ID: description
-**Tasks Remaining in Story**: [count] or "None - story complete"
-**Commit**: [commit hash if story completed, or "No commit - partial progress"]
-**Files Changed**: 
+**Tasks Remaining in Work Unit**: [count or description]
+**Commit**: [This work-unit commit | No commit - no completed work unit]
+**Files Changed**:
 - path/to/file.ext
 **Learnings**:
-- [patterns discovered, gotchas, useful context for future iterations]
+- [concise audit note; put durable detail in ralph-memory.md]
 ---
 ```
+
+Append the new record after every existing byte in `progress.md`. Do not reorganize or rewrite historical entries, including legacy `Codebase Patterns` content.
 
 ## Stop Conditions
 
@@ -127,6 +138,6 @@ Follow the patterns established in the codebase:
 | --------- | ----------------- |
 | User story unclear | Ask for clarification in progress entry, mark tasks as blocked |
 | Tests fail | Report failure, do not mark task complete, no commit |
-| Cannot complete story | Report partial progress, commit only if all completed tasks form coherent unit |
+| Cannot complete story | Persist useful memory/audit context, leave `HEAD` unchanged, and make no commit |
 | All tasks done | Commit final story, output `<promise>COMPLETE</promise>` |
 | Dependencies missing | Note in progress file, skip to next available task |

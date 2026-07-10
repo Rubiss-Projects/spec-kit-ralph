@@ -17,6 +17,7 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 FIXTURE_DIR="$SCRIPT_DIR/../fixtures"
 SOURCE_SCRIPT="$REPO_ROOT/scripts/bash/ralph-loop.sh"
 RUN_COMMAND="$REPO_ROOT/commands/run.md"
+ITERATE_GUIDANCE="$REPO_ROOT/commands/iterate.md"
 
 # Test bookkeeping
 TESTS_RUN=0
@@ -100,6 +101,10 @@ extract_functions() {
     sed -n '/^validate_ralph_memory_file()/,/^}/p' "$SOURCE_SCRIPT"
     sed -n '/^render_ralph_memory()/,/^}/p' "$SOURCE_SCRIPT"
     sed -n '/^prepare_ralph_memory()/,/^}/p' "$SOURCE_SCRIPT"
+    # Extract coordinated commit helpers
+    sed -n '/^get_git_head_snapshot()/,/^}/p' "$SOURCE_SCRIPT"
+    sed -n '/^get_task_state_snapshot()/,/^}/p' "$SOURCE_SCRIPT"
+    sed -n '/^validate_iteration_commit_history()/,/^}/p' "$SOURCE_SCRIPT"
     # Extract get_agent_cli_kind
     sed -n '/^get_agent_cli_kind()/,/^}/p' "$SOURCE_SCRIPT"
     # Extract Spec Kit integration helpers
@@ -125,6 +130,95 @@ extract_functions() {
 }
 
 eval "$(extract_functions)"
+
+#endregion
+
+#region Tests: coordinated iteration commits
+
+section "coordinated iteration commits"
+
+persist_line=$(grep -n 'Persist the iteration outcome before any commit' "$ITERATE_GUIDANCE" | head -n 1 | cut -d: -f1)
+stage_line=$(grep -n 'Stage substantive files together' "$ITERATE_GUIDANCE" | head -n 1 | cut -d: -f1)
+commit_line=$(grep -n 'Create one substantive commit only after coordinated persistence' "$ITERATE_GUIDANCE" | head -n 1 | cut -d: -f1)
+assert_true "guidance persists state before staging" test -n "$persist_line" -a "$persist_line" -lt "$stage_line"
+assert_true "guidance stages coordinated state before commit" test -n "$stage_line" -a "$stage_line" -lt "$commit_line"
+
+snapshot_line=$(grep -n 'iteration_head_before=$(get_git_head_snapshot' "$SOURCE_SCRIPT" | head -n 1 | cut -d: -f1)
+invoke_line=$(grep -n 'output=$(invoke_agent_iteration' "$SOURCE_SCRIPT" | head -n 1 | cut -d: -f1)
+validation_line=$(grep -n 'validate_iteration_commit_history' "$SOURCE_SCRIPT" | tail -n 1 | cut -d: -f1)
+assert_true "snapshots HEAD before agent invocation" test -n "$snapshot_line" -a "$snapshot_line" -lt "$invoke_line"
+assert_true "validates commit history after agent invocation" test -n "$validation_line" -a "$validation_line" -gt "$invoke_line"
+history_helper=$(sed -n '/^validate_iteration_commit_history()/,/^}/p' "$SOURCE_SCRIPT")
+assert_false "commit validator has no repair or commit mutation" grep -Eq 'git .*([[:space:]])(commit|add|amend|reset|rebase|revert|checkout|stash)([[:space:]]|$)' <<< "$history_helper"
+
+TMP_COMMIT_REPO=$(mktemp -d)
+git -C "$TMP_COMMIT_REPO" init -q
+git -C "$TMP_COMMIT_REPO" config user.name "Ralph Test"
+git -C "$TMP_COMMIT_REPO" config user.email "ralph@example.test"
+TMP_COMMIT_SPEC="$TMP_COMMIT_REPO/specs/test-feature"
+mkdir -p "$TMP_COMMIT_SPEC"
+printf '%s\n' '- [ ] T001 First work' '- [ ] T002 Second work' > "$TMP_COMMIT_SPEC/tasks.md"
+cp "$FIXTURE_DIR/ralph-memory-valid-active.md" "$TMP_COMMIT_SPEC/ralph-memory.md"
+printf '%s\n' '# Ralph Progress Log' > "$TMP_COMMIT_SPEC/progress.md"
+printf '%s\n' 'initial' > "$TMP_COMMIT_REPO/source.txt"
+git -C "$TMP_COMMIT_REPO" add .
+git -C "$TMP_COMMIT_REPO" commit -qm "initial"
+
+before_head=$(get_git_head_snapshot "$TMP_COMMIT_REPO")
+before_state=$(get_task_state_snapshot "$TMP_COMMIT_SPEC/tasks.md")
+before_count=$(get_incomplete_task_count "$TMP_COMMIT_SPEC/tasks.md")
+printf '%s\n' 'substantive one' >> "$TMP_COMMIT_REPO/source.txt"
+sed -i.bak 's/- \[ \] T001/- [x] T001/' "$TMP_COMMIT_SPEC/tasks.md"
+rm -f "$TMP_COMMIT_SPEC/tasks.md.bak"
+printf '%s\n' '- durable learning' >> "$TMP_COMMIT_SPEC/ralph-memory.md"
+printf '%s\n' 'iteration one' >> "$TMP_COMMIT_SPEC/progress.md"
+git -C "$TMP_COMMIT_REPO" add .
+git -C "$TMP_COMMIT_REPO" commit -qm "coordinated work"
+after_count=$(get_incomplete_task_count "$TMP_COMMIT_SPEC/tasks.md")
+assert_true "accepts substantive commit containing all state artifacts" validate_iteration_commit_history "$TMP_COMMIT_REPO" "$before_head" "$before_state" "$before_count" "$after_count" 0 "$TMP_COMMIT_SPEC/tasks.md" "$TMP_COMMIT_SPEC/progress.md" "$TMP_COMMIT_SPEC/ralph-memory.md"
+
+# A failed attempt may retain memory and audit changes, but must leave tasks and
+# HEAD untouched so the next substantive transaction can include the records.
+failed_head=$(get_git_head_snapshot "$TMP_COMMIT_REPO")
+failed_state=$(get_task_state_snapshot "$TMP_COMMIT_SPEC/tasks.md")
+failed_count=$(get_incomplete_task_count "$TMP_COMMIT_SPEC/tasks.md")
+printf '%s\n' '- failed approach retained' >> "$TMP_COMMIT_SPEC/ralph-memory.md"
+printf '%s\n' 'failed iteration retained' >> "$TMP_COMMIT_SPEC/progress.md"
+assert_true "accepts failed-attempt retention without HEAD advance" validate_iteration_commit_history "$TMP_COMMIT_REPO" "$failed_head" "$failed_state" "$failed_count" "$failed_count" 7 "$TMP_COMMIT_SPEC/tasks.md" "$TMP_COMMIT_SPEC/progress.md" "$TMP_COMMIT_SPEC/ralph-memory.md"
+assert_eq "failed attempt leaves HEAD unchanged" "$failed_head" "$(get_git_head_snapshot "$TMP_COMMIT_REPO")"
+assert_true "failed attempt retains memory change" grep -q 'failed approach retained' "$TMP_COMMIT_SPEC/ralph-memory.md"
+assert_true "failed attempt retains audit change" grep -q 'failed iteration retained' "$TMP_COMMIT_SPEC/progress.md"
+
+followup_head=$(get_git_head_snapshot "$TMP_COMMIT_REPO")
+followup_state=$(get_task_state_snapshot "$TMP_COMMIT_SPEC/tasks.md")
+followup_before=$(get_incomplete_task_count "$TMP_COMMIT_SPEC/tasks.md")
+printf '%s\n' 'substantive two' >> "$TMP_COMMIT_REPO/source.txt"
+sed -i.bak 's/- \[ \] T002/- [x] T002/' "$TMP_COMMIT_SPEC/tasks.md"
+rm -f "$TMP_COMMIT_SPEC/tasks.md.bak"
+git -C "$TMP_COMMIT_REPO" add .
+git -C "$TMP_COMMIT_REPO" commit -qm "follow-up coordinated work"
+followup_after=$(get_incomplete_task_count "$TMP_COMMIT_SPEC/tasks.md")
+assert_true "accepts later substantive inclusion of retained records" validate_iteration_commit_history "$TMP_COMMIT_REPO" "$followup_head" "$followup_state" "$followup_before" "$followup_after" 0 "$TMP_COMMIT_SPEC/tasks.md" "$TMP_COMMIT_SPEC/progress.md" "$TMP_COMMIT_SPEC/ralph-memory.md"
+followup_paths=$(git -C "$TMP_COMMIT_REPO" show --pretty=format: --name-only HEAD)
+assert_true "follow-up commit contains retained memory" grep -Fxq 'specs/test-feature/ralph-memory.md' <<< "$followup_paths"
+assert_true "follow-up commit contains retained audit" grep -Fxq 'specs/test-feature/progress.md' <<< "$followup_paths"
+
+bookkeeping_head=$(get_git_head_snapshot "$TMP_COMMIT_REPO")
+bookkeeping_state=$(get_task_state_snapshot "$TMP_COMMIT_SPEC/tasks.md")
+bookkeeping_count=$(get_incomplete_task_count "$TMP_COMMIT_SPEC/tasks.md")
+printf '%s\n' 'bookkeeping only' >> "$TMP_COMMIT_SPEC/progress.md"
+git -C "$TMP_COMMIT_REPO" add "$TMP_COMMIT_SPEC/progress.md"
+git -C "$TMP_COMMIT_REPO" commit -qm "bookkeeping only"
+bookkeeping_committed_head=$(git -C "$TMP_COMMIT_REPO" rev-parse HEAD)
+set +e
+bookkeeping_output=$(validate_iteration_commit_history "$TMP_COMMIT_REPO" "$bookkeeping_head" "$bookkeeping_state" "$bookkeeping_count" "$bookkeeping_count" 0 "$TMP_COMMIT_SPEC/tasks.md" "$TMP_COMMIT_SPEC/progress.md" "$TMP_COMMIT_SPEC/ralph-memory.md" 2>&1)
+bookkeeping_exit=$?
+set -e
+assert_eq "bookkeeping-only commit validation exits one" "1" "$bookkeeping_exit"
+assert_true "reports bookkeeping-only violation" grep -q '^bookkeeping-only:' <<< "$bookkeeping_output"
+assert_eq "bookkeeping reporting does not mutate HEAD" "$bookkeeping_committed_head" "$(get_git_head_snapshot "$TMP_COMMIT_REPO")"
+
+rm -rf "$TMP_COMMIT_REPO"
 
 #endregion
 
