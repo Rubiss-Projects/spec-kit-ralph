@@ -67,6 +67,12 @@ function Write-Section {
     Write-Host "-- $Name --" -ForegroundColor Cyan
 }
 
+function ConvertTo-BatchEchoLiteral {
+    param([string]$Value)
+
+    return $Value.Replace("^", "^^").Replace("%", "%%").Replace("&", "^&").Replace("|", "^|").Replace("<", "^<").Replace(">", "^>")
+}
+
 function New-FakeCopilot {
     param(
         [string]$Directory,
@@ -116,7 +122,7 @@ function New-FakeCopilot {
         }
 
         foreach ($line in $OutputLines) {
-            $lines += "echo $line"
+            $lines += "echo $(ConvertTo-BatchEchoLiteral -Value $line)"
         }
         $lines += "exit /b $ExitCode"
         Set-Content -Path $path -Value ($lines -join "`r`n") -Encoding ASCII
@@ -433,6 +439,8 @@ Remove-Item $incompleteRepo.Root -Recurse -Force
 #region Tests: centralized completion gate
 
 Write-Section "centralized completion gate"
+
+Assert-Equal "batch fake agent escapes completion-token metacharacters" "^<promise^>COMPLETE^</promise^>" (ConvertTo-BatchEchoLiteral -Value "<promise>COMPLETE</promise>")
 
 $handoffValidationActive = Test-RalphMemoryFile `
     -Path (Join-Path $FixtureDir "ralph-memory-valid-active.md") `
@@ -1205,9 +1213,12 @@ Initialize-ProgressFile -Path $progressFile -Feature "test-feature"
 Assert-True "creates progress file" (Test-Path $progressFile)
 
 $content = Get-Content $progressFile -Raw
+$progressBytes = [System.IO.File]::ReadAllBytes($progressFile)
 Assert-True "contains feature name" ($content -match "Feature: test-feature")
 Assert-True "new progress file is audit-only" (-not ($content -match "## Codebase Patterns"))
 Assert-True "new progress file has audit delimiter" ($content -match '(?m)^---$')
+Assert-True "new progress file uses UTF-8 without BOM" (-not ($progressBytes.Length -ge 3 -and $progressBytes[0] -eq 0xEF -and $progressBytes[1] -eq 0xBB -and $progressBytes[2] -eq 0xBF))
+Assert-True "new progress file uses LF line endings" (-not $content.Contains("`r"))
 
 # Doesn't overwrite existing file
 Set-Content -Path $progressFile -Value "custom content" -Encoding UTF8

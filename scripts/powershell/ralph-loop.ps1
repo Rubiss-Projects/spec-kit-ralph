@@ -749,7 +749,8 @@ Started: $timestamp
 ---
 
 "@
-        Set-Content -Path $Path -Value $header -Encoding UTF8
+        $normalizedHeader = $header.Replace("`r`n", "`n").Replace("`r", "`n")
+        [System.IO.File]::WriteAllText($Path, $normalizedHeader, (New-Object System.Text.UTF8Encoding($false)))
         Write-Host "Created progress log: $Path" -ForegroundColor DarkGray
     }
 }
