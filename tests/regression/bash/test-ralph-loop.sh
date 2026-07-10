@@ -98,6 +98,7 @@ extract_functions() {
     sed -n '/^is_valid_utc_timestamp()/,/^}/p' "$SOURCE_SCRIPT"
     sed -n '/^load_ralph_memory_schema()/,/^}/p' "$SOURCE_SCRIPT"
     sed -n '/^validate_ralph_memory_template()/,/^}/p' "$SOURCE_SCRIPT"
+    sed -n '/^get_current_handoff_content()/,/^}/p' "$SOURCE_SCRIPT"
     sed -n '/^validate_ralph_memory_file()/,/^}/p' "$SOURCE_SCRIPT"
     sed -n '/^render_ralph_memory()/,/^}/p' "$SOURCE_SCRIPT"
     sed -n '/^prepare_ralph_memory()/,/^}/p' "$SOURCE_SCRIPT"
@@ -105,6 +106,8 @@ extract_functions() {
     sed -n '/^get_git_head_snapshot()/,/^}/p' "$SOURCE_SCRIPT"
     sed -n '/^get_task_state_snapshot()/,/^}/p' "$SOURCE_SCRIPT"
     sed -n '/^validate_iteration_commit_history()/,/^}/p' "$SOURCE_SCRIPT"
+    sed -n '/^validate_initial_commit_postconditions()/,/^}/p' "$SOURCE_SCRIPT"
+    sed -n '/^validate_completion_gate()/,/^}/p' "$SOURCE_SCRIPT"
     # Extract get_agent_cli_kind
     sed -n '/^get_agent_cli_kind()/,/^}/p' "$SOURCE_SCRIPT"
     # Extract Spec Kit integration helpers
@@ -130,6 +133,215 @@ extract_functions() {
 }
 
 eval "$(extract_functions)"
+
+#endregion
+
+#region Tests: centralized completion gate
+
+section "centralized completion gate"
+
+completion_helper=$(sed -n '/^validate_completion_gate()/,/^}/p' "$SOURCE_SCRIPT")
+assert_false "completion gate has no Git mutation or repair" grep -Eq 'git .*([[:space:]])(commit|add|amend|reset|rebase|revert|checkout|stash)([[:space:]]|$)' <<< "$completion_helper"
+initial_gate_line=$(grep -n 'validate_completion_gate "absent"' "$SOURCE_SCRIPT" | head -n 1 | cut -d: -f1)
+signal_gate_line=$(grep -n 'validate_completion_gate "$exit_code"' "$SOURCE_SCRIPT" | head -n 1 | cut -d: -f1)
+assert_true "initial task-zero uses centralized gate" test -n "$initial_gate_line"
+assert_true "post-agent candidates use centralized gate" test -n "$signal_gate_line"
+
+TMP_GATE_ROOT=$(mktemp -d)
+TMP_INITIAL_REPO="$TMP_GATE_ROOT/initial"
+TMP_INITIAL_SPEC="$TMP_INITIAL_REPO/specs/test-feature"
+mkdir -p "$TMP_INITIAL_SPEC"
+git -C "$TMP_INITIAL_REPO" init -q
+git -C "$TMP_INITIAL_REPO" config user.name "Ralph Test"
+git -C "$TMP_INITIAL_REPO" config user.email "ralph@example.test"
+cp "$FIXTURE_DIR/tasks-all-done.md" "$TMP_INITIAL_SPEC/tasks.md"
+cp "$FIXTURE_DIR/ralph-memory-valid-complete.md" "$TMP_INITIAL_SPEC/ralph-memory.md"
+printf '%s\n' '# Ralph Progress Log' > "$TMP_INITIAL_SPEC/progress.md"
+printf '%s\n' 'initial' > "$TMP_INITIAL_REPO/source.txt"
+git -C "$TMP_INITIAL_REPO" add .
+git -C "$TMP_INITIAL_REPO" commit -qm "initial complete state"
+
+NEVER_AGENT="$TMP_GATE_ROOT/copilot"
+cat > "$NEVER_AGENT" << 'NEVERAGENT'
+#!/usr/bin/env bash
+printf '%s\n' invoked >> "$RALPH_TEST_CALLS"
+exit 99
+NEVERAGENT
+chmod +x "$NEVER_AGENT"
+INITIAL_CALLS="$TMP_GATE_ROOT/initial.calls"
+initial_head=$(git -C "$TMP_INITIAL_REPO" rev-parse HEAD)
+set +e
+initial_output=$(cd "$TMP_INITIAL_REPO" && RALPH_TEST_CALLS="$INITIAL_CALLS" bash "$SOURCE_SCRIPT" --feature-name "test-feature" --tasks-path "$TMP_INITIAL_SPEC/tasks.md" --spec-dir "$TMP_INITIAL_SPEC" --max-iterations 3 --model "fake-model" --agent-cli "$NEVER_AGENT" 2>&1)
+initial_exit=$?
+set -e
+assert_eq "clean initial task-zero exits success" "0" "$initial_exit"
+assert_true "clean initial task-zero reports completion" grep -q '<promise>COMPLETE</promise>' <<< "$initial_output"
+assert_false "clean initial task-zero invokes no agent" test -e "$INITIAL_CALLS"
+assert_eq "clean initial gate leaves history unchanged" "$initial_head" "$(git -C "$TMP_INITIAL_REPO" rev-parse HEAD)"
+
+printf '%s\n' 'dirty tracked' >> "$TMP_INITIAL_REPO/source.txt"
+printf '%s\n' 'dirty untracked' > "$TMP_INITIAL_REPO/dirty-two.txt"
+dirty_head=$(git -C "$TMP_INITIAL_REPO" rev-parse HEAD)
+set +e
+dirty_output=$(cd "$TMP_INITIAL_REPO" && RALPH_TEST_CALLS="$INITIAL_CALLS" bash "$SOURCE_SCRIPT" --feature-name "test-feature" --tasks-path "$TMP_INITIAL_SPEC/tasks.md" --spec-dir "$TMP_INITIAL_SPEC" --max-iterations 3 --model "fake-model" --agent-cli "$NEVER_AGENT" 2>&1)
+dirty_exit=$?
+set -e
+assert_eq "dirty initial task-zero exits one" "1" "$dirty_exit"
+assert_true "dirty gate reports tracked porcelain" grep -Fq 'dirty-path:  M source.txt' <<< "$dirty_output"
+assert_true "dirty gate reports untracked porcelain" grep -Fq 'dirty-path: ?? dirty-two.txt' <<< "$dirty_output"
+assert_false "dirty initial task-zero invokes no agent" test -e "$INITIAL_CALLS"
+assert_eq "dirty completion reporting leaves history unchanged" "$dirty_head" "$(git -C "$TMP_INITIAL_REPO" rev-parse HEAD)"
+printf '%s\n' 'initial' > "$TMP_INITIAL_REPO/source.txt"
+rm -f "$TMP_INITIAL_REPO/dirty-two.txt"
+
+cp "$FIXTURE_DIR/ralph-memory-valid-active.md" "$TMP_INITIAL_SPEC/ralph-memory.md"
+git -C "$TMP_INITIAL_REPO" add "$TMP_INITIAL_SPEC/ralph-memory.md"
+git -C "$TMP_INITIAL_REPO" commit -qm "stale handoff fixture"
+stale_head=$(git -C "$TMP_INITIAL_REPO" rev-parse HEAD)
+set +e
+stale_output=$(cd "$TMP_INITIAL_REPO" && RALPH_TEST_CALLS="$INITIAL_CALLS" bash "$SOURCE_SCRIPT" --feature-name "test-feature" --tasks-path "$TMP_INITIAL_SPEC/tasks.md" --spec-dir "$TMP_INITIAL_SPEC" --max-iterations 3 --model "fake-model" --agent-cli "$NEVER_AGENT" 2>&1)
+stale_exit=$?
+set -e
+assert_eq "nonterminal handoff blocks initial completion" "1" "$stale_exit"
+assert_true "nonterminal handoff reports handoff-invalid" grep -q '^handoff-invalid:' <<< "$stale_output"
+assert_false "stale handoff starts no reconciliation agent" test -e "$INITIAL_CALLS"
+assert_eq "stale handoff leaves history unchanged" "$stale_head" "$(git -C "$TMP_INITIAL_REPO" rev-parse HEAD)"
+
+cp "$FIXTURE_DIR/ralph-memory-valid-complete.md" "$TMP_INITIAL_SPEC/ralph-memory.md"
+printf '%s\n' '- extra completion content' >> "$TMP_INITIAL_SPEC/ralph-memory.md"
+git -C "$TMP_INITIAL_REPO" add "$TMP_INITIAL_SPEC/ralph-memory.md"
+git -C "$TMP_INITIAL_REPO" commit -qm "invalid handoff shape fixture"
+set +e
+shape_output=$(cd "$TMP_INITIAL_REPO" && RALPH_TEST_CALLS="$INITIAL_CALLS" bash "$SOURCE_SCRIPT" --feature-name "test-feature" --tasks-path "$TMP_INITIAL_SPEC/tasks.md" --spec-dir "$TMP_INITIAL_SPEC" --max-iterations 3 --model "fake-model" --agent-cli "$NEVER_AGENT" 2>&1)
+shape_exit=$?
+set -e
+assert_eq "extra handoff content blocks completion" "1" "$shape_exit"
+assert_true "extra handoff content reports handoff-invalid" grep -q '^handoff-invalid:' <<< "$shape_output"
+assert_true "initial completion rejects incomplete coordinated state commit" grep -q '^commit-postcondition-invalid:' <<< "$shape_output"
+
+TMP_ACTIVE_REPO="$TMP_GATE_ROOT/active"
+TMP_ACTIVE_SPEC="$TMP_ACTIVE_REPO/specs/test-feature"
+mkdir -p "$TMP_ACTIVE_SPEC"
+git -C "$TMP_ACTIVE_REPO" init -q
+git -C "$TMP_ACTIVE_REPO" config user.name "Ralph Test"
+git -C "$TMP_ACTIVE_REPO" config user.email "ralph@example.test"
+printf '%s\n' '- [ ] T001 Complete work' > "$TMP_ACTIVE_SPEC/tasks.md"
+cp "$FIXTURE_DIR/ralph-memory-valid-active.md" "$TMP_ACTIVE_SPEC/ralph-memory.md"
+printf '%s\n' '# Ralph Progress Log' > "$TMP_ACTIVE_SPEC/progress.md"
+printf '%s\n' 'initial' > "$TMP_ACTIVE_REPO/source.txt"
+git -C "$TMP_ACTIVE_REPO" add .
+git -C "$TMP_ACTIVE_REPO" commit -qm "active state"
+
+mkdir -p "$TMP_GATE_ROOT/active-agent"
+ACTIVE_AGENT="$TMP_GATE_ROOT/active-agent/copilot"
+cat > "$ACTIVE_AGENT" << 'ACTIVEAGENT'
+#!/usr/bin/env bash
+printf '%s\n' invoked >> "$RALPH_TEST_CALLS"
+case "$RALPH_TEST_MODE" in
+    failed-token)
+        printf '%s\n' '<promise>COMPLETE</promise>'
+        exit 7
+        ;;
+    remaining-token)
+        printf '%s\n' '<promise>COMPLETE</promise>'
+        exit 0
+        ;;
+    complete|complete-dirty)
+        sed -i.bak 's/- \[ \] T001/- [x] T001/' "$RALPH_TEST_SPEC/tasks.md"
+        rm -f "$RALPH_TEST_SPEC/tasks.md.bak"
+        cp "$RALPH_TEST_COMPLETE_MEMORY" "$RALPH_TEST_SPEC/ralph-memory.md"
+        printf '%s\n' 'completed iteration' >> "$RALPH_TEST_SPEC/progress.md"
+        printf '%s\n' 'substantive completion' >> source.txt
+        git add source.txt "$RALPH_TEST_SPEC/tasks.md" "$RALPH_TEST_SPEC/ralph-memory.md" "$RALPH_TEST_SPEC/progress.md"
+        git commit -qm "complete work unit"
+        if [[ "$RALPH_TEST_MODE" == "complete-dirty" ]]; then
+            printf '%s\n' one > dirty-one.txt
+            printf '%s\n' two > dirty-two.txt
+        fi
+        printf '%s\n' '<promise>COMPLETE</promise>'
+        exit 0
+        ;;
+esac
+ACTIVEAGENT
+chmod +x "$ACTIVE_AGENT"
+
+ACTIVE_CALLS="$TMP_GATE_ROOT/active.calls"
+set +e
+failed_token_output=$(cd "$TMP_ACTIVE_REPO" && RALPH_TEST_CALLS="$ACTIVE_CALLS" RALPH_TEST_MODE=failed-token RALPH_TEST_SPEC="$TMP_ACTIVE_SPEC" RALPH_TEST_COMPLETE_MEMORY="$FIXTURE_DIR/ralph-memory-valid-complete.md" bash "$SOURCE_SCRIPT" --feature-name "test-feature" --tasks-path "$TMP_ACTIVE_SPEC/tasks.md" --spec-dir "$TMP_ACTIVE_SPEC" --max-iterations 3 --model "fake-model" --agent-cli "$ACTIVE_AGENT" 2>&1)
+failed_token_exit=$?
+set -e
+assert_eq "failed agent completion token exits one" "1" "$failed_token_exit"
+assert_true "failed token reports agent result" grep -q '^agent-result-invalid:' <<< "$failed_token_output"
+assert_eq "failed token starts no next iteration" "1" "$(wc -l < "$ACTIVE_CALLS" | tr -d ' ')"
+
+rm -f "$ACTIVE_CALLS"
+set +e
+remaining_token_output=$(cd "$TMP_ACTIVE_REPO" && RALPH_TEST_CALLS="$ACTIVE_CALLS" RALPH_TEST_MODE=remaining-token RALPH_TEST_SPEC="$TMP_ACTIVE_SPEC" RALPH_TEST_COMPLETE_MEMORY="$FIXTURE_DIR/ralph-memory-valid-complete.md" bash "$SOURCE_SCRIPT" --feature-name "test-feature" --tasks-path "$TMP_ACTIVE_SPEC/tasks.md" --spec-dir "$TMP_ACTIVE_SPEC" --max-iterations 3 --model "fake-model" --agent-cli "$ACTIVE_AGENT" 2>&1)
+remaining_token_exit=$?
+set -e
+assert_eq "completion token with remaining task exits one" "1" "$remaining_token_exit"
+assert_true "remaining-task token reports task count" grep -q '^tasks-incomplete: 1' <<< "$remaining_token_output"
+assert_eq "remaining-task token starts no next iteration" "1" "$(wc -l < "$ACTIVE_CALLS" | tr -d ' ')"
+
+rm -f "$ACTIVE_CALLS"
+set +e
+post_output=$(cd "$TMP_ACTIVE_REPO" && RALPH_TEST_CALLS="$ACTIVE_CALLS" RALPH_TEST_MODE=complete RALPH_TEST_SPEC="$TMP_ACTIVE_SPEC" RALPH_TEST_COMPLETE_MEMORY="$FIXTURE_DIR/ralph-memory-valid-complete.md" bash "$SOURCE_SCRIPT" --feature-name "test-feature" --tasks-path "$TMP_ACTIVE_SPEC/tasks.md" --spec-dir "$TMP_ACTIVE_SPEC" --max-iterations 3 --model "fake-model" --agent-cli "$ACTIVE_AGENT" 2>&1)
+post_exit=$?
+set -e
+assert_eq "clean post-agent completion exits success" "0" "$post_exit"
+assert_true "clean post-agent completion reports promise" grep -q '<promise>COMPLETE</promise>' <<< "$post_output"
+assert_eq "clean post-agent completion invokes once" "1" "$(wc -l < "$ACTIVE_CALLS" | tr -d ' ')"
+
+TMP_POST_DIRTY_REPO="$TMP_GATE_ROOT/post-dirty"
+cp -R "$TMP_ACTIVE_REPO" "$TMP_POST_DIRTY_REPO"
+TMP_POST_DIRTY_SPEC="$TMP_POST_DIRTY_REPO/specs/test-feature"
+# Restore an active baseline in the copied repository with a new coordinated commit.
+printf '%s\n' '- [ ] T001 Complete work' > "$TMP_POST_DIRTY_SPEC/tasks.md"
+cp "$FIXTURE_DIR/ralph-memory-valid-active.md" "$TMP_POST_DIRTY_SPEC/ralph-memory.md"
+printf '%s\n' 'active again' >> "$TMP_POST_DIRTY_SPEC/progress.md"
+printf '%s\n' 'active baseline' >> "$TMP_POST_DIRTY_REPO/source.txt"
+git -C "$TMP_POST_DIRTY_REPO" add .
+git -C "$TMP_POST_DIRTY_REPO" commit -qm "active baseline for dirty completion"
+post_dirty_baseline_head=$(git -C "$TMP_POST_DIRTY_REPO" rev-parse HEAD)
+POST_DIRTY_CALLS="$TMP_GATE_ROOT/post-dirty.calls"
+set +e
+post_dirty_output=$(cd "$TMP_POST_DIRTY_REPO" && RALPH_TEST_CALLS="$POST_DIRTY_CALLS" RALPH_TEST_MODE=complete-dirty RALPH_TEST_SPEC="$TMP_POST_DIRTY_SPEC" RALPH_TEST_COMPLETE_MEMORY="$FIXTURE_DIR/ralph-memory-valid-complete.md" bash "$SOURCE_SCRIPT" --feature-name "test-feature" --tasks-path "$TMP_POST_DIRTY_SPEC/tasks.md" --spec-dir "$TMP_POST_DIRTY_SPEC" --max-iterations 3 --model "fake-model" --agent-cli "$ACTIVE_AGENT" 2>&1)
+post_dirty_exit=$?
+set -e
+post_dirty_head=$(git -C "$TMP_POST_DIRTY_REPO" rev-parse HEAD)
+assert_eq "dirty post-agent completion exits one" "1" "$post_dirty_exit"
+assert_true "dirty post-agent gate reports first path" grep -Fq 'dirty-path: ?? dirty-one.txt' <<< "$post_dirty_output"
+assert_true "dirty post-agent gate reports second path" grep -Fq 'dirty-path: ?? dirty-two.txt' <<< "$post_dirty_output"
+assert_eq "dirty post-agent starts no next iteration" "1" "$(wc -l < "$POST_DIRTY_CALLS" | tr -d ' ')"
+assert_eq "dirty post-agent creates only its work-unit commit" "1" "$(git -C "$TMP_POST_DIRTY_REPO" rev-list --count "$post_dirty_baseline_head..$post_dirty_head")"
+assert_eq "dirty post-agent reporting adds no repair history" "$post_dirty_head" "$(git -C "$TMP_POST_DIRTY_REPO" rev-parse HEAD)"
+
+cp "$FIXTURE_DIR/ralph-memory-malformed.md" "$TMP_GATE_ROOT/malformed-completion.md"
+set +e
+aggregate_handoff_output=$(validate_ralph_memory_file "$REPO_ROOT/templates/ralph-memory.md" "$TMP_GATE_ROOT/malformed-completion.md" "test-feature" true 2>&1)
+aggregate_handoff_exit=$?
+set -e
+assert_eq "completion memory aggregate exits one" "1" "$aggregate_handoff_exit"
+assert_true "completion memory aggregate includes structural defect" grep -q '^title-invalid:' <<< "$aggregate_handoff_output"
+assert_true "completion memory aggregate includes handoff-invalid" grep -q '^handoff-invalid:' <<< "$aggregate_handoff_output"
+
+expected_completion_categories="agent-result-invalid
+bookkeeping-only
+commit-postcondition-invalid
+coordinated-commit-invalid
+dirty-path
+handoff-invalid
+tasks-incomplete"
+completion_parity_output="$dirty_output
+$shape_output
+$failed_token_output
+$remaining_token_output
+$post_dirty_output
+$stale_output"
+actual_completion_categories=$(sed -n -E 's/^(agent-result-invalid|bookkeeping-only|commit-postcondition-invalid|coordinated-commit-invalid|dirty-path|handoff-invalid|tasks-incomplete):.*/\1/p' <<< "$completion_parity_output" | LC_ALL=C sort -u)
+assert_eq "completion parity exposes the canonical diagnostic categories" "$expected_completion_categories" "$actual_completion_categories"
+
+rm -rf "$TMP_GATE_ROOT"
 
 #endregion
 

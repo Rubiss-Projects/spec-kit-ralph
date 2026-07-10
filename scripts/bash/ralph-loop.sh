@@ -108,7 +108,7 @@ fi
 
 #region Resolve Paths
 
-REPO_ROOT="$(pwd)"
+REPO_ROOT="$(pwd -P)"
 TASKS_PATH="$(realpath "$TASKS_PATH")"
 SPEC_DIR="$(realpath "$SPEC_DIR")"
 PROGRESS_PATH="$SPEC_DIR/progress.md"
@@ -319,10 +319,25 @@ validate_ralph_memory_template() {
     load_ralph_memory_schema "$template_path"
 }
 
+get_current_handoff_content() {
+    local memory_path=$1
+
+    awk '
+        /^```/ || /^~~~/ {
+            if (in_handoff) { print }
+            fenced = !fenced
+            next
+        }
+        !fenced && /^## Current Handoff$/ { in_handoff = 1; next }
+        in_handoff { print }
+    ' "$memory_path" | sed '/^[[:space:]]*$/d'
+}
+
 validate_ralph_memory_file() {
     local template_path=$1
     local memory_path=$2
     local feature=$3
+    local completion_required=${4:-false}
     local defects=()
     local title_count
     local all_h1_count
@@ -405,6 +420,11 @@ $section"
 
     if grep -Eq '\{\{[^}]+\}\}' "$memory_path" 2>/dev/null; then
         defects+=("token-unresolved: feature memory contains an unresolved template token")
+    fi
+
+    if [[ "$completion_required" == "true" ]] &&
+       [[ $(get_current_handoff_content "$memory_path") != '- Feature complete; no handoff required.' ]]; then
+        defects+=("handoff-invalid: Current Handoff must contain only '- Feature complete; no handoff required.'")
     fi
 
     if [[ ${#defects[@]} -gt 0 ]]; then
@@ -541,7 +561,7 @@ validate_iteration_commit_history() {
 
         while IFS= read -r commit; do
             [[ -z "$commit" ]] && continue
-            paths=$(git -C "$repo_root" diff-tree --no-commit-id --name-only -r "$commit" 2>/dev/null) || {
+            paths=$(git -C "$repo_root" diff-tree --root --no-commit-id --name-only -r "$commit" 2>/dev/null) || {
                 violations+=("coordinated-commit-invalid: cannot inspect commit $commit")
                 continue
             }
@@ -571,6 +591,112 @@ validate_iteration_commit_history() {
 
     if [[ ${#violations[@]} -gt 0 ]]; then
         printf '%s\n' "${violations[@]}" >&2
+        return 1
+    fi
+
+    return 0
+}
+
+validate_initial_commit_postconditions() {
+    local repo_root=$1
+    local tasks_path=$2
+    local progress_path=$3
+    local memory_path=$4
+    local tasks_relative=${tasks_path#"$repo_root"/}
+    local progress_relative=${progress_path#"$repo_root"/}
+    local memory_relative=${memory_path#"$repo_root"/}
+    local commit
+    local paths
+    local path
+    local has_tasks=false
+    local has_progress=false
+    local has_memory=false
+    local has_substantive=false
+    local defects=()
+
+    commit=$(git -C "$repo_root" log -1 --format=%H -- "$tasks_relative" "$progress_relative" "$memory_relative" 2>/dev/null) || true
+    if [[ -z "$commit" ]]; then
+        printf '%s\n' "coordinated-commit-invalid: no commit contains the active feature state artifacts" >&2
+        return 1
+    fi
+
+    paths=$(git -C "$repo_root" diff-tree --root --no-commit-id --name-only -r "$commit" 2>/dev/null) || {
+        printf 'coordinated-commit-invalid: cannot inspect commit %s\n' "$commit" >&2
+        return 1
+    }
+    while IFS= read -r path; do
+        [[ -z "$path" ]] && continue
+        case "$path" in
+            "$tasks_relative") has_tasks=true ;;
+            "$progress_relative") has_progress=true ;;
+            "$memory_relative") has_memory=true ;;
+            *) has_substantive=true ;;
+        esac
+    done <<< "$paths"
+
+    if [[ "$has_substantive" == "false" ]]; then
+        defects+=("bookkeeping-only: commit $commit contains no substantive path")
+    fi
+    if [[ "$has_tasks" == "false" || "$has_progress" == "false" || "$has_memory" == "false" ]]; then
+        defects+=("coordinated-commit-invalid: commit $commit must include tasks.md, progress.md, and ralph-memory.md")
+    fi
+
+    if [[ ${#defects[@]} -gt 0 ]]; then
+        printf '%s\n' "${defects[@]}" >&2
+        return 1
+    fi
+    return 0
+}
+
+validate_completion_gate() {
+    local agent_result=$1
+    local commit_postconditions=$2
+    local repo_root=$3
+    local tasks_path=$4
+    local template_path=$5
+    local memory_path=$6
+    local feature=$7
+    local incomplete
+    local memory_output
+    local status_output
+    local status_exit
+    local line
+    local defects=()
+
+    if [[ "$agent_result" != "absent" && "$agent_result" -ne 0 ]]; then
+        defects+=("agent-result-invalid: completion requires a successful agent result")
+    fi
+
+    incomplete=$(get_incomplete_task_count "$tasks_path")
+    if [[ "$incomplete" -ne 0 ]]; then
+        defects+=("tasks-incomplete: $incomplete task(s) remain")
+    fi
+
+    if ! memory_output=$(validate_ralph_memory_file "$template_path" "$memory_path" "$feature" true 2>&1); then
+        while IFS= read -r line; do
+            [[ -n "$line" ]] && defects+=("$line")
+        done <<< "$memory_output"
+    fi
+
+    if [[ "$commit_postconditions" -ne 0 ]]; then
+        defects+=("commit-postcondition-invalid: iteration history failed coordinated commit validation")
+    fi
+
+    if status_output=$(git -C "$repo_root" status --short --untracked-files=all 2>&1); then
+        status_exit=0
+    else
+        status_exit=$?
+    fi
+    if [[ "$status_exit" -ne 0 ]]; then
+        defects+=("git-status-invalid: git status failed: $status_output")
+    elif [[ -n "$status_output" ]]; then
+        while IFS= read -r line; do
+            defects+=("dirty-path: $line")
+        done <<< "$status_output"
+    fi
+
+    if [[ ${#defects[@]} -gt 0 ]]; then
+        printf '%s\n' "${defects[@]}" >&2
         return 1
     fi
 
@@ -960,17 +1086,25 @@ if ! prepare_ralph_memory "$MEMORY_TEMPLATE_PATH" "$MEMORY_PATH" "$FEATURE_NAME"
     exit 1
 fi
 
-# Initialize the audit log only after durable memory passes preflight, so an
-# invalid memory file causes no unrelated state mutation.
-initialize_progress_file "$PROGRESS_PATH" "$FEATURE_NAME"
-
 # Check initial task count
 INITIAL_TASKS=$(get_incomplete_task_count "$TASKS_PATH")
 if [[ "$INITIAL_TASKS" -eq 0 ]]; then
-    echo -e "\033[32mAll tasks are already complete!\033[0m"
-    echo "<promise>COMPLETE</promise>"
-    exit 0
+    initial_commit_postconditions=0
+    if ! validate_initial_commit_postconditions "$REPO_ROOT" "$TASKS_PATH" "$PROGRESS_PATH" "$MEMORY_PATH"; then
+        initial_commit_postconditions=1
+    fi
+    if validate_completion_gate "absent" "$initial_commit_postconditions" "$REPO_ROOT" "$TASKS_PATH" "$MEMORY_TEMPLATE_PATH" "$MEMORY_PATH" "$FEATURE_NAME"; then
+        echo -e "\033[32mAll tasks are already complete!\033[0m"
+        echo "<promise>COMPLETE</promise>"
+        exit 0
+    fi
+    exit 1
 fi
+
+# Initialize the audit log only when work remains. Completion validation is
+# read-only and must not create a missing progress file while reporting an
+# inconsistent task-zero repository.
+initialize_progress_file "$PROGRESS_PATH" "$FEATURE_NAME"
 
 echo -e "\033[37mFound $INITIAL_TASKS incomplete task(s)\033[0m"
 
@@ -1008,6 +1142,7 @@ while [[ $iteration -le $MAX_ITERATIONS && "$completed" == "false" && "$INTERRUP
     set -e
 
     iteration_tasks_after=$(get_incomplete_task_count "$TASKS_PATH")
+    commit_postconditions=0
     if ! validate_iteration_commit_history \
         "$REPO_ROOT" \
         "$iteration_head_before" \
@@ -1018,15 +1153,31 @@ while [[ $iteration -le $MAX_ITERATIONS && "$completed" == "false" && "$INTERRUP
         "$TASKS_PATH" \
         "$PROGRESS_PATH" \
         "$MEMORY_PATH"; then
-        print_status "$iteration" "failure" "Invalid work-unit commit history"
-        fatal_failure=true
+        commit_postconditions=1
+    fi
+
+    completion_signaled=false
+    if test_completion_signal "$output"; then
+        completion_signaled=true
+    fi
+
+    # Every completion candidate uses the same strict, read-only gate. A bad
+    # signal or inconsistent task-zero state fails immediately without a
+    # reconciliation iteration or repository mutation.
+    if [[ "$completion_signaled" == "true" || "$iteration_tasks_after" -eq 0 ]]; then
+        if validate_completion_gate "$exit_code" "$commit_postconditions" "$REPO_ROOT" "$TASKS_PATH" "$MEMORY_TEMPLATE_PATH" "$MEMORY_PATH" "$FEATURE_NAME"; then
+            print_status "$iteration" "success" "Completion gate passed"
+            completed=true
+        else
+            print_status "$iteration" "failure" "Completion gate failed"
+            fatal_failure=true
+        fi
         break
     fi
 
-    # Check for completion signal
-    if test_completion_signal "$output"; then
-        print_status "$iteration" "success" "COMPLETE signal received"
-        completed=true
+    if [[ "$commit_postconditions" -ne 0 ]]; then
+        print_status "$iteration" "failure" "Invalid work-unit commit history"
+        fatal_failure=true
         break
     fi
 
@@ -1054,12 +1205,6 @@ while [[ $iteration -le $MAX_ITERATIONS && "$completed" == "false" && "$INTERRUP
 
     # Check remaining tasks
     remaining_tasks=$iteration_tasks_after
-    if [[ "$remaining_tasks" -eq 0 ]]; then
-        echo -e "\033[32mAll tasks complete!\033[0m"
-        completed=true
-        break
-    fi
-
     echo -e "\033[90m$remaining_tasks task(s) remaining\033[0m"
 
     ((iteration++))
