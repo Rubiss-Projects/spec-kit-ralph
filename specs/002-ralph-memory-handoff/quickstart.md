@@ -35,7 +35,9 @@ See [Ralph Memory Schema](contracts/ralph-memory-schema.md) for metadata, invali
 
 ```bash
 bash -n scripts/bash/ralph-loop.sh
+bash -n tests/regression/bash/test-ralph-loop.sh
 bash tests/regression/bash/test-ralph-loop.sh
+pwsh -NoLogo -NoProfile -Command '$errors=$null; [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path "scripts/powershell/ralph-loop.ps1"), [ref]$null, [ref]$errors) > $null; [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path "tests/regression/powershell/Test-RalphLoop.ps1"), [ref]$null, [ref]$errors) > $null; if ($errors.Count) { $errors | ForEach-Object { Write-Error $_ }; exit 1 }'
 pwsh -NoLogo -NoProfile -File tests/regression/powershell/Test-RalphLoop.ps1
 git diff --check
 ```
@@ -61,6 +63,14 @@ The two regression suites must exercise equivalent temporary-Git-repository scen
 | Bookkeeping-only commit | Report protocol violation without rewriting history. |
 
 The normative sequencing and exit behavior are in [Iteration Lifecycle](contracts/iteration-lifecycle.md).
+
+Canonical regression inputs are:
+
+- `tests/regression/fixtures/ralph-memory-valid-active.md` for valid nonterminal state;
+- `tests/regression/fixtures/ralph-memory-valid-complete.md` for the exact terminal handoff;
+- `tests/regression/fixtures/ralph-memory-malformed.md` for simultaneous structural defects and byte-preservation checks.
+
+Memory diagnostics use the stable categories `template-unavailable`, `title-invalid`, `feature-invalid`, `started-invalid`, `section-missing`, `section-duplicate`, `section-unexpected`, `section-order`, `token-unresolved`, and `handoff-invalid`. Completion diagnostics additionally distinguish an invalid agent result, remaining tasks, coordinated-commit violations, bookkeeping-only commits, and each `dirty-path` porcelain line.
 
 ## 4. Verify cross-platform parity
 

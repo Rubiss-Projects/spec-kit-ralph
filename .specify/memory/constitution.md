@@ -20,14 +20,13 @@
     ✅ .specify/templates/plan-template.md - Constitution Check remains compatible
     ✅ .specify/templates/spec-template.md - no durable-state guidance to change
     ✅ .specify/templates/tasks-template.md - phase/task structure remains compatible
-    ⚠ commands/iterate.md - update in T011, T016, and T022
-    ⚠ commands/run.md - update in T028
-    ⚠ scripts/bash/ralph-loop.sh - update in T009, T017, and T023
-    ⚠ scripts/powershell/ralph-loop.ps1 - update in T010, T018, and T024
-    ⚠ README.md - update in T026
+    ✅ commands/iterate.md - memory-first context, coordinated persistence, and strict signal contract propagated
+    ✅ commands/run.md - memory preflight and strict orchestrator exits propagated
+    ✅ scripts/bash/ralph-loop.sh - initialization, transaction validation, and clean completion propagated
+    ✅ scripts/powershell/ralph-loop.ps1 - parity lifecycle and diagnostics propagated
+    ✅ README.md - user-facing memory/audit/completion guidance propagated
 
-  Follow-up TODOs: Complete the active-guidance propagation tasks above and
-  close the review in T033. Historical specs/001 artifacts remain unchanged.
+  Follow-up TODOs: None. Historical specs/001 artifacts remain unchanged.
   ============================================================================
 -->
 
