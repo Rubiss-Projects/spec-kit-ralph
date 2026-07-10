@@ -77,15 +77,15 @@
 
 > Write these tests first and confirm the new cases fail before implementation.
 
-- [ ] T014 [P] [US2] Add Bash static and temporary-Git-repository tests for persistence-before-commit ordering, failed-attempt retention, later substantive inclusion, and bookkeeping-only commit detection in `tests/regression/bash/test-ralph-loop.sh`
-- [ ] T015 [P] [US2] Add equivalent PowerShell transaction, failed-attempt, follow-up commit, and bookkeeping-only detection tests in `tests/regression/powershell/Test-RalphLoop.ps1`
+- [x] T014 [P] [US2] Add Bash static and temporary-Git-repository tests for persistence-before-commit ordering, failed-attempt retention, later substantive inclusion, and bookkeeping-only commit detection in `tests/regression/bash/test-ralph-loop.sh`
+- [x] T015 [P] [US2] Add equivalent PowerShell transaction, failed-attempt, follow-up commit, and bookkeeping-only detection tests in `tests/regression/powershell/Test-RalphLoop.ps1`
 
 ### Implementation for User Story 2
 
-- [ ] T016 [P] [US2] Reorder the completed-work transaction, replace future commit hashes with knowable audit dispositions, define failed/no-work persistence, and remove the partial-commit contradiction in `commands/iterate.md`
-- [ ] T017 [P] [US2] Add pre-iteration task/HEAD snapshots and read-only coordinated-commit/bookkeeping violation reporting in `scripts/bash/ralph-loop.sh`
-- [ ] T018 [P] [US2] Add parity task/HEAD snapshots and read-only coordinated-commit/bookkeeping violation reporting in `scripts/powershell/ralph-loop.ps1`
-- [ ] T019 [US2] Run the US2 completed-work, failed-attempt, follow-up-commit, and no-bookkeeping independent scenarios in `tests/regression/bash/test-ralph-loop.sh` and `tests/regression/powershell/Test-RalphLoop.ps1`
+- [x] T016 [P] [US2] Reorder the completed-work transaction, replace future commit hashes with knowable audit dispositions, define failed/no-work persistence, and remove the partial-commit contradiction in `commands/iterate.md`
+- [x] T017 [P] [US2] Add pre-iteration task/HEAD snapshots and read-only coordinated-commit/bookkeeping violation reporting in `scripts/bash/ralph-loop.sh`
+- [x] T018 [P] [US2] Add parity task/HEAD snapshots and read-only coordinated-commit/bookkeeping violation reporting in `scripts/powershell/ralph-loop.ps1`
+- [x] T019 [US2] Run the US2 completed-work, failed-attempt, follow-up-commit, and no-bookkeeping independent scenarios in `tests/regression/bash/test-ralph-loop.sh` and `tests/regression/powershell/Test-RalphLoop.ps1`
 
 **Checkpoint**: User Story 2 works independently with canonical fixtures—durable knowledge and audit history are separated, coordinated, and committed only with substantive work.
 

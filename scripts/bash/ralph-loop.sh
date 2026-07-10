@@ -465,6 +465,118 @@ prepare_ralph_memory() {
     validate_ralph_memory_file "$template_path" "$memory_path" "$feature"
 }
 
+get_git_head_snapshot() {
+    local repo_root=$1
+    local head
+
+    head=$(git -C "$repo_root" rev-parse --verify HEAD 2>/dev/null) || return 0
+    printf '%s\n' "$head"
+}
+
+get_task_state_snapshot() {
+    local tasks_path=$1
+
+    if [[ ! -f "$tasks_path" ]]; then
+        printf '%s\n' "missing"
+        return 0
+    fi
+
+    cksum < "$tasks_path" | awk '{ printf "%s:%s\n", $1, $2 }'
+}
+
+validate_iteration_commit_history() {
+    local repo_root=$1
+    local before_head=$2
+    local before_task_state=$3
+    local before_incomplete=$4
+    local after_incomplete=$5
+    local agent_exit=$6
+    local tasks_path=$7
+    local progress_path=$8
+    local memory_path=$9
+    local after_head
+    local after_task_state
+    local tasks_relative
+    local progress_relative
+    local memory_relative
+    local commits
+    local commit
+    local paths
+    local path
+    local has_tasks
+    local has_progress
+    local has_memory
+    local has_substantive
+    local violations=()
+
+    after_head=$(get_git_head_snapshot "$repo_root")
+    after_task_state=$(get_task_state_snapshot "$tasks_path")
+
+    # Preserve compatibility with callers outside a Git worktree. The strict
+    # repository preflight belongs to the centralized completion gate; when a
+    # HEAD exists, all checks below are mandatory and read-only.
+    if [[ -z "$before_head" || -z "$after_head" ]]; then
+        return 0
+    fi
+
+    tasks_relative=${tasks_path#"$repo_root"/}
+    progress_relative=${progress_path#"$repo_root"/}
+    memory_relative=${memory_path#"$repo_root"/}
+
+    if [[ "$before_head" == "$after_head" ]]; then
+        if [[ "$after_incomplete" -lt "$before_incomplete" ]]; then
+            violations+=("coordinated-commit-invalid: completed task state was not included in a new work-unit commit")
+        elif [[ "$after_task_state" != "$before_task_state" ]]; then
+            violations+=("failed-iteration-task-state: failed or no-work iteration changed tasks.md")
+        fi
+    else
+        if [[ "$agent_exit" -ne 0 || "$after_incomplete" -ge "$before_incomplete" ]]; then
+            violations+=("failed-iteration-advanced-head: failed or no-work iteration advanced HEAD")
+        fi
+
+        commits=$(git -C "$repo_root" rev-list --reverse "$before_head..$after_head" 2>/dev/null) || {
+            violations+=("coordinated-commit-invalid: new history cannot be inspected from the pre-iteration HEAD")
+            commits=""
+        }
+
+        while IFS= read -r commit; do
+            [[ -z "$commit" ]] && continue
+            paths=$(git -C "$repo_root" diff-tree --no-commit-id --name-only -r "$commit" 2>/dev/null) || {
+                violations+=("coordinated-commit-invalid: cannot inspect commit $commit")
+                continue
+            }
+            has_tasks=false
+            has_progress=false
+            has_memory=false
+            has_substantive=false
+
+            while IFS= read -r path; do
+                [[ -z "$path" ]] && continue
+                case "$path" in
+                    "$tasks_relative") has_tasks=true ;;
+                    "$progress_relative") has_progress=true ;;
+                    "$memory_relative") has_memory=true ;;
+                    *) has_substantive=true ;;
+                esac
+            done <<< "$paths"
+
+            if [[ "$has_substantive" == "false" ]]; then
+                violations+=("bookkeeping-only: commit $commit contains no substantive path")
+            fi
+            if [[ "$has_tasks" == "false" || "$has_progress" == "false" || "$has_memory" == "false" ]]; then
+                violations+=("coordinated-commit-invalid: commit $commit must include tasks.md, progress.md, and ralph-memory.md")
+            fi
+        done <<< "$commits"
+    fi
+
+    if [[ ${#violations[@]} -gt 0 ]]; then
+        printf '%s\n' "${violations[@]}" >&2
+        return 1
+    fi
+
+    return 0
+}
+
 get_agent_cli_kind() {
     local cli=$1
     local cli_name
@@ -881,6 +993,11 @@ while [[ $iteration -le $MAX_ITERATIONS && "$completed" == "false" && "$INTERRUP
         break
     fi
 
+    # Snapshot authoritative state immediately before the fresh agent context.
+    iteration_head_before=$(get_git_head_snapshot "$REPO_ROOT")
+    iteration_task_state_before=$(get_task_state_snapshot "$TASKS_PATH")
+    iteration_tasks_before=$(get_incomplete_task_count "$TASKS_PATH")
+
     # Invoke configured agent CLI with speckit.ralph.iterate behavior
     set +e
     output=$(invoke_agent_iteration \
@@ -889,6 +1006,22 @@ while [[ $iteration -le $MAX_ITERATIONS && "$completed" == "false" && "$INTERRUP
         "$WORKING_DIRECTORY")
     exit_code=$?
     set -e
+
+    iteration_tasks_after=$(get_incomplete_task_count "$TASKS_PATH")
+    if ! validate_iteration_commit_history \
+        "$REPO_ROOT" \
+        "$iteration_head_before" \
+        "$iteration_task_state_before" \
+        "$iteration_tasks_before" \
+        "$iteration_tasks_after" \
+        "$exit_code" \
+        "$TASKS_PATH" \
+        "$PROGRESS_PATH" \
+        "$MEMORY_PATH"; then
+        print_status "$iteration" "failure" "Invalid work-unit commit history"
+        fatal_failure=true
+        break
+    fi
 
     # Check for completion signal
     if test_completion_signal "$output"; then
@@ -920,7 +1053,7 @@ while [[ $iteration -le $MAX_ITERATIONS && "$completed" == "false" && "$INTERRUP
     fi
 
     # Check remaining tasks
-    remaining_tasks=$(get_incomplete_task_count "$TASKS_PATH")
+    remaining_tasks=$iteration_tasks_after
     if [[ "$remaining_tasks" -eq 0 ]]; then
         echo -e "\033[32mAll tasks complete!\033[0m"
         completed=true

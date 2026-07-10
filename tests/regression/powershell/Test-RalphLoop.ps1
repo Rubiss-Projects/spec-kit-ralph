@@ -142,6 +142,48 @@ function New-FakeCopilot {
     return $path
 }
 
+function Invoke-TestGit {
+    param(
+        [string]$Repository,
+        [string[]]$Arguments
+    )
+
+    $output = & git -C $Repository @Arguments 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        throw "git $($Arguments -join ' ') failed: $($output -join "`n")"
+    }
+    return $output
+}
+
+function New-TransactionTestRepository {
+    param([string]$Name)
+
+    $repository = Join-Path ([System.IO.Path]::GetTempPath()) "$Name-$PID"
+    $specDir = Join-Path $repository "specs/test-feature"
+    New-Item -ItemType Directory -Path $specDir -Force | Out-Null
+    New-Item -ItemType Directory -Path (Join-Path $repository "src") -Force | Out-Null
+
+    Invoke-TestGit -Repository $repository -Arguments @("init", "-q") | Out-Null
+    Invoke-TestGit -Repository $repository -Arguments @("config", "user.email", "ralph-tests@example.invalid") | Out-Null
+    Invoke-TestGit -Repository $repository -Arguments @("config", "user.name", "Ralph Tests") | Out-Null
+
+    Set-Content -Path (Join-Path $specDir "tasks.md") -Value "- [ ] T001 Complete transaction" -Encoding UTF8
+    Copy-Item (Join-Path $FixtureDir "ralph-memory-valid-active.md") (Join-Path $specDir "ralph-memory.md")
+    Set-Content -Path (Join-Path $specDir "progress.md") -Value "# Ralph Progress Log`n`nFeature: test-feature`n`n---" -Encoding UTF8
+    Set-Content -Path (Join-Path $repository "src/work.txt") -Value "baseline" -Encoding UTF8
+    Invoke-TestGit -Repository $repository -Arguments @("add", ".") | Out-Null
+    Invoke-TestGit -Repository $repository -Arguments @("commit", "-q", "-m", "test: baseline") | Out-Null
+
+    return [pscustomobject]@{
+        Root = $repository
+        SpecDir = $specDir
+        TasksPath = Join-Path $specDir "tasks.md"
+        MemoryPath = Join-Path $specDir "ralph-memory.md"
+        ProgressPath = Join-Path $specDir "progress.md"
+        SubstantivePath = Join-Path $repository "src/work.txt"
+    }
+}
+
 #endregion
 
 #region Extract Functions
@@ -238,6 +280,126 @@ Assert-True "later repeated preparation rejects newly malformed memory" (-not (P
 Assert-Equal "later repeated preparation preserves malformed bytes" ([Convert]::ToBase64String($repeatBefore)) ([Convert]::ToBase64String([System.IO.File]::ReadAllBytes($memoryFile)))
 
 Remove-Item $tmpMemoryDir -Recurse -Force
+
+#endregion
+
+#region Tests: coordinated commit postconditions
+
+Write-Section "coordinated commit postconditions"
+
+$transactionRepo = New-TransactionTestRepository -Name "ralph-transaction"
+
+# A failed attempt may retain useful memory/audit changes, but may not change
+# task state or advance HEAD. Validation itself must leave retained work intact.
+$failedBefore = New-RalphIterationSnapshot -RepoRoot $transactionRepo.Root -TasksPath $transactionRepo.TasksPath
+$failedHead = $failedBefore.Head
+$failedMemory = [System.IO.File]::ReadAllText($transactionRepo.MemoryPath).Replace(
+    "## Current Handoff",
+    "- Retained failed approach.`n`n## Current Handoff"
+)
+[System.IO.File]::WriteAllText($transactionRepo.MemoryPath, $failedMemory, (New-Object System.Text.UTF8Encoding($false)))
+Add-Content -Path $transactionRepo.ProgressPath -Value "`nFailed attempt retained." -Encoding UTF8
+$failedMemoryBeforeValidation = [System.IO.File]::ReadAllBytes($transactionRepo.MemoryPath)
+$failedProgressBeforeValidation = [System.IO.File]::ReadAllBytes($transactionRepo.ProgressPath)
+
+$failedValidation = Test-RalphIterationPostconditions `
+    -BeforeSnapshot $failedBefore `
+    -RepoRoot $transactionRepo.Root `
+    -TasksPath $transactionRepo.TasksPath `
+    -SpecDir $transactionRepo.SpecDir `
+    -AgentExitCode 1
+
+Assert-True "failed attempt retention passes with unchanged tasks and HEAD" $failedValidation.IsValid
+Assert-Equal "failed attempt does not advance HEAD" $failedHead ((New-RalphIterationSnapshot -RepoRoot $transactionRepo.Root -TasksPath $transactionRepo.TasksPath).Head)
+Assert-Equal "failed attempt memory remains retained" ([Convert]::ToBase64String($failedMemoryBeforeValidation)) ([Convert]::ToBase64String([System.IO.File]::ReadAllBytes($transactionRepo.MemoryPath)))
+Assert-Equal "failed attempt audit remains retained" ([Convert]::ToBase64String($failedProgressBeforeValidation)) ([Convert]::ToBase64String([System.IO.File]::ReadAllBytes($transactionRepo.ProgressPath)))
+
+# The next substantive work-unit commit consumes the retained state and includes
+# tasks, memory, progress, and at least one substantive path in one transaction.
+$followUpBefore = New-RalphIterationSnapshot -RepoRoot $transactionRepo.Root -TasksPath $transactionRepo.TasksPath
+Set-Content -Path $transactionRepo.TasksPath -Value "- [x] T001 Complete transaction" -Encoding UTF8
+$followUpMemory = [System.IO.File]::ReadAllText($transactionRepo.MemoryPath).Replace(
+    "- Continue the first incomplete work unit.",
+    "- Feature complete; no handoff required."
+)
+[System.IO.File]::WriteAllText($transactionRepo.MemoryPath, $followUpMemory, (New-Object System.Text.UTF8Encoding($false)))
+Add-Content -Path $transactionRepo.ProgressPath -Value "`nFollow-up work unit completed." -Encoding UTF8
+Add-Content -Path $transactionRepo.SubstantivePath -Value "`nsubstantive change" -Encoding UTF8
+Invoke-TestGit -Repository $transactionRepo.Root -Arguments @("add", ".") | Out-Null
+Invoke-TestGit -Repository $transactionRepo.Root -Arguments @("commit", "-q", "-m", "feat: coordinated transaction") | Out-Null
+$followUpHead = (Invoke-TestGit -Repository $transactionRepo.Root -Arguments @("rev-parse", "HEAD") | Select-Object -First 1).Trim()
+
+$followUpValidation = Test-RalphIterationPostconditions `
+    -BeforeSnapshot $followUpBefore `
+    -RepoRoot $transactionRepo.Root `
+    -TasksPath $transactionRepo.TasksPath `
+    -SpecDir $transactionRepo.SpecDir `
+    -AgentExitCode 0
+
+Assert-True "later substantive commit includes retained coordinated state" $followUpValidation.IsValid
+Assert-Equal "coordinated validation leaves substantive HEAD unchanged" $followUpHead ((Invoke-TestGit -Repository $transactionRepo.Root -Arguments @("rev-parse", "HEAD") | Select-Object -First 1).Trim())
+Assert-True "coordinated commit includes tasks" ((Invoke-TestGit -Repository $transactionRepo.Root -Arguments @("show", "--pretty=format:", "--name-only", "HEAD")) -contains "specs/test-feature/tasks.md")
+Assert-True "coordinated commit includes memory" ((Invoke-TestGit -Repository $transactionRepo.Root -Arguments @("show", "--pretty=format:", "--name-only", "HEAD")) -contains "specs/test-feature/ralph-memory.md")
+Assert-True "coordinated commit includes progress" ((Invoke-TestGit -Repository $transactionRepo.Root -Arguments @("show", "--pretty=format:", "--name-only", "HEAD")) -contains "specs/test-feature/progress.md")
+Assert-True "coordinated commit includes substantive path" ((Invoke-TestGit -Repository $transactionRepo.Root -Arguments @("show", "--pretty=format:", "--name-only", "HEAD")) -contains "src/work.txt")
+Assert-True "follow-up commit carries retained failure knowledge" (((Invoke-TestGit -Repository $transactionRepo.Root -Arguments @("show", "HEAD:specs/test-feature/ralph-memory.md")) -join "`n") -match "Retained failed approach")
+
+Remove-Item $transactionRepo.Root -Recurse -Force
+
+# A bookkeeping-only commit is reported but never repaired, rewritten, reset,
+# amended, reverted, or hidden by the validator.
+$bookkeepingRepo = New-TransactionTestRepository -Name "ralph-bookkeeping"
+$bookkeepingBefore = New-RalphIterationSnapshot -RepoRoot $bookkeepingRepo.Root -TasksPath $bookkeepingRepo.TasksPath
+Set-Content -Path $bookkeepingRepo.TasksPath -Value "- [x] T001 Complete transaction" -Encoding UTF8
+Copy-Item (Join-Path $FixtureDir "ralph-memory-valid-complete.md") $bookkeepingRepo.MemoryPath -Force
+Add-Content -Path $bookkeepingRepo.ProgressPath -Value "`nBookkeeping only." -Encoding UTF8
+Invoke-TestGit -Repository $bookkeepingRepo.Root -Arguments @("add", "specs/test-feature/tasks.md", "specs/test-feature/ralph-memory.md", "specs/test-feature/progress.md") | Out-Null
+Invoke-TestGit -Repository $bookkeepingRepo.Root -Arguments @("commit", "-q", "-m", "chore: bookkeeping only") | Out-Null
+$bookkeepingHeadBeforeValidation = (Invoke-TestGit -Repository $bookkeepingRepo.Root -Arguments @("rev-parse", "HEAD") | Select-Object -First 1).Trim()
+$bookkeepingStatusBeforeValidation = (Invoke-TestGit -Repository $bookkeepingRepo.Root -Arguments @("status", "--short", "--untracked-files=all")) -join "`n"
+$bookkeepingHistoryBeforeValidation = (Invoke-TestGit -Repository $bookkeepingRepo.Root -Arguments @("rev-list", "--count", "HEAD") | Select-Object -First 1).Trim()
+
+$bookkeepingValidation = Test-RalphIterationPostconditions `
+    -BeforeSnapshot $bookkeepingBefore `
+    -RepoRoot $bookkeepingRepo.Root `
+    -TasksPath $bookkeepingRepo.TasksPath `
+    -SpecDir $bookkeepingRepo.SpecDir `
+    -AgentExitCode 0
+
+Assert-True "bookkeeping-only commit is rejected" (-not $bookkeepingValidation.IsValid)
+Assert-True "bookkeeping-only diagnostic is reported" (($bookkeepingValidation.Defects | Where-Object { $_ -like 'bookkeeping-only:*' }).Count -gt 0)
+Assert-Equal "bookkeeping validator does not move HEAD" $bookkeepingHeadBeforeValidation ((Invoke-TestGit -Repository $bookkeepingRepo.Root -Arguments @("rev-parse", "HEAD") | Select-Object -First 1).Trim())
+Assert-Equal "bookkeeping validator does not change worktree or index" $bookkeepingStatusBeforeValidation ((Invoke-TestGit -Repository $bookkeepingRepo.Root -Arguments @("status", "--short", "--untracked-files=all")) -join "`n")
+Assert-Equal "bookkeeping validator does not rewrite history" $bookkeepingHistoryBeforeValidation ((Invoke-TestGit -Repository $bookkeepingRepo.Root -Arguments @("rev-list", "--count", "HEAD") | Select-Object -First 1).Trim())
+
+Remove-Item $bookkeepingRepo.Root -Recurse -Force
+
+# A substantive commit is still inconsistent when it omits any coordinated
+# state artifact. Reporting the omission must also remain read-only.
+$incompleteRepo = New-TransactionTestRepository -Name "ralph-incomplete-commit"
+$incompleteBefore = New-RalphIterationSnapshot -RepoRoot $incompleteRepo.Root -TasksPath $incompleteRepo.TasksPath
+Set-Content -Path $incompleteRepo.TasksPath -Value "- [x] T001 Complete transaction" -Encoding UTF8
+Add-Content -Path $incompleteRepo.ProgressPath -Value "`nIncomplete coordinated commit." -Encoding UTF8
+Add-Content -Path $incompleteRepo.SubstantivePath -Value "`nsubstantive but incomplete" -Encoding UTF8
+Invoke-TestGit -Repository $incompleteRepo.Root -Arguments @("add", "specs/test-feature/tasks.md", "specs/test-feature/progress.md", "src/work.txt") | Out-Null
+Invoke-TestGit -Repository $incompleteRepo.Root -Arguments @("commit", "-q", "-m", "feat: incomplete transaction") | Out-Null
+$incompleteHead = (Invoke-TestGit -Repository $incompleteRepo.Root -Arguments @("rev-parse", "HEAD") | Select-Object -First 1).Trim()
+
+$incompleteValidation = Test-RalphIterationPostconditions `
+    -BeforeSnapshot $incompleteBefore `
+    -RepoRoot $incompleteRepo.Root `
+    -TasksPath $incompleteRepo.TasksPath `
+    -SpecDir $incompleteRepo.SpecDir `
+    -AgentExitCode 0
+
+Assert-True "substantive commit missing memory is rejected" (-not $incompleteValidation.IsValid)
+Assert-True "missing coordinated memory diagnostic is reported" (($incompleteValidation.Defects | Where-Object { $_ -like 'coordinated-commit-invalid:*ralph-memory.md' }).Count -gt 0)
+Assert-Equal "incomplete transaction validator leaves HEAD unchanged" $incompleteHead ((Invoke-TestGit -Repository $incompleteRepo.Root -Arguments @("rev-parse", "HEAD") | Select-Object -First 1).Trim())
+
+$postconditionFunction = $functionDefs | Where-Object { $_.Name -eq "Test-RalphIterationPostconditions" } | Select-Object -First 1
+Assert-True "postcondition validator contains no mutating Git command" (-not ($postconditionFunction.Extent.Text -match '(?im)&\s+git\b[^\r\n]*\s+(add|commit|reset|rebase|revert|checkout|stash)(?:\s|$)'))
+
+Remove-Item $incompleteRepo.Root -Recurse -Force
 
 #endregion
 

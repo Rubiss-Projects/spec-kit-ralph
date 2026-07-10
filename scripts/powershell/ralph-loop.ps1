@@ -454,6 +454,198 @@ function Prepare-RalphMemory {
     return $true
 }
 
+function Get-RalphGitHead {
+    param([string]$RepoRoot)
+
+    try {
+        $headOutput = & git -C $RepoRoot rev-parse --verify HEAD 2>$null
+        if ($LASTEXITCODE -eq 0 -and $headOutput) {
+            return ([string]($headOutput | Select-Object -First 1)).Trim()
+        }
+    }
+    catch {
+        return ""
+    }
+
+    return ""
+}
+
+function Test-RalphGitRepository {
+    param([string]$RepoRoot)
+
+    try {
+        $insideWorkTree = & git -C $RepoRoot rev-parse --is-inside-work-tree 2>$null
+        return $LASTEXITCODE -eq 0 -and ([string]($insideWorkTree | Select-Object -First 1)).Trim() -eq "true"
+    }
+    catch {
+        return $false
+    }
+}
+
+function ConvertTo-RalphGitPath {
+    param(
+        [string]$RepoRoot,
+        [string]$Path
+    )
+
+    $rootPath = [System.IO.Path]::GetFullPath($RepoRoot).TrimEnd([char[]]@('\', '/')) + [System.IO.Path]::DirectorySeparatorChar
+    $fullPath = [System.IO.Path]::GetFullPath($Path)
+    $rootUri = New-Object System.Uri($rootPath)
+    $pathUri = New-Object System.Uri($fullPath)
+    return [System.Uri]::UnescapeDataString($rootUri.MakeRelativeUri($pathUri).ToString()).Replace('\', '/')
+}
+
+function New-RalphIterationSnapshot {
+    param(
+        [string]$RepoRoot,
+        [string]$TasksPath
+    )
+
+    $taskBytes = ""
+    if (Test-Path -LiteralPath $TasksPath -PathType Leaf) {
+        $taskBytes = [Convert]::ToBase64String([System.IO.File]::ReadAllBytes($TasksPath))
+    }
+
+    $incompleteTaskIds = @(
+        Get-IncompleteTasks -Path $TasksPath | ForEach-Object {
+            if ($_ -match '^(T\d+)') {
+                $Matches[1]
+            }
+        }
+    )
+
+    return [pscustomobject]@{
+        Head = Get-RalphGitHead -RepoRoot $RepoRoot
+        IsGitRepository = Test-RalphGitRepository -RepoRoot $RepoRoot
+        TaskBytes = $taskBytes
+        IncompleteTaskIds = $incompleteTaskIds
+    }
+}
+
+function Test-RalphIterationPostconditions {
+    param(
+        $BeforeSnapshot,
+        [string]$RepoRoot,
+        [string]$TasksPath,
+        [string]$SpecDir,
+        [int]$AgentExitCode
+    )
+
+    $defects = New-Object System.Collections.Generic.List[string]
+    $afterSnapshot = New-RalphIterationSnapshot -RepoRoot $RepoRoot -TasksPath $TasksPath
+
+    # Existing non-Git harnesses retain their historical behavior. Completion
+    # validation separately requires a working Git repository; this helper only
+    # classifies history when an iteration actually runs inside one.
+    if (-not $BeforeSnapshot.IsGitRepository -or -not $afterSnapshot.IsGitRepository) {
+        return [pscustomobject]@{
+            IsValid = $true
+            Defects = @()
+            BeforeHead = $BeforeSnapshot.Head
+            AfterHead = $afterSnapshot.Head
+        }
+    }
+
+    $headAdvanced = $BeforeSnapshot.Head -ne $afterSnapshot.Head
+    $taskStateChanged = $BeforeSnapshot.TaskBytes -ne $afterSnapshot.TaskBytes
+    $completedTaskIds = @($BeforeSnapshot.IncompleteTaskIds | Where-Object { $afterSnapshot.IncompleteTaskIds -notcontains $_ })
+
+    if ($AgentExitCode -ne 0) {
+        if ($headAdvanced) {
+            $defects.Add("failed-iteration-advanced-head: failed or no-work iteration advanced HEAD")
+        }
+        if ($taskStateChanged) {
+            $defects.Add("failed-iteration-task-state: failed or no-work iteration changed tasks.md")
+        }
+    }
+
+    if (-not $headAdvanced) {
+        if ($AgentExitCode -eq 0 -and $taskStateChanged) {
+            if ($completedTaskIds.Count -gt 0) {
+                $defects.Add("coordinated-commit-invalid: completed task state was not included in a new work-unit commit")
+            } else {
+                $defects.Add("failed-iteration-task-state: failed or no-work iteration changed tasks.md")
+            }
+        }
+
+        return [pscustomobject]@{
+            IsValid = ($defects.Count -eq 0)
+            Defects = @($defects.ToArray())
+            BeforeHead = $BeforeSnapshot.Head
+            AfterHead = $afterSnapshot.Head
+        }
+    }
+
+    if ($BeforeSnapshot.Head) {
+        & git -C $RepoRoot merge-base --is-ancestor $BeforeSnapshot.Head $afterSnapshot.Head 2>$null
+        if ($LASTEXITCODE -ne 0) {
+            $defects.Add("coordinated-commit-invalid: new history cannot be inspected from the pre-iteration HEAD")
+            return [pscustomobject]@{
+                IsValid = $false
+                Defects = @($defects.ToArray())
+                BeforeHead = $BeforeSnapshot.Head
+                AfterHead = $afterSnapshot.Head
+            }
+        }
+        $commitRange = "$($BeforeSnapshot.Head)..$($afterSnapshot.Head)"
+        $newCommits = @(& git -C $RepoRoot rev-list --reverse $commitRange 2>$null)
+    } else {
+        $newCommits = @(& git -C $RepoRoot rev-list --reverse $afterSnapshot.Head 2>$null)
+    }
+
+    if ($LASTEXITCODE -ne 0 -or $newCommits.Count -eq 0) {
+        $defects.Add("coordinated-commit-invalid: unable to inspect commits created by the iteration")
+        return [pscustomobject]@{
+            IsValid = $false
+            Defects = @($defects.ToArray())
+            BeforeHead = $BeforeSnapshot.Head
+            AfterHead = $afterSnapshot.Head
+        }
+    }
+
+    $stateArtifacts = @(
+        ConvertTo-RalphGitPath -RepoRoot $RepoRoot -Path $TasksPath
+        ConvertTo-RalphGitPath -RepoRoot $RepoRoot -Path (Join-Path $SpecDir "ralph-memory.md")
+        ConvertTo-RalphGitPath -RepoRoot $RepoRoot -Path (Join-Path $SpecDir "progress.md")
+    )
+
+    foreach ($commit in $newCommits) {
+        $commitId = ([string]$commit).Trim()
+        if (-not $commitId) {
+            continue
+        }
+
+        $changedPaths = @(& git -C $RepoRoot diff-tree --no-commit-id --name-only -r --root $commitId 2>$null | Where-Object { $_ })
+        if ($LASTEXITCODE -ne 0) {
+            $defects.Add("coordinated-commit-invalid: unable to inspect paths for commit $commitId")
+            continue
+        }
+
+        $substantivePaths = @($changedPaths | Where-Object { $stateArtifacts -notcontains $_ })
+        if ($substantivePaths.Count -eq 0) {
+            $defects.Add("bookkeeping-only: commit $commitId contains no substantive path")
+            continue
+        }
+
+        foreach ($stateArtifact in $stateArtifacts) {
+            if ($changedPaths -notcontains $stateArtifact) {
+                $defects.Add("coordinated-commit-invalid: commit $commitId is missing coordinated state artifact $stateArtifact")
+            }
+        }
+    }
+
+    if ($completedTaskIds.Count -eq 0) {
+        $defects.Add("failed-iteration-advanced-head: failed or no-work iteration advanced HEAD")
+    }
+
+    return [pscustomobject]@{
+        IsValid = ($defects.Count -eq 0)
+        Defects = @($defects.ToArray())
+        BeforeHead = $BeforeSnapshot.Head
+        AfterHead = $afterSnapshot.Head
+    }
+}
+
 function Initialize-ProgressFile {
     param([string]$Path, [string]$Feature)
     
@@ -908,6 +1100,8 @@ try {
             break
         }
 
+        $iterationSnapshot = New-RalphIterationSnapshot -RepoRoot $RepoRoot -TasksPath $TasksPath
+
         $lastIterationRun = $iteration
         Write-RalphHeader -Iteration $iteration -Max $MaxIterations
         Write-IterationStatus -Iteration $iteration -Status "running" -Message "Starting iteration"
@@ -919,6 +1113,21 @@ try {
         
         if ($DetailedOutput -or $result.ExitCode -ne 0) {
             Write-Host $result.Output
+        }
+
+        $postconditions = Test-RalphIterationPostconditions `
+            -BeforeSnapshot $iterationSnapshot `
+            -RepoRoot $RepoRoot `
+            -TasksPath $TasksPath `
+            -SpecDir $SpecDir `
+            -AgentExitCode $result.ExitCode
+        if (-not $postconditions.IsValid) {
+            Write-IterationStatus -Iteration $iteration -Status "failure" -Message "Commit postcondition violation"
+            foreach ($defect in $postconditions.Defects) {
+                Write-Host $defect -ForegroundColor Red
+            }
+            $fatalFailure = $true
+            break
         }
         
         # Check for completion signal
