@@ -1,1 +1,2 @@
 *.sh text eol=lf
+templates/ralph-memory.md text eol=lf

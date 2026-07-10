@@ -232,6 +232,9 @@ $tmpMemoryDir = Join-Path ([System.IO.Path]::GetTempPath()) "ralph-memory-$PID"
 New-Item -ItemType Directory -Path $tmpMemoryDir -Force | Out-Null
 $memoryFile = Join-Path $tmpMemoryDir "ralph-memory.md"
 
+$templateText = [System.IO.File]::ReadAllText($MemoryTemplate)
+Assert-True "shared memory template uses LF after checkout" (-not $templateText.Contains("`r"))
+
 $prepared = Prepare-RalphMemory -Path $memoryFile -TemplatePath $MemoryTemplate -Feature "test-feature"
 Assert-True "missing memory renders successfully" $prepared
 Assert-True "missing memory creates a file" (Test-Path $memoryFile)
