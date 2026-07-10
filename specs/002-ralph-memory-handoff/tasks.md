@@ -20,7 +20,7 @@
 
 **Purpose**: Reconcile authoritative project governance before any product-code implementation.
 
-- [ ] T001 Amend Principles II, IV, and VI, bump the constitution to 2.0.0, and complete the sync impact propagation report in `.specify/memory/constitution.md`
+- [x] T001 Amend Principles II, IV, and VI, bump the constitution to 2.0.0, and complete the sync impact propagation report in `.specify/memory/constitution.md`
 
 **Checkpoint**: Constitution 2.0.0 authorizes `ralph-memory.md`, audit-only `progress.md`, coordinated persistence, and strict clean completion.
 
@@ -32,11 +32,11 @@
 
 **⚠️ CRITICAL**: This phase depends on T001 and blocks all user-story work.
 
-- [ ] T002 Create the UTF-8/LF canonical tokenized memory template defined by the schema contract in `templates/ralph-memory.md`
-- [ ] T003 [P] Add an active canonical memory fixture with nonterminal handoff content in `tests/regression/fixtures/ralph-memory-valid-active.md` after T002
-- [ ] T004 [P] Add a completed canonical memory fixture with the exact terminal marker in `tests/regression/fixtures/ralph-memory-valid-complete.md` after T002
-- [ ] T005 [P] Add one byte-stable malformed memory fixture containing multiple simultaneous structural defects in `tests/regression/fixtures/ralph-memory-malformed.md` after T002
-- [ ] T006 Document the memory fixtures, token normalization, and intended validation categories in `tests/regression/fixtures/README.md`
+- [x] T002 Create the UTF-8/LF canonical tokenized memory template defined by the schema contract in `templates/ralph-memory.md`
+- [x] T003 [P] Add an active canonical memory fixture with nonterminal handoff content in `tests/regression/fixtures/ralph-memory-valid-active.md` after T002
+- [x] T004 [P] Add a completed canonical memory fixture with the exact terminal marker in `tests/regression/fixtures/ralph-memory-valid-complete.md` after T002
+- [x] T005 [P] Add one byte-stable malformed memory fixture containing multiple simultaneous structural defects in `tests/regression/fixtures/ralph-memory-malformed.md` after T002
+- [x] T006 Document the memory fixtures, token normalization, and intended validation categories in `tests/regression/fixtures/README.md`
 
 **Checkpoint**: The shared template and valid/invalid fixtures are ready for mirrored Bash and PowerShell tests.
 
@@ -52,16 +52,16 @@
 
 > Write these tests first and confirm the new cases fail before implementation.
 
-- [ ] T007 [P] [US1] Add Bash helper and full-script tests for template rendering, valid-file preservation, aggregate malformed diagnostics, invalid-template failure, and pre-agent initialization in `tests/regression/bash/test-ralph-loop.sh`
-- [ ] T008 [P] [US1] Add equivalent PowerShell helper and full-script tests for rendering, preservation, aggregate diagnostics, invalid-template failure, and pre-agent initialization in `tests/regression/powershell/Test-RalphLoop.ps1`
+- [x] T007 [P] [US1] Add Bash helper and full-script tests for template rendering, valid-file preservation, aggregate malformed diagnostics, invalid-template failure, and pre-agent initialization in `tests/regression/bash/test-ralph-loop.sh`
+- [x] T008 [P] [US1] Add equivalent PowerShell helper and full-script tests for rendering, preservation, aggregate diagnostics, invalid-template failure, and pre-agent initialization in `tests/regression/powershell/Test-RalphLoop.ps1`
 
 ### Implementation for User Story 1
 
-- [ ] T009 [P] [US1] Implement memory/template paths, create-new rendering, template-derived aggregate validation, repeated pre-agent preparation, and audit-only new progress initialization in `scripts/bash/ralph-loop.sh`
-- [ ] T010 [P] [US1] Implement the parity memory preparation and validation helpers with byte-preserving invalid-file behavior in `scripts/powershell/ralph-loop.ps1`
-- [ ] T011 [P] [US1] Make `ralph-memory.md` the first context source and demote `progress.md` to append-only audit/optional recent context in `commands/iterate.md`
-- [ ] T012 [US1] Add semantic parity assertions for canonical headings, metadata classes, validation result classes, and diagnostic categories across `tests/regression/bash/test-ralph-loop.sh` and `tests/regression/powershell/Test-RalphLoop.ps1`
-- [ ] T013 [US1] Run the US1 independent scenario and syntax checks against `templates/ralph-memory.md`, `scripts/bash/ralph-loop.sh`, `scripts/powershell/ralph-loop.ps1`, `tests/regression/bash/test-ralph-loop.sh`, and `tests/regression/powershell/Test-RalphLoop.ps1`
+- [x] T009 [P] [US1] Implement memory/template paths, create-new rendering, template-derived aggregate validation, repeated pre-agent preparation, and audit-only new progress initialization in `scripts/bash/ralph-loop.sh`
+- [x] T010 [P] [US1] Implement the parity memory preparation and validation helpers with byte-preserving invalid-file behavior in `scripts/powershell/ralph-loop.ps1`
+- [x] T011 [P] [US1] Make `ralph-memory.md` the first context source and demote `progress.md` to append-only audit/optional recent context in `commands/iterate.md`
+- [x] T012 [US1] Add semantic parity assertions for canonical headings, metadata classes, validation result classes, and diagnostic categories across `tests/regression/bash/test-ralph-loop.sh` and `tests/regression/powershell/Test-RalphLoop.ps1`
+- [x] T013 [US1] Run the US1 independent scenario and syntax checks against `templates/ralph-memory.md`, `scripts/bash/ralph-loop.sh`, `scripts/powershell/ralph-loop.ps1`, `tests/regression/bash/test-ralph-loop.sh`, and `tests/regression/powershell/Test-RalphLoop.ps1`
 
 **Checkpoint**: User Story 1 works independently—fresh contexts always begin with valid durable memory and never rely on the full audit log.
 

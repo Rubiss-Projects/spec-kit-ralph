@@ -92,6 +92,14 @@ extract_functions() {
     sed -n '/^get_incomplete_task_count()/,/^}/p' "$SOURCE_SCRIPT"
     # Extract initialize_progress_file
     sed -n '/^initialize_progress_file()/,/^}/p' "$SOURCE_SCRIPT"
+    # Extract Ralph memory helpers
+    sed -n '/^extract_ralph_memory_lines()/,/^}/p' "$SOURCE_SCRIPT"
+    sed -n '/^is_valid_utc_timestamp()/,/^}/p' "$SOURCE_SCRIPT"
+    sed -n '/^load_ralph_memory_schema()/,/^}/p' "$SOURCE_SCRIPT"
+    sed -n '/^validate_ralph_memory_template()/,/^}/p' "$SOURCE_SCRIPT"
+    sed -n '/^validate_ralph_memory_file()/,/^}/p' "$SOURCE_SCRIPT"
+    sed -n '/^render_ralph_memory()/,/^}/p' "$SOURCE_SCRIPT"
+    sed -n '/^prepare_ralph_memory()/,/^}/p' "$SOURCE_SCRIPT"
     # Extract get_agent_cli_kind
     sed -n '/^get_agent_cli_kind()/,/^}/p' "$SOURCE_SCRIPT"
     # Extract Spec Kit integration helpers
@@ -117,6 +125,116 @@ extract_functions() {
 }
 
 eval "$(extract_functions)"
+
+#endregion
+
+#region Tests: Ralph memory preparation
+
+section "Ralph memory preparation"
+
+TMP_MEMORY_ROOT=$(mktemp -d)
+MEMORY_TEMPLATE="$REPO_ROOT/templates/ralph-memory.md"
+MEMORY_FILE="$TMP_MEMORY_ROOT/ralph-memory.md"
+
+prepare_ralph_memory "$MEMORY_TEMPLATE" "$MEMORY_FILE" "test-feature" >/dev/null 2>&1
+assert_true "renders missing memory from shared template" test -f "$MEMORY_FILE"
+assert_true "renders exact feature identity" grep -Fxq "Feature: test-feature" "$MEMORY_FILE"
+assert_true "renders parseable UTC timestamp" grep -Eq '^Started: [0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$' "$MEMORY_FILE"
+assert_false "resolves every declared template token" grep -Eq '\{\{[^}]+\}\}' "$MEMORY_FILE"
+assert_true "rendered memory validates" validate_ralph_memory_file "$MEMORY_TEMPLATE" "$MEMORY_FILE" "test-feature"
+
+expected_headings="# Ralph Memory
+## Codebase Patterns
+## Decisions
+## Gotchas
+## Reusable Commands
+## Do Not Repeat
+## Current Handoff"
+actual_headings=$(awk '/^# / || /^## / { print }' "$MEMORY_FILE")
+assert_eq "parity contract uses canonical heading set and order" "$expected_headings" "$actual_headings"
+assert_eq "parity contract has one Feature metadata field" "1" "$(grep -c '^Feature: test-feature$' "$MEMORY_FILE")"
+assert_eq "parity contract has one Started metadata field" "1" "$(grep -Ec '^Started: [0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$' "$MEMORY_FILE")"
+
+cp "$FIXTURE_DIR/ralph-memory-valid-active.md" "$MEMORY_FILE"
+cp "$MEMORY_FILE" "$TMP_MEMORY_ROOT/valid.before"
+prepare_ralph_memory "$MEMORY_TEMPLATE" "$MEMORY_FILE" "test-feature" >/dev/null 2>&1
+assert_true "preserves an existing valid memory byte-for-byte" cmp -s "$TMP_MEMORY_ROOT/valid.before" "$MEMORY_FILE"
+
+cp "$FIXTURE_DIR/ralph-memory-malformed.md" "$MEMORY_FILE"
+cp "$MEMORY_FILE" "$TMP_MEMORY_ROOT/malformed.before"
+set +e
+malformed_output=$(prepare_ralph_memory "$MEMORY_TEMPLATE" "$MEMORY_FILE" "test-feature" 2>&1)
+malformed_exit=$?
+set -e
+assert_eq "aggregate malformed memory exits one" "1" "$malformed_exit"
+for category in title-invalid feature-invalid started-invalid section-missing section-duplicate section-unexpected section-order token-unresolved; do
+    assert_true "reports aggregate defect $category" grep -q "^$category:" <<< "$malformed_output"
+done
+expected_categories="feature-invalid
+section-duplicate
+section-missing
+section-order
+section-unexpected
+started-invalid
+title-invalid
+token-unresolved"
+actual_categories=$(sed -n 's/^\([a-z-]*\):.*/\1/p' <<< "$malformed_output" | LC_ALL=C sort -u)
+assert_eq "parity contract reports only canonical diagnostic categories" "$expected_categories" "$actual_categories"
+assert_true "preserves malformed memory byte-for-byte" cmp -s "$TMP_MEMORY_ROOT/malformed.before" "$MEMORY_FILE"
+
+INVALID_TEMPLATE="$TMP_MEMORY_ROOT/invalid-template.md"
+printf '%s\n' '# Ralph Memory' 'Feature: {{FEATURE_NAME}}' > "$INVALID_TEMPLATE"
+set +e
+invalid_template_output=$(prepare_ralph_memory "$INVALID_TEMPLATE" "$TMP_MEMORY_ROOT/from-invalid.md" "test-feature" 2>&1)
+invalid_template_exit=$?
+set -e
+assert_eq "invalid shared template exits one" "1" "$invalid_template_exit"
+assert_true "invalid shared template reports template-unavailable" grep -q '^template-unavailable:' <<< "$invalid_template_output"
+assert_false "invalid shared template creates no feature memory" test -e "$TMP_MEMORY_ROOT/from-invalid.md"
+
+rm -rf "$TMP_MEMORY_ROOT"
+
+#endregion
+
+#region Tests: full-script memory preflight
+
+section "full-script memory preflight"
+
+TMP_PREFLIGHT_REPO=$(mktemp -d)
+TMP_PREFLIGHT_SPEC="$TMP_PREFLIGHT_REPO/specs/test-feature"
+mkdir -p "$TMP_PREFLIGHT_SPEC"
+printf '%s\n' '- [ ] T001 Keep working' > "$TMP_PREFLIGHT_SPEC/tasks.md"
+
+FAKE_PREFLIGHT_CLI="$TMP_PREFLIGHT_REPO/copilot"
+cat > "$FAKE_PREFLIGHT_CLI" << 'FAKEPREFLIGHT'
+#!/usr/bin/env bash
+if [[ -f "$RALPH_TEST_MEMORY_PATH" ]] && grep -Fxq 'Feature: test-feature' "$RALPH_TEST_MEMORY_PATH"; then
+    printf '%s\n' 'MEMORY_READY_BEFORE_AGENT'
+else
+    printf '%s\n' 'MEMORY_MISSING_AT_AGENT'
+fi
+exit 0
+FAKEPREFLIGHT
+chmod +x "$FAKE_PREFLIGHT_CLI"
+
+set +e
+preflight_output=$(cd "$TMP_PREFLIGHT_REPO" && RALPH_TEST_MEMORY_PATH="$TMP_PREFLIGHT_SPEC/ralph-memory.md" bash "$SOURCE_SCRIPT" --feature-name "test-feature" --tasks-path "$TMP_PREFLIGHT_SPEC/tasks.md" --spec-dir "$TMP_PREFLIGHT_SPEC" --max-iterations 1 --model "fake-model" --agent-cli "$FAKE_PREFLIGHT_CLI" 2>&1)
+preflight_exit=$?
+set -e
+assert_eq "prepared-memory run reaches iteration limit" "1" "$preflight_exit"
+assert_true "prepares memory before fake agent invocation" grep -q 'MEMORY_READY_BEFORE_AGENT' <<< "$preflight_output"
+
+cp "$FIXTURE_DIR/ralph-memory-malformed.md" "$TMP_PREFLIGHT_SPEC/ralph-memory.md"
+cp "$TMP_PREFLIGHT_SPEC/ralph-memory.md" "$TMP_PREFLIGHT_REPO/malformed.before"
+set +e
+blocked_output=$(cd "$TMP_PREFLIGHT_REPO" && RALPH_TEST_MEMORY_PATH="$TMP_PREFLIGHT_SPEC/ralph-memory.md" bash "$SOURCE_SCRIPT" --feature-name "test-feature" --tasks-path "$TMP_PREFLIGHT_SPEC/tasks.md" --spec-dir "$TMP_PREFLIGHT_SPEC" --max-iterations 1 --model "fake-model" --agent-cli "$FAKE_PREFLIGHT_CLI" 2>&1)
+blocked_exit=$?
+set -e
+assert_eq "malformed preflight exits one" "1" "$blocked_exit"
+assert_false "malformed preflight never invokes agent" grep -q 'MEMORY_.*_AGENT' <<< "$blocked_output"
+assert_true "malformed preflight preserves exact bytes" cmp -s "$TMP_PREFLIGHT_REPO/malformed.before" "$TMP_PREFLIGHT_SPEC/ralph-memory.md"
+
+rm -rf "$TMP_PREFLIGHT_REPO"
 
 #endregion
 
@@ -546,9 +664,9 @@ PROGRESS_FILE="$TMP_PROGRESS/progress.md"
 initialize_progress_file "$PROGRESS_FILE" "test-feature" >/dev/null 2>&1
 assert_true "creates progress file" test -f "$PROGRESS_FILE"
 
-# File contains expected header content
+# File contains expected audit-only header content
 assert_true "contains feature name" grep -q "Feature: test-feature" "$PROGRESS_FILE"
-assert_true "contains codebase patterns section" grep -q "## Codebase Patterns" "$PROGRESS_FILE"
+assert_false "does not initialize durable codebase patterns in audit log" grep -q "## Codebase Patterns" "$PROGRESS_FILE"
 
 # Doesn't overwrite existing file
 printf '%s\n' "custom content" > "$PROGRESS_FILE"

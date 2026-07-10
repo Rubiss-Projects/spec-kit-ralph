@@ -17,6 +17,7 @@ $RepoRoot = Resolve-Path (Join-Path $ScriptDir "..\..\..") | Select-Object -Expa
 $FixtureDir = Join-Path $ScriptDir "..\fixtures"
 $SourceScript = Join-Path $RepoRoot "scripts\powershell\ralph-loop.ps1"
 $RunCommand = Join-Path $RepoRoot "commands\run.md"
+$MemoryTemplate = Join-Path $RepoRoot "templates\ralph-memory.md"
 
 # Test bookkeeping
 $script:TestsRun = 0
@@ -71,7 +72,8 @@ function New-FakeCopilot {
         [string]$Directory,
         [string[]]$OutputLines = @(),
         [int]$ExitCode = 0,
-        [switch]$EchoArgs
+        [switch]$EchoArgs,
+        [string]$RequiredFile = ""
     )
 
     $isWindowsRunner = ($env:OS -eq "Windows_NT") -or ($PSVersionTable.PSEdition -eq "Desktop")
@@ -94,6 +96,13 @@ function New-FakeCopilot {
             )
         }
 
+        if ($RequiredFile) {
+            $lines += @(
+                "if not exist `"$RequiredFile`" exit /b 91",
+                "echo MEMORY_READY"
+            )
+        }
+
         foreach ($line in $OutputLines) {
             $lines += "echo $line"
         }
@@ -112,6 +121,14 @@ function New-FakeCopilot {
             "    printf ' [%s]' ""`$arg""",
             "done",
             "printf '\n'"
+        )
+    }
+
+    if ($RequiredFile) {
+        $escapedRequiredFile = $RequiredFile -replace "'", "'\''"
+        $lines += @(
+            "test -f '$escapedRequiredFile' || exit 91",
+            "printf '%s\n' 'MEMORY_READY'"
         )
     }
 
@@ -138,6 +155,89 @@ foreach ($funcDef in $functionDefs) {
     # Define each function in the current scope
     Invoke-Expression $funcDef.Extent.Text
 }
+
+#endregion
+
+#region Tests: Ralph memory preparation
+
+Write-Section "Ralph memory preparation"
+
+$tmpMemoryDir = Join-Path ([System.IO.Path]::GetTempPath()) "ralph-memory-$PID"
+New-Item -ItemType Directory -Path $tmpMemoryDir -Force | Out-Null
+$memoryFile = Join-Path $tmpMemoryDir "ralph-memory.md"
+
+$prepared = Prepare-RalphMemory -Path $memoryFile -TemplatePath $MemoryTemplate -Feature "test-feature"
+Assert-True "missing memory renders successfully" $prepared
+Assert-True "missing memory creates a file" (Test-Path $memoryFile)
+
+$memoryBytes = [System.IO.File]::ReadAllBytes($memoryFile)
+$memoryText = [System.IO.File]::ReadAllText($memoryFile)
+Assert-True "rendered memory is UTF-8 without BOM" (-not ($memoryBytes.Length -ge 3 -and $memoryBytes[0] -eq 0xEF -and $memoryBytes[1] -eq 0xBB -and $memoryBytes[2] -eq 0xBF))
+Assert-True "rendered memory uses LF line endings" (-not $memoryText.Contains("`r"))
+Assert-True "rendered memory replaces feature token" ($memoryText -match '(?m)^Feature: test-feature$')
+Assert-True "rendered memory replaces timestamp token" ($memoryText -match '(?m)^Started: \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$')
+Assert-True "rendered memory has no unresolved tokens" (-not ($memoryText -match '\{\{[^{}]+\}\}'))
+Assert-Equal "rendered memory has six canonical sections" 6 ([regex]::Matches($memoryText, '(?m)^## ').Count)
+$expectedHeadings = @(
+    "# Ralph Memory",
+    "## Codebase Patterns",
+    "## Decisions",
+    "## Gotchas",
+    "## Reusable Commands",
+    "## Do Not Repeat",
+    "## Current Handoff"
+)
+$actualHeadings = [regex]::Matches($memoryText, '(?m)^#{1,2} .+$') | ForEach-Object { $_.Value }
+Assert-Equal "parity contract uses canonical heading set and order" ($expectedHeadings -join "`n") ($actualHeadings -join "`n")
+Assert-Equal "parity contract has one Feature metadata field" 1 ([regex]::Matches($memoryText, '(?m)^Feature: test-feature$').Count)
+Assert-Equal "parity contract has one Started metadata field" 1 ([regex]::Matches($memoryText, '(?m)^Started: \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$').Count)
+
+$renderedBefore = [System.IO.File]::ReadAllBytes($memoryFile)
+$prepared = Prepare-RalphMemory -Path $memoryFile -TemplatePath $MemoryTemplate -Feature "test-feature"
+$renderedAfter = [System.IO.File]::ReadAllBytes($memoryFile)
+Assert-True "existing valid memory prepares successfully" $prepared
+Assert-Equal "existing valid memory is byte-preserved" ([Convert]::ToBase64String($renderedBefore)) ([Convert]::ToBase64String($renderedAfter))
+
+Copy-Item (Join-Path $FixtureDir "ralph-memory-malformed.md") $memoryFile -Force
+$malformedBefore = [System.IO.File]::ReadAllBytes($memoryFile)
+$validation = Test-RalphMemoryFile -Path $memoryFile -Feature "test-feature" -TemplatePath $MemoryTemplate
+$expectedCategories = @(
+    "title-invalid",
+    "feature-invalid",
+    "started-invalid",
+    "section-missing",
+    "section-duplicate",
+    "section-unexpected",
+    "section-order",
+    "token-unresolved"
+)
+foreach ($category in $expectedCategories) {
+    Assert-True "malformed memory reports $category" (($validation.Defects | Where-Object { $_ -like "${category}:*" }).Count -gt 0)
+}
+Assert-True "malformed memory reports aggregate defects" ($validation.Defects.Count -ge $expectedCategories.Count)
+$actualCategories = @($validation.Defects | ForEach-Object { ($_ -split ':', 2)[0] } | Sort-Object -Unique)
+Assert-Equal "parity contract reports only canonical diagnostic categories" (($expectedCategories | Sort-Object) -join "`n") ($actualCategories -join "`n")
+$prepared = Prepare-RalphMemory -Path $memoryFile -TemplatePath $MemoryTemplate -Feature "test-feature"
+$malformedAfter = [System.IO.File]::ReadAllBytes($memoryFile)
+Assert-True "malformed memory blocks preparation" (-not $prepared)
+Assert-Equal "malformed memory remains byte-for-byte unchanged" ([Convert]::ToBase64String($malformedBefore)) ([Convert]::ToBase64String($malformedAfter))
+
+$invalidTemplate = Join-Path $tmpMemoryDir "invalid-template.md"
+Set-Content -Path $invalidTemplate -Value "# Not Ralph Memory`n`n{{FEATURE_NAME}}" -Encoding UTF8
+$missingTarget = Join-Path $tmpMemoryDir "from-invalid-template.md"
+$prepared = Prepare-RalphMemory -Path $missingTarget -TemplatePath $invalidTemplate -Feature "test-feature"
+Assert-True "invalid template blocks preparation" (-not $prepared)
+Assert-True "invalid template does not create memory" (-not (Test-Path $missingTarget))
+
+# Preparation is required before every fresh launch, not just once at startup.
+Copy-Item (Join-Path $FixtureDir "ralph-memory-valid-active.md") $memoryFile -Force
+Assert-True "first repeated preparation accepts canonical memory" (Prepare-RalphMemory -Path $memoryFile -TemplatePath $MemoryTemplate -Feature "test-feature")
+Copy-Item (Join-Path $FixtureDir "ralph-memory-malformed.md") $memoryFile -Force
+$repeatBefore = [System.IO.File]::ReadAllBytes($memoryFile)
+Assert-True "later repeated preparation rejects newly malformed memory" (-not (Prepare-RalphMemory -Path $memoryFile -TemplatePath $MemoryTemplate -Feature "test-feature"))
+Assert-Equal "later repeated preparation preserves malformed bytes" ([Convert]::ToBase64String($repeatBefore)) ([Convert]::ToBase64String([System.IO.File]::ReadAllBytes($memoryFile)))
+
+Remove-Item $tmpMemoryDir -Recurse -Force
 
 #endregion
 
@@ -433,6 +533,59 @@ Remove-Item $tmpCopilotDir -Recurse -Force
 
 #endregion
 
+#region Tests: full-script memory preflight
+
+Write-Section "full-script memory preflight"
+
+$tmpPreflightRepo = Join-Path ([System.IO.Path]::GetTempPath()) "ralph-memory-preflight-$PID"
+$tmpPreflightSpec = Join-Path $tmpPreflightRepo "specs/001-memory-preflight"
+$tmpPreflightCli = Join-Path $tmpPreflightRepo "cli"
+New-Item -ItemType Directory -Path $tmpPreflightSpec -Force | Out-Null
+New-Item -ItemType Directory -Path $tmpPreflightCli -Force | Out-Null
+Set-Content -Path (Join-Path $tmpPreflightSpec "tasks.md") -Value "- [ ] T001 Keep working" -Encoding UTF8
+$preflightMemory = Join-Path $tmpPreflightSpec "ralph-memory.md"
+$fakePreflightCli = New-FakeCopilot -Directory $tmpPreflightCli -RequiredFile $preflightMemory -ExitCode 0
+
+$preflightOutput = & pwsh -NoLogo -NoProfile -File $SourceScript `
+    -FeatureName "001-memory-preflight" `
+    -TasksPath (Join-Path $tmpPreflightSpec "tasks.md") `
+    -SpecDir $tmpPreflightSpec `
+    -MaxIterations 1 `
+    -Model "fake-model" `
+    -AgentCli $fakePreflightCli `
+    -WorkingDirectory $tmpPreflightRepo 2>&1
+$preflightExit = $LASTEXITCODE
+$preflightText = $preflightOutput -join "`n"
+
+Assert-Equal "full loop with incomplete work reaches iteration limit" 1 $preflightExit
+Assert-True "full loop creates memory before agent output" (Test-Path $preflightMemory)
+Assert-True "full loop reaches fake agent only after valid preflight" ($preflightText -match "MEMORY_READY")
+Assert-True "full loop renders active feature identity" (([System.IO.File]::ReadAllText($preflightMemory)) -match '(?m)^Feature: 001-memory-preflight$')
+
+Copy-Item (Join-Path $FixtureDir "ralph-memory-malformed.md") $preflightMemory -Force
+$preflightMalformedBefore = [System.IO.File]::ReadAllBytes($preflightMemory)
+$invalidOutput = & pwsh -NoLogo -NoProfile -File $SourceScript `
+    -FeatureName "001-memory-preflight" `
+    -TasksPath (Join-Path $tmpPreflightSpec "tasks.md") `
+    -SpecDir $tmpPreflightSpec `
+    -MaxIterations 1 `
+    -Model "fake-model" `
+    -AgentCli $fakePreflightCli `
+    -WorkingDirectory $tmpPreflightRepo 2>&1
+$invalidExit = $LASTEXITCODE
+$invalidText = $invalidOutput -join "`n"
+
+Assert-Equal "full loop rejects malformed memory before selection" 1 $invalidExit
+foreach ($category in $expectedCategories) {
+    Assert-True "full loop prints $category" ($invalidText -match [regex]::Escape("${category}:"))
+}
+Assert-True "full loop does not invoke agent for malformed memory" (-not ($invalidText -match "MEMORY_READY"))
+Assert-Equal "full loop preserves malformed memory bytes" ([Convert]::ToBase64String($preflightMalformedBefore)) ([Convert]::ToBase64String([System.IO.File]::ReadAllBytes($preflightMemory)))
+
+Remove-Item $tmpPreflightRepo -Recurse -Force
+
+#endregion
+
 #region Tests: fail-fast resolution guard
 
 Write-Section "fail-fast resolution guard"
@@ -504,7 +657,8 @@ Assert-True "creates progress file" (Test-Path $progressFile)
 
 $content = Get-Content $progressFile -Raw
 Assert-True "contains feature name" ($content -match "Feature: test-feature")
-Assert-True "contains codebase patterns section" ($content -match "## Codebase Patterns")
+Assert-True "new progress file is audit-only" (-not ($content -match "## Codebase Patterns"))
+Assert-True "new progress file has audit delimiter" ($content -match '(?m)^---$')
 
 # Doesn't overwrite existing file
 Set-Content -Path $progressFile -Value "custom content" -Encoding UTF8
