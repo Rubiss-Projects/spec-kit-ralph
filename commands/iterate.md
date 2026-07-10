@@ -32,12 +32,13 @@ You **MUST** consider the user input before proceeding (if not empty).
    ```
 
 2. **Read context first**:
-   - Read `FEATURE_DIR/progress.md` if it exists -- check the `## Codebase Patterns` section for discovered conventions
+   - Read `FEATURE_DIR/ralph-memory.md` FIRST -- it is the primary durable source for codebase patterns, decisions, gotchas, reusable commands, failed approaches, and the current handoff
    - Read `FEATURE_DIR/tasks.md` -- understand task structure and identify next incomplete user story
    - Read `FEATURE_DIR/plan.md` for tech stack, architecture, and file structure
    - **IF EXISTS**: Read `FEATURE_DIR/data-model.md` for entities and relationships
    - **IF EXISTS**: Read `FEATURE_DIR/contracts/` for API specifications
    - **IF EXISTS**: Read `FEATURE_DIR/research.md` for technical decisions and constraints
+   - **IF EXISTS**: Read only the recent relevant entries in `FEATURE_DIR/progress.md` for optional audit context; never use it as the primary memory bridge
 
 3. **Identify scope**:
    - Find the FIRST user story section with incomplete tasks (`- [ ]`)
@@ -63,7 +64,8 @@ You **MUST** consider the user input before proceeding (if not empty).
 
 6. **Update progress log**:
    - Create or append to `FEATURE_DIR/progress.md`
-   - Add any discovered patterns to `## Codebase Patterns` section at TOP of file
+   - Keep this file as append-only chronological audit history
+   - Put durable discoveries in the matching `ralph-memory.md` section; keep `Learnings` below concise and point to memory when detail is durable
    - Use the Progress Report Format below
 
 ## Progress Report Format
@@ -106,7 +108,7 @@ prose while tasks remain would falsely terminate the loop. The next iteration wi
 
 - ALL changes must pass quality checks before marking tasks complete
 - DO NOT commit broken code
-- Follow existing code patterns (check Codebase Patterns in progress file)
+- Follow existing code patterns and decisions from `ralph-memory.md`
 - Reference plan.md for architecture decisions
 - Run tests if they exist before committing
 

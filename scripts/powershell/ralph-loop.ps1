@@ -92,9 +92,11 @@ $RepoRoot = $WorkingDirectory
 $TasksPath = [System.IO.Path]::GetFullPath($TasksPath)
 $SpecDir = [System.IO.Path]::GetFullPath($SpecDir)
 $ProgressPath = Join-Path $SpecDir "progress.md"
+$MemoryPath = Join-Path $SpecDir "ralph-memory.md"
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $ExtensionRoot = Resolve-Path (Join-Path $ScriptDir "..\..") | Select-Object -ExpandProperty Path
 $IterateCommandPath = Join-Path $ExtensionRoot "commands\iterate.md"
+$MemoryTemplatePath = Join-Path $ExtensionRoot "templates\ralph-memory.md"
 
 # Load config from extension config file
 function Read-RalphConfig {
@@ -211,6 +213,247 @@ function Get-IncompleteTaskCount {
     return (Get-IncompleteTasks -Path $Path).Count
 }
 
+function Get-RalphMemoryTemplateContract {
+    param([string]$Path)
+
+    $defects = New-Object System.Collections.Generic.List[string]
+    $requiredSections = @(
+        "Codebase Patterns",
+        "Decisions",
+        "Gotchas",
+        "Reusable Commands",
+        "Do Not Repeat",
+        "Current Handoff"
+    )
+    $raw = ""
+    $templateRead = $false
+
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+        $defects.Add("template-unavailable: shared memory template is missing: $Path")
+    } else {
+        try {
+            $bytes = [System.IO.File]::ReadAllBytes($Path)
+            if ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF) {
+                $defects.Add("template-unavailable: shared memory template must be UTF-8 without BOM")
+            }
+
+            $strictUtf8 = New-Object System.Text.UTF8Encoding($false, $true)
+            $raw = $strictUtf8.GetString($bytes)
+            $templateRead = $true
+            if ($raw.Contains("`r")) {
+                $defects.Add("template-unavailable: shared memory template must use LF line endings")
+            }
+        }
+        catch {
+            $defects.Add("template-unavailable: shared memory template is unreadable: $($_.Exception.Message)")
+        }
+    }
+
+    if ($templateRead) {
+        $allTitles = [regex]::Matches($raw, '(?m)^# [^#\r\n].*$')
+        if ($allTitles.Count -ne 1 -or [regex]::Matches($raw, '(?m)^# Ralph Memory$').Count -ne 1) {
+            $defects.Add("template-unavailable: shared memory template must contain exactly one canonical title")
+        }
+
+        if ([regex]::Matches($raw, '(?m)^Feature: \{\{FEATURE_NAME\}\}$').Count -ne 1) {
+            $defects.Add("template-unavailable: shared memory template must contain exactly one FEATURE_NAME field")
+        }
+        if ([regex]::Matches($raw, '(?m)^Started: \{\{STARTED_AT\}\}$').Count -ne 1) {
+            $defects.Add("template-unavailable: shared memory template must contain exactly one STARTED_AT field")
+        }
+
+        $actualSections = @([regex]::Matches($raw, '(?m)^## ([^\r\n]+)$') | ForEach-Object { $_.Groups[1].Value })
+        if ($actualSections.Count -ne $requiredSections.Count -or (($actualSections -join "`n") -ne ($requiredSections -join "`n"))) {
+            $defects.Add("template-unavailable: shared memory template has an invalid canonical section sequence")
+        }
+
+        $tokens = @([regex]::Matches($raw, '\{\{[^{}\r\n]+\}\}') | ForEach-Object { $_.Value })
+        if ($tokens.Count -ne 2 -or ($tokens -contains '{{FEATURE_NAME}}') -eq $false -or ($tokens -contains '{{STARTED_AT}}') -eq $false) {
+            $defects.Add("template-unavailable: shared memory template contains undeclared or duplicate tokens")
+        }
+    }
+
+    return [pscustomobject]@{
+        IsValid = ($defects.Count -eq 0)
+        Defects = @($defects.ToArray())
+        Sections = $requiredSections
+        Raw = $raw
+    }
+}
+
+function Get-RalphMemoryFileValidation {
+    param(
+        [string]$Path,
+        [string]$Feature,
+        $TemplateContract
+    )
+
+    if (-not $TemplateContract.IsValid) {
+        return [pscustomobject]@{
+            IsValid = $false
+            Defects = @($TemplateContract.Defects)
+        }
+    }
+
+    $defects = New-Object System.Collections.Generic.List[string]
+    $raw = ""
+    try {
+        $raw = [System.IO.File]::ReadAllText($Path)
+    }
+    catch {
+        $defects.Add("title-invalid: memory file is missing or unreadable: $Path")
+        return [pscustomobject]@{
+            IsValid = $false
+            Defects = @($defects.ToArray())
+        }
+    }
+
+    $allTitles = [regex]::Matches($raw, '(?m)^# [^#\r\n].*\r?$')
+    if ($allTitles.Count -ne 1 -or [regex]::Matches($raw, '(?m)^# Ralph Memory\r?$').Count -ne 1) {
+        $defects.Add("title-invalid: expected exactly one '# Ralph Memory' title")
+    }
+
+    $featureMatches = [regex]::Matches($raw, '(?m)^Feature:([^\r\n]*)')
+    if ($featureMatches.Count -ne 1 -or $featureMatches[0].Groups[1].Value.Trim() -ne $Feature) {
+        $defects.Add("feature-invalid: expected exactly one non-empty Feature field matching '$Feature'")
+    }
+
+    $startedMatches = [regex]::Matches($raw, '(?m)^Started:([^\r\n]*)')
+    $startedValid = $false
+    if ($startedMatches.Count -eq 1) {
+        $startedValue = $startedMatches[0].Groups[1].Value.Trim()
+        if ($startedValue) {
+            $parsedStarted = [DateTimeOffset]::MinValue
+            $startedValid = [DateTimeOffset]::TryParse(
+                $startedValue,
+                [System.Globalization.CultureInfo]::InvariantCulture,
+                [System.Globalization.DateTimeStyles]::AssumeUniversal,
+                [ref]$parsedStarted
+            )
+        }
+    }
+    if (-not $startedValid) {
+        $defects.Add("started-invalid: expected exactly one non-empty parseable Started field")
+    }
+
+    $actualSections = @([regex]::Matches($raw, '(?m)^## ([^\r\n]+)\r?$') | ForEach-Object { $_.Groups[1].Value })
+    foreach ($section in $TemplateContract.Sections) {
+        $count = @($actualSections | Where-Object { $_ -eq $section }).Count
+        if ($count -eq 0) {
+            $defects.Add("section-missing: ## $section")
+        } elseif ($count -gt 1) {
+            $defects.Add("section-duplicate: ## $section")
+        }
+    }
+    foreach ($section in $actualSections) {
+        if ($TemplateContract.Sections -notcontains $section) {
+            $defects.Add("section-unexpected: ## $section")
+        }
+    }
+
+    $lastPosition = -1
+    $sectionsInOrder = $true
+    foreach ($section in $TemplateContract.Sections) {
+        $position = [Array]::IndexOf([object[]]$actualSections, [object]$section)
+        if ($position -ge 0) {
+            if ($position -le $lastPosition) {
+                $sectionsInOrder = $false
+                break
+            }
+            $lastPosition = $position
+        }
+    }
+    if (-not $sectionsInOrder) {
+        $defects.Add("section-order: canonical H2 headings are not in template order")
+    }
+
+    if ($raw -match '\{\{[^{}\r\n]+\}\}') {
+        $defects.Add("token-unresolved: memory contains an unresolved template token")
+    }
+
+    return [pscustomobject]@{
+        IsValid = ($defects.Count -eq 0)
+        Defects = @($defects.ToArray())
+    }
+}
+
+function Test-RalphMemoryFile {
+    param(
+        [string]$Path,
+        [string]$Feature,
+        [string]$TemplatePath
+    )
+
+    $templateContract = Get-RalphMemoryTemplateContract -Path $TemplatePath
+    return Get-RalphMemoryFileValidation -Path $Path -Feature $Feature -TemplateContract $templateContract
+}
+
+function Prepare-RalphMemory {
+    param(
+        [string]$Path,
+        [string]$TemplatePath,
+        [string]$Feature
+    )
+
+    $templateContract = Get-RalphMemoryTemplateContract -Path $TemplatePath
+    if (-not $templateContract.IsValid) {
+        foreach ($defect in $templateContract.Defects) {
+            Write-Host $defect -ForegroundColor Red
+        }
+        return $false
+    }
+
+    if (-not (Test-Path -LiteralPath $Path)) {
+        $parent = Split-Path -Parent $Path
+        if ($parent -and -not (Test-Path -LiteralPath $parent)) {
+            New-Item -ItemType Directory -Path $parent -Force | Out-Null
+        }
+
+        $startedAt = [DateTime]::UtcNow.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", [System.Globalization.CultureInfo]::InvariantCulture)
+        $rendered = $templateContract.Raw.Replace('{{FEATURE_NAME}}', $Feature).Replace('{{STARTED_AT}}', $startedAt)
+        $rendered = $rendered.Replace("`r`n", "`n").Replace("`r", "`n")
+        $encoding = New-Object System.Text.UTF8Encoding($false)
+        $bytes = $encoding.GetBytes($rendered)
+
+        try {
+            $stream = New-Object System.IO.FileStream(
+                $Path,
+                [System.IO.FileMode]::CreateNew,
+                [System.IO.FileAccess]::Write,
+                [System.IO.FileShare]::None
+            )
+            try {
+                $stream.Write($bytes, 0, $bytes.Length)
+            }
+            finally {
+                $stream.Dispose()
+            }
+            Write-Host "Created Ralph memory: $Path" -ForegroundColor DarkGray
+        }
+        catch [System.IO.IOException] {
+            if (-not (Test-Path -LiteralPath $Path)) {
+                Write-Host "template-unavailable: could not create Ralph memory: $($_.Exception.Message)" -ForegroundColor Red
+                return $false
+            }
+            # A concurrent creator won the create-new race. Validate its file below.
+        }
+        catch {
+            Write-Host "template-unavailable: could not create Ralph memory: $($_.Exception.Message)" -ForegroundColor Red
+            return $false
+        }
+    }
+
+    $validation = Get-RalphMemoryFileValidation -Path $Path -Feature $Feature -TemplateContract $templateContract
+    if (-not $validation.IsValid) {
+        foreach ($defect in $validation.Defects) {
+            Write-Host $defect -ForegroundColor Red
+        }
+        return $false
+    }
+
+    return $true
+}
+
 function Initialize-ProgressFile {
     param([string]$Path, [string]$Feature)
     
@@ -221,10 +464,6 @@ function Initialize-ProgressFile {
 
 Feature: $Feature
 Started: $timestamp
-
-## Codebase Patterns
-
-[Patterns discovered during implementation - updated by agent]
 
 ---
 
@@ -631,7 +870,10 @@ function Test-CompletionSignal {
 
 #region Main Loop
 
-# Initialize progress file
+# Prepare durable memory before any task selection, then initialize audit history.
+if (-not (Prepare-RalphMemory -Path $MemoryPath -TemplatePath $MemoryTemplatePath -Feature $FeatureName)) {
+    exit 1
+}
 Initialize-ProgressFile -Path $ProgressPath -Feature $FeatureName
 
 # Check initial task count
@@ -659,6 +901,13 @@ $interrupted = $false
 
 try {
     while ($iteration -le $MaxIterations -and -not $completed -and -not $interrupted -and -not $circuitBreaker -and -not $fatalFailure) {
+        # Repeat preparation before every fresh agent process. A prior failed
+        # iteration or user edit may have invalidated memory since preflight.
+        if (-not (Prepare-RalphMemory -Path $MemoryPath -TemplatePath $MemoryTemplatePath -Feature $FeatureName)) {
+            $fatalFailure = $true
+            break
+        }
+
         $lastIterationRun = $iteration
         Write-RalphHeader -Iteration $iteration -Max $MaxIterations
         Write-IterationStatus -Iteration $iteration -Status "running" -Message "Starting iteration"

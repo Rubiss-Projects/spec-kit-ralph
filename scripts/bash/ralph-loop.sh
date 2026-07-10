@@ -112,6 +112,8 @@ REPO_ROOT="$(pwd)"
 TASKS_PATH="$(realpath "$TASKS_PATH")"
 SPEC_DIR="$(realpath "$SPEC_DIR")"
 PROGRESS_PATH="$SPEC_DIR/progress.md"
+MEMORY_PATH="$SPEC_DIR/ralph-memory.md"
+MEMORY_TEMPLATE_PATH="$EXTENSION_ROOT/templates/ralph-memory.md"
 
 # Paths for spec files
 SPEC_PATH="$SPEC_DIR/spec.md"
@@ -229,15 +231,238 @@ initialize_progress_file() {
 Feature: $feature
 Started: $timestamp
 
-## Codebase Patterns
-
-[Patterns discovered during implementation - updated by agent]
-
 ---
 
 EOF
         echo -e "\033[90mCreated progress log: $path\033[0m"
     fi
+}
+
+extract_ralph_memory_lines() {
+    local path=$1
+    local kind=$2
+
+    awk -v kind="$kind" '
+        /^```/ || /^~~~/ { fenced = !fenced; next }
+        fenced { next }
+        kind == "h1" && /^# / { print; next }
+        kind == "h2" && /^## / { print; next }
+        kind == "feature" && /^Feature:/ { print; next }
+        kind == "started" && /^Started:/ { print; next }
+    ' "$path"
+}
+
+is_valid_utc_timestamp() {
+    local value=$1
+    local normalized
+
+    [[ "$value" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]] || return 1
+
+    normalized=$(date -u -d "$value" +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null) || true
+    if [[ "$normalized" == "$value" ]]; then
+        return 0
+    fi
+
+    normalized=$(date -j -u -f "%Y-%m-%dT%H:%M:%SZ" "$value" +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null) || true
+    [[ "$normalized" == "$value" ]]
+}
+
+load_ralph_memory_schema() {
+    local template_path=$1
+    local expected_sections="## Codebase Patterns
+## Decisions
+## Gotchas
+## Reusable Commands
+## Do Not Repeat
+## Current Handoff"
+    local actual_sections
+    local title_count
+    local feature_token_count
+    local started_token_count
+    local unresolved_tokens
+
+    if [[ ! -f "$template_path" || ! -r "$template_path" ]]; then
+        printf 'template-unavailable: shared memory template is missing or unreadable: %s\n' "$template_path" >&2
+        return 1
+    fi
+
+    title_count=$(extract_ralph_memory_lines "$template_path" "h1" | grep -c '^# Ralph Memory$') || true
+    feature_token_count=$(grep -c '^Feature: {{FEATURE_NAME}}$' "$template_path" 2>/dev/null) || true
+    started_token_count=$(grep -c '^Started: {{STARTED_AT}}$' "$template_path" 2>/dev/null) || true
+    actual_sections=$(extract_ralph_memory_lines "$template_path" "h2")
+    unresolved_tokens=$(grep -Eo '\{\{[^}]+\}\}' "$template_path" 2>/dev/null | grep -Ev '^\{\{(FEATURE_NAME|STARTED_AT)\}\}$') || true
+
+    if [[ "$title_count" -ne 1 ]] ||
+       [[ $(extract_ralph_memory_lines "$template_path" "h1" | wc -l | tr -d ' ') -ne 1 ]] ||
+       [[ "$feature_token_count" -ne 1 ]] ||
+       [[ "$started_token_count" -ne 1 ]] ||
+       [[ "$actual_sections" != "$expected_sections" ]] ||
+       [[ -n "$unresolved_tokens" ]] ||
+       LC_ALL=C grep -q $'\r' "$template_path"; then
+        printf 'template-unavailable: shared memory template is structurally invalid: %s\n' "$template_path" >&2
+        return 1
+    fi
+
+    # Once the canonical template passes its own contract, use its structure as
+    # the schema for feature-instance validation.
+    RALPH_MEMORY_TITLE=$(extract_ralph_memory_lines "$template_path" "h1")
+    RALPH_MEMORY_SECTIONS=()
+    while IFS= read -r section; do
+        RALPH_MEMORY_SECTIONS+=("$section")
+    done < <(extract_ralph_memory_lines "$template_path" "h2")
+
+    return 0
+}
+
+validate_ralph_memory_template() {
+    local template_path=$1
+    load_ralph_memory_schema "$template_path"
+}
+
+validate_ralph_memory_file() {
+    local template_path=$1
+    local memory_path=$2
+    local feature=$3
+    local defects=()
+    local title_count
+    local all_h1_count
+    local feature_count
+    local feature_value
+    local started_count
+    local started_value
+    local actual_sections
+    local expected_sections=""
+    local section
+    local section_count
+    local known
+
+    load_ralph_memory_schema "$template_path" || return 1
+
+    if [[ ! -f "$memory_path" || ! -r "$memory_path" ]]; then
+        printf 'template-unavailable: feature memory is missing or unreadable: %s\n' "$memory_path" >&2
+        return 1
+    fi
+
+    title_count=$(extract_ralph_memory_lines "$memory_path" "h1" | grep -Fxc "$RALPH_MEMORY_TITLE") || true
+    all_h1_count=$(extract_ralph_memory_lines "$memory_path" "h1" | wc -l | tr -d ' ')
+    if [[ "$title_count" -ne 1 || "$all_h1_count" -ne 1 ]]; then
+        defects+=("title-invalid: expected exactly one '# Ralph Memory' title")
+    fi
+
+    feature_count=$(extract_ralph_memory_lines "$memory_path" "feature" | wc -l | tr -d ' ')
+    feature_value=$(extract_ralph_memory_lines "$memory_path" "feature" | sed 's/^Feature:[[:space:]]*//')
+    if [[ "$feature_count" -ne 1 || -z "$feature_value" || "$feature_value" != "$feature" ]]; then
+        defects+=("feature-invalid: expected exactly one non-empty Feature field matching '$feature'")
+    fi
+
+    started_count=$(extract_ralph_memory_lines "$memory_path" "started" | wc -l | tr -d ' ')
+    started_value=$(extract_ralph_memory_lines "$memory_path" "started" | sed 's/^Started:[[:space:]]*//')
+    if [[ "$started_count" -ne 1 ]] || ! is_valid_utc_timestamp "$started_value"; then
+        defects+=("started-invalid: expected exactly one UTC Started timestamp")
+    fi
+
+    # Keep defect categories stable: all missing-section diagnostics precede
+    # every duplicate-section diagnostic.
+    for section in "${RALPH_MEMORY_SECTIONS[@]}"; do
+        section_count=$(extract_ralph_memory_lines "$memory_path" "h2" | grep -Fxc "$section") || true
+        if [[ "$section_count" -eq 0 ]]; then
+            defects+=("section-missing: $section")
+        fi
+        if [[ -z "$expected_sections" ]]; then
+            expected_sections="$section"
+        else
+            expected_sections="$expected_sections
+$section"
+        fi
+    done
+
+    for section in "${RALPH_MEMORY_SECTIONS[@]}"; do
+        section_count=$(extract_ralph_memory_lines "$memory_path" "h2" | grep -Fxc "$section") || true
+        if [[ "$section_count" -gt 1 ]]; then
+            defects+=("section-duplicate: $section")
+        fi
+    done
+
+    while IFS= read -r section; do
+        [[ -z "$section" ]] && continue
+        known=false
+        local expected
+        for expected in "${RALPH_MEMORY_SECTIONS[@]}"; do
+            if [[ "$section" == "$expected" ]]; then
+                known=true
+                break
+            fi
+        done
+        if [[ "$known" == "false" ]]; then
+            defects+=("section-unexpected: $section")
+        fi
+    done < <(extract_ralph_memory_lines "$memory_path" "h2")
+
+    actual_sections=$(extract_ralph_memory_lines "$memory_path" "h2")
+    if [[ "$actual_sections" != "$expected_sections" ]]; then
+        defects+=("section-order: H2 headings do not match canonical template order")
+    fi
+
+    if grep -Eq '\{\{[^}]+\}\}' "$memory_path" 2>/dev/null; then
+        defects+=("token-unresolved: feature memory contains an unresolved template token")
+    fi
+
+    if [[ ${#defects[@]} -gt 0 ]]; then
+        printf '%s\n' "${defects[@]}" >&2
+        return 1
+    fi
+
+    return 0
+}
+
+render_ralph_memory() {
+    local template_path=$1
+    local output_path=$2
+    local feature=$3
+    local started_at=$4
+    local line
+
+    : > "$output_path" || return 1
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        line=${line//'{{FEATURE_NAME}}'/$feature}
+        line=${line//'{{STARTED_AT}}'/$started_at}
+        printf '%s\n' "$line" >> "$output_path" || return 1
+    done < "$template_path"
+}
+
+prepare_ralph_memory() {
+    local template_path=$1
+    local memory_path=$2
+    local feature=$3
+    local started_at
+    local temporary_path
+
+    validate_ralph_memory_template "$template_path" || return 1
+
+    if [[ ! -e "$memory_path" ]]; then
+        started_at=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+        temporary_path=$(mktemp "${memory_path}.tmp.XXXXXX") || {
+            printf 'template-unavailable: cannot create memory render target: %s\n' "$memory_path" >&2
+            return 1
+        }
+
+        if ! render_ralph_memory "$template_path" "$temporary_path" "$feature" "$started_at"; then
+            rm -f "$temporary_path"
+            printf 'template-unavailable: cannot render shared memory template: %s\n' "$template_path" >&2
+            return 1
+        fi
+
+        # A hard-link publish is atomic and create-new: if another process won
+        # the race, ln fails without replacing the existing feature memory.
+        if ! ln "$temporary_path" "$memory_path" 2>/dev/null && [[ ! -e "$memory_path" ]]; then
+            rm -f "$temporary_path"
+            printf 'template-unavailable: cannot publish feature memory: %s\n' "$memory_path" >&2
+            return 1
+        fi
+        rm -f "$temporary_path"
+    fi
+
+    validate_ralph_memory_file "$template_path" "$memory_path" "$feature"
 }
 
 get_agent_cli_kind() {
@@ -618,7 +843,13 @@ trap cleanup SIGINT SIGTERM
 
 #region Main Loop
 
-# Initialize progress file
+# Prepare durable context before any task selection or agent invocation.
+if ! prepare_ralph_memory "$MEMORY_TEMPLATE_PATH" "$MEMORY_PATH" "$FEATURE_NAME"; then
+    exit 1
+fi
+
+# Initialize the audit log only after durable memory passes preflight, so an
+# invalid memory file causes no unrelated state mutation.
 initialize_progress_file "$PROGRESS_PATH" "$FEATURE_NAME"
 
 # Check initial task count
@@ -642,6 +873,13 @@ fatal_failure=false
 while [[ $iteration -le $MAX_ITERATIONS && "$completed" == "false" && "$INTERRUPTED" == "false" && "$circuit_breaker" == "false" && "$fatal_failure" == "false" ]]; do
     print_header "$iteration" "$MAX_ITERATIONS"
     print_status "$iteration" "running" "Starting iteration"
+
+    # Revalidate before every fresh context. A failed or external iteration may
+    # have left memory malformed since the preceding preparation.
+    if ! prepare_ralph_memory "$MEMORY_TEMPLATE_PATH" "$MEMORY_PATH" "$FEATURE_NAME"; then
+        fatal_failure=true
+        break
+    fi
 
     # Invoke configured agent CLI with speckit.ralph.iterate behavior
     set +e

@@ -2,26 +2,32 @@
   ============================================================================
   SYNC IMPACT REPORT
   ============================================================================
-  Version change: N/A (initial) → 1.0.0
+  Version change: 1.0.0 → 2.0.0
 
-  Modified principles: None (initial version)
+  Modified principles:
+    - II. Context Isolation — ralph-memory.md is now the primary durable
+      handoff; progress.md is audit-only optional context
+    - IV. Progress Persistence — coordinated task/memory/audit persistence,
+      failed-attempt retention, and no bookkeeping-only commits
+    - VI. Graceful Termination — clean working tree, canonical terminal
+      handoff, and read-only failure validation are required for success
 
-  Added sections:
-    - Core Principles (6 principles: Extension-First Architecture,
-      Context Isolation, Spec-Kit Compatibility, Progress Persistence,
-      Agent Agnosticism, Graceful Termination)
-    - Extension Compliance section
-    - Development Workflow section
-    - Governance section
+  Added sections: None
 
   Removed sections: None (initial version)
 
-  Templates requiring updates:
-    ✅ plan-template.md - Constitution Check section compatible
-    ✅ spec-template.md - Requirements alignment compatible
-    ✅ tasks-template.md - Task categorization compatible
+  Propagation review:
+    ✅ .specify/templates/plan-template.md - Constitution Check remains compatible
+    ✅ .specify/templates/spec-template.md - no durable-state guidance to change
+    ✅ .specify/templates/tasks-template.md - phase/task structure remains compatible
+    ⚠ commands/iterate.md - update in T011, T016, and T022
+    ⚠ commands/run.md - update in T028
+    ⚠ scripts/bash/ralph-loop.sh - update in T009, T017, and T023
+    ⚠ scripts/powershell/ralph-loop.ps1 - update in T010, T018, and T024
+    ⚠ README.md - update in T026
 
-  Follow-up TODOs: None
+  Follow-up TODOs: Complete the active-guidance propagation tasks above and
+  close the review in T033. Historical specs/001 artifacts remain unchanged.
   ============================================================================
 -->
 
@@ -59,8 +65,15 @@ iteration.
 - The orchestrator script MUST invoke the agent CLI as a new
   process per iteration, never reuse a running session.
 - Inter-iteration knowledge transfer MUST occur exclusively through
-  on-disk artifacts: `progress.md`, `tasks.md` checkbox state, and
-  committed source files.
+  on-disk artifacts: `ralph-memory.md` as the primary durable knowledge
+  source, `tasks.md` checkbox state, committed source files, and
+  `progress.md` only as optional recent audit context.
+- The orchestrator MUST initialize a missing `ralph-memory.md` from the
+  extension's canonical shared template and validate it without mutation
+  before any fresh iteration selects work.
+- Each iteration MUST read `ralph-memory.md` before `tasks.md` and other
+  design artifacts. It MUST NOT treat the chronological progress log as
+  the primary memory bridge.
 - A single iteration MUST complete at most one work unit (one
   phase, one user story, or one task group) to prevent context
   degradation.
@@ -95,8 +108,10 @@ patching undermines trust and blocks catalog distribution.
 
 ### IV. Progress Persistence
 
-All iteration state MUST be persisted to disk. No state that would
-be lost on process termination is acceptable for tracking progress.
+All iteration state MUST be persisted to disk. Durable knowledge,
+task completion, and chronological audit have separate authoritative
+artifacts; no state that would be lost on process termination is
+acceptable.
 
 - Task completion MUST be tracked via `tasks.md` checkbox state
   (`[ ]` → `[x]`). No separate tracking database or file is
@@ -105,16 +120,20 @@ be lost on process termination is acceptable for tracking progress.
   `specs/{feature}/progress.md` after each iteration with:
   timestamp, work unit attempted, tasks completed, files changed,
   and learnings discovered.
-- Codebase patterns discovered during implementation MUST be
-  recorded in the `## Codebase Patterns` section of `progress.md`
-  so subsequent iterations can leverage them.
-- The `<promise>COMPLETE</promise>` signal MUST only be emitted
-  when all tasks in `tasks.md` are verified complete.
+- Durable codebase patterns, decisions, gotchas, reusable commands,
+  failed approaches, and the current handoff MUST be maintained in
+  `specs/{feature}/ralph-memory.md` using the canonical section contract.
+- Before committing a completed work unit, the agent MUST update
+  `tasks.md`, compact/update `ralph-memory.md`, and append `progress.md`,
+  then include those state changes with substantive implementation work
+  in the same commit.
+- A failed or no-work iteration MAY update memory and append progress,
+  but MUST leave tasks and `HEAD` unchanged. Ralph MUST NOT create a
+  commit containing only `tasks.md`, `progress.md`, or `ralph-memory.md`.
 
-**Rationale**: Persistent state enables resumability after
-interruptions, provides an audit trail for debugging failed
-iterations, and is the sole mechanism for cross-iteration learning
-given the context isolation constraint.
+**Rationale**: Separate, coordinated state preserves resumability and
+auditability without forcing every fresh context to consume an
+unbounded historical log or allowing bookkeeping-only history.
 
 ### V. Agent Agnosticism
 
@@ -142,9 +161,16 @@ by teams using different tools.
 The ralph loop MUST handle all termination paths cleanly, preserving
 progress and providing actionable status information.
 
-- **Completion**: When the agent emits `<promise>COMPLETE</promise>`
-  or all `tasks.md` checkboxes are marked `[x]`, the loop MUST
-  exit with code 0 and a success summary.
+- **Completion**: The completion signal or zero remaining tasks creates
+  a completion candidate; neither is sufficient by itself. Exit code 0
+  requires a successful agent result (when applicable), all tasks
+  complete, valid canonical memory, `Current Handoff` containing only
+  `Feature complete; no handoff required.`, valid commit postconditions,
+  and an empty successful `git status --short` result.
+- **Inconsistent or dirty completion**: The loop MUST exit non-zero
+  immediately, report every applicable validation defect and dirty path,
+  and MUST NOT launch a cleanup iteration, amend a commit, rewrite
+  history, or create a hidden recovery commit.
 - **Iteration limit**: When `MaxIterations` is reached with tasks
   remaining, the loop MUST exit with a non-zero code and a summary
   of completed vs. remaining tasks.
@@ -215,4 +241,4 @@ This constitution is the authoritative source for project standards:
 - **Review Cadence**: Constitution is reviewed when the spec-kit
   extension API changes or when a new major version is released.
 
-**Version**: 1.0.0 | **Ratified**: 2026-03-06 | **Last Amended**: 2026-03-06
+**Version**: 2.0.0 | **Ratified**: 2026-03-06 | **Last Amended**: 2026-07-10
