@@ -243,6 +243,7 @@ extract_ralph_memory_lines() {
     local kind=$2
 
     awk -v kind="$kind" '
+        { sub(/\r$/, "", $0) }
         /^```/ || /^~~~/ { fenced = !fenced; next }
         fenced { next }
         kind == "h1" && /^# / { print; next }
@@ -323,6 +324,7 @@ get_current_handoff_content() {
     local memory_path=$1
 
     awk '
+        { sub(/\r$/, "", $0) }
         /^```/ || /^~~~/ {
             if (in_handoff) { print }
             fenced = !fenced
