@@ -123,11 +123,11 @@
 
 **Purpose**: Close compatibility, packaging, propagation, and end-to-end quality gates.
 
-- [ ] T030 Verify `templates/ralph-memory.md` remains package-included and no manifest schema/dependency change is required, updating `.extensionignore` or `extension.yml` only if the compatibility check fails
-- [ ] T031 [P] Reconcile the validation guide with final commands, diagnostics, and fixture names in `specs/002-ralph-memory-handoff/quickstart.md`
-- [ ] T032 Execute development-extension installation and installed-root template resolution from `specs/002-ralph-memory-handoff/quickstart.md` against `templates/ralph-memory.md`, `scripts/bash/ralph-loop.sh`, and `scripts/powershell/ralph-loop.ps1`
-- [ ] T033 [P] Run the active-guidance propagation review across `.specify/memory/constitution.md`, `commands/iterate.md`, `commands/run.md`, and `README.md`, confirming `specs/001-port-ralph-extension/` remains unchanged
-- [ ] T034 Run `bash -n`, both complete regression suites, `git diff --check`, and the full acceptance matrix documented in `specs/002-ralph-memory-handoff/quickstart.md`
+- [x] T030 Verify `templates/ralph-memory.md` remains package-included and no manifest schema/dependency change is required, updating `.extensionignore` or `extension.yml` only if the compatibility check fails
+- [x] T031 [P] Reconcile the validation guide with final commands, diagnostics, and fixture names in `specs/002-ralph-memory-handoff/quickstart.md`
+- [x] T032 Execute development-extension installation and installed-root template resolution from `specs/002-ralph-memory-handoff/quickstart.md` against `templates/ralph-memory.md`, `scripts/bash/ralph-loop.sh`, and `scripts/powershell/ralph-loop.ps1`
+- [x] T033 [P] Run the active-guidance propagation review across `.specify/memory/constitution.md`, `commands/iterate.md`, `commands/run.md`, and `README.md`, confirming `specs/001-port-ralph-extension/` remains unchanged
+- [x] T034 Run `bash -n`, both complete regression suites, `git diff --check`, and the full acceptance matrix documented in `specs/002-ralph-memory-handoff/quickstart.md`
 
 ---
 
