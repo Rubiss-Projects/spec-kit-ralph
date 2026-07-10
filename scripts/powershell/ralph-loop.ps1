@@ -666,7 +666,7 @@ function Test-RalphIterationPostconditions {
         }
     }
 
-    if ($completedTaskIds.Count -eq 0) {
+    if ($AgentExitCode -eq 0 -and $completedTaskIds.Count -eq 0) {
         $defects.Add("failed-iteration-advanced-head: failed or no-work iteration advanced HEAD")
     }
 

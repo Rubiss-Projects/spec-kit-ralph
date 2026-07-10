@@ -273,6 +273,17 @@ $renderedAfter = [System.IO.File]::ReadAllBytes($memoryFile)
 Assert-True "existing valid memory prepares successfully" $prepared
 Assert-Equal "existing valid memory is byte-preserved" ([Convert]::ToBase64String($renderedBefore)) ([Convert]::ToBase64String($renderedAfter))
 
+$crlfActiveText = [System.IO.File]::ReadAllText((Join-Path $FixtureDir "ralph-memory-valid-active.md")).Replace("`r`n", "`n").Replace("`r", "`n").Replace("`n", "`r`n")
+[System.IO.File]::WriteAllText($memoryFile, $crlfActiveText, (New-Object System.Text.UTF8Encoding($false)))
+$crlfActiveBefore = [System.IO.File]::ReadAllBytes($memoryFile)
+Assert-True "accepts CRLF feature memory by semantic structure" (Prepare-RalphMemory -Path $memoryFile -TemplatePath $MemoryTemplate -Feature "test-feature")
+Assert-Equal "preserves valid CRLF feature memory byte-for-byte" ([Convert]::ToBase64String($crlfActiveBefore)) ([Convert]::ToBase64String([System.IO.File]::ReadAllBytes($memoryFile)))
+
+$crlfCompleteText = [System.IO.File]::ReadAllText((Join-Path $FixtureDir "ralph-memory-valid-complete.md")).Replace("`r`n", "`n").Replace("`r", "`n").Replace("`n", "`r`n")
+[System.IO.File]::WriteAllText($memoryFile, $crlfCompleteText, (New-Object System.Text.UTF8Encoding($false)))
+$crlfCompleteValidation = Test-RalphMemoryFile -Path $memoryFile -Feature "test-feature" -TemplatePath $MemoryTemplate -RequireCompletedHandoff
+Assert-True "accepts terminal handoff in CRLF feature memory" $crlfCompleteValidation.IsValid
+
 Copy-Item (Join-Path $FixtureDir "ralph-memory-malformed.md") $memoryFile -Force
 $malformedBefore = [System.IO.File]::ReadAllBytes($memoryFile)
 $validation = Test-RalphMemoryFile -Path $memoryFile -Feature "test-feature" -TemplatePath $MemoryTemplate
@@ -378,6 +389,23 @@ Assert-True "coordinated commit includes substantive path" ((Invoke-TestGit -Rep
 Assert-True "follow-up commit carries retained failure knowledge" (((Invoke-TestGit -Repository $transactionRepo.Root -Arguments @("show", "HEAD:specs/test-feature/ralph-memory.md")) -join "`n") -match "Retained failed approach")
 
 Remove-Item $transactionRepo.Root -Recurse -Force
+
+# A failed agent that advances HEAD without completing a task reports the
+# history violation exactly once, even when commit-content diagnostics follow.
+$failedAdvanceRepo = New-TransactionTestRepository -Name "ralph-failed-advanced-head"
+$failedAdvanceBefore = New-RalphIterationSnapshot -RepoRoot $failedAdvanceRepo.Root -TasksPath $failedAdvanceRepo.TasksPath
+Add-Content -Path $failedAdvanceRepo.SubstantivePath -Value "`nfailed agent commit" -Encoding UTF8
+Invoke-TestGit -Repository $failedAdvanceRepo.Root -Arguments @("add", "src/work.txt") | Out-Null
+Invoke-TestGit -Repository $failedAdvanceRepo.Root -Arguments @("commit", "-q", "-m", "test: failed agent advanced head") | Out-Null
+$failedAdvanceValidation = Test-RalphIterationPostconditions `
+    -BeforeSnapshot $failedAdvanceBefore `
+    -RepoRoot $failedAdvanceRepo.Root `
+    -TasksPath $failedAdvanceRepo.TasksPath `
+    -SpecDir $failedAdvanceRepo.SpecDir `
+    -AgentExitCode 7
+$failedAdvanceDefects = @($failedAdvanceValidation.Defects | Where-Object { $_ -like 'failed-iteration-advanced-head:*' })
+Assert-Equal "failed agent HEAD advance emits one diagnostic" 1 $failedAdvanceDefects.Count
+Remove-Item $failedAdvanceRepo.Root -Recurse -Force
 
 # A bookkeeping-only commit is reported but never repaired, rewritten, reset,
 # amended, reverted, or hidden by the validator.
