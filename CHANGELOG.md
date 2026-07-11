@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-07-11
+
 ### Added
 - Added a packaged canonical `templates/ralph-memory.md` and cross-platform create-new initialization with aggregate, byte-preserving validation for malformed feature memory.
 - Added read-only coordinated-commit and bookkeeping-only validation for work-unit history.
