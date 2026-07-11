@@ -285,6 +285,23 @@ $crlfCompleteText = [System.IO.File]::ReadAllText((Join-Path $FixtureDir "ralph-
 $crlfCompleteValidation = Test-RalphMemoryFile -Path $memoryFile -Feature "test-feature" -TemplatePath $MemoryTemplate -RequireCompletedHandoff
 Assert-True "accepts terminal handoff in CRLF feature memory" $crlfCompleteValidation.IsValid
 
+$validMemoryText = [System.IO.File]::ReadAllText((Join-Path $FixtureDir "ralph-memory-valid-active.md"))
+$startedRegex = [regex]'(?m)^Started: [^\r\n]*'
+$invalidStartedValues = @(
+    "2026-07-11T12:00:00+00:00",
+    "2026-07-11 12:00:00Z",
+    "2026-07-11T12:00:00",
+    "2026-07-11T12:00:00.000Z",
+    "2026-02-29T12:00:00Z"
+)
+foreach ($invalidStartedValue in $invalidStartedValues) {
+    $invalidStartedText = $startedRegex.Replace($validMemoryText, "Started: $invalidStartedValue", 1)
+    [System.IO.File]::WriteAllText($memoryFile, $invalidStartedText, (New-Object System.Text.UTF8Encoding($false)))
+    $invalidStartedValidation = Test-RalphMemoryFile -Path $memoryFile -Feature "test-feature" -TemplatePath $MemoryTemplate
+    Assert-True "rejects noncanonical Started value $invalidStartedValue" (-not $invalidStartedValidation.IsValid)
+    Assert-Equal "reports one started-invalid for $invalidStartedValue" 1 (($invalidStartedValidation.Defects | Where-Object { $_ -like 'started-invalid:*' }).Count)
+}
+
 Copy-Item (Join-Path $FixtureDir "ralph-memory-malformed.md") $memoryFile -Force
 $malformedBefore = [System.IO.File]::ReadAllBytes($memoryFile)
 $validation = Test-RalphMemoryFile -Path $memoryFile -Feature "test-feature" -TemplatePath $MemoryTemplate
