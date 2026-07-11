@@ -160,6 +160,23 @@ function Set-RalphConsoleControlCMode {
     }
 }
 
+function Test-RalphUtcTimestamp {
+    param([string]$Value)
+
+    if ($Value -notmatch '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$') {
+        return $false
+    }
+
+    $parsed = [DateTime]::MinValue
+    return [DateTime]::TryParseExact(
+        $Value,
+        "yyyy-MM-ddTHH:mm:ssZ",
+        [System.Globalization.CultureInfo]::InvariantCulture,
+        [System.Globalization.DateTimeStyles]::AssumeUniversal -bor [System.Globalization.DateTimeStyles]::AdjustToUniversal,
+        [ref]$parsed
+    )
+}
+
 function Write-RalphHeader {
     param([int]$Iteration, [int]$Max)
     
@@ -334,17 +351,11 @@ function Get-RalphMemoryFileValidation {
     if ($startedMatches.Count -eq 1) {
         $startedValue = $startedMatches[0].Groups[1].Value.Trim()
         if ($startedValue) {
-            $parsedStarted = [DateTimeOffset]::MinValue
-            $startedValid = [DateTimeOffset]::TryParse(
-                $startedValue,
-                [System.Globalization.CultureInfo]::InvariantCulture,
-                [System.Globalization.DateTimeStyles]::AssumeUniversal,
-                [ref]$parsedStarted
-            )
+            $startedValid = Test-RalphUtcTimestamp -Value $startedValue
         }
     }
     if (-not $startedValid) {
-        $defects.Add("started-invalid: expected exactly one non-empty parseable Started field")
+        $defects.Add("started-invalid: expected exactly one UTC Started timestamp")
     }
 
     $actualSections = @([regex]::Matches($raw, '(?m)^## ([^\r\n]+)\r?$') | ForEach-Object { $_.Groups[1].Value })
