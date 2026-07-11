@@ -149,6 +149,17 @@ if (-not $PSBoundParameters.ContainsKey('AgentCli') -and $env:SPECKIT_RALPH_AGEN
 
 #region Helper Functions
 
+function Set-RalphConsoleControlCMode {
+    param([bool]$TreatAsInput)
+
+    try {
+        [Console]::TreatControlCAsInput = $TreatAsInput
+    }
+    catch {
+        # Some redirected or non-interactive hosts expose no valid console handle.
+    }
+}
+
 function Write-RalphHeader {
     param([int]$Iteration, [int]$Max)
     
@@ -402,8 +413,12 @@ function Test-RalphMemoryFile {
         $handoffMatches = [regex]::Matches($raw, '(?ms)^## Current Handoff\r?\n(.*?)(?=^## |\z)')
         if ($handoffMatches.Count -eq 1) {
             $handoffBody = $handoffMatches[0].Groups[1].Value.Replace("`r`n", "`n").Replace("`r", "`n")
-            $handoffBody = $handoffBody.TrimEnd([char[]]"`n")
-            $handoffValid = $handoffBody -eq "`n- Feature complete; no handoff required."
+            $handoffLines = @(
+                $handoffBody -split "`n" |
+                    ForEach-Object { $_.Trim() } |
+                    Where-Object { $_ -ne "" }
+            )
+            $handoffValid = ($handoffLines.Count -eq 1 -and $handoffLines[0] -eq "- Feature complete; no handoff required.")
         }
     }
     catch {
@@ -1272,7 +1287,7 @@ $fatalFailure = $false
 
 # Register Ctrl+C handler
 $interrupted = $false
-[Console]::TreatControlCAsInput = $false
+Set-RalphConsoleControlCMode -TreatAsInput $false
 
 try {
     while ($iteration -le $MaxIterations -and -not $completed -and -not $interrupted -and -not $circuitBreaker -and -not $fatalFailure) {
@@ -1378,7 +1393,7 @@ catch {
     }
 }
 finally {
-    [Console]::TreatControlCAsInput = $false
+    Set-RalphConsoleControlCMode -TreatAsInput $false
 }
 
 #endregion

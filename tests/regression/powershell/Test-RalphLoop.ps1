@@ -220,6 +220,7 @@ function New-TransactionTestRepository {
 
 # Parse the source script to extract function definitions without executing the main body.
 # We use AST parsing to safely extract only the function blocks.
+$sourceText = [System.IO.File]::ReadAllText($SourceScript)
 $ast = [System.Management.Automation.Language.Parser]::ParseFile($SourceScript, [ref]$null, [ref]$null)
 $functionDefs = $ast.FindAll({ param($node) $node -is [System.Management.Automation.Language.FunctionDefinitionAst] }, $false)
 
@@ -485,6 +486,19 @@ $handoffValidationComplete = Test-RalphMemoryFile `
     -RequireCompletedHandoff
 Assert-True "exact terminal handoff is valid for completion" $handoffValidationComplete.IsValid
 
+$noBlankHandoffPath = Join-Path ([System.IO.Path]::GetTempPath()) "ralph-no-blank-handoff-$PID.md"
+$noBlankHandoffText = [System.IO.File]::ReadAllText((Join-Path $FixtureDir "ralph-memory-valid-complete.md")).
+    Replace("## Current Handoff`r`n`r`n-", "## Current Handoff`r`n-").
+    Replace("## Current Handoff`n`n-", "## Current Handoff`n-")
+[System.IO.File]::WriteAllText($noBlankHandoffPath, $noBlankHandoffText, (New-Object System.Text.UTF8Encoding($false)))
+$noBlankHandoffValidation = Test-RalphMemoryFile `
+    -Path $noBlankHandoffPath `
+    -Feature "test-feature" `
+    -TemplatePath $MemoryTemplate `
+    -RequireCompletedHandoff
+Assert-True "terminal handoff without blank spacer is valid for completion" $noBlankHandoffValidation.IsValid
+Remove-Item $noBlankHandoffPath -Force
+
 $handoffValidationMalformed = Test-RalphMemoryFile `
     -Path (Join-Path $FixtureDir "ralph-memory-malformed.md") `
     -Feature "test-feature" `
@@ -509,6 +523,12 @@ Remove-Item $extraHandoffPath -Force
 
 $completionFunction = $functionDefs | Where-Object { $_.Name -eq "Test-RalphCompletionGate" } | Select-Object -First 1
 Assert-True "completion gate contains no mutating Git command" (-not ($completionFunction.Extent.Text -match '(?im)&\s+git\b[^\r\n]*\s+(add|commit|reset|rebase|revert|checkout|stash)(?:\s|$)'))
+
+$consoleFunction = $functionDefs | Where-Object { $_.Name -eq "Set-RalphConsoleControlCMode" } | Select-Object -First 1
+Assert-True "console control-c helper exists" ($null -ne $consoleFunction)
+Assert-True "console control-c helper catches non-console host errors" ($consoleFunction.Extent.Text -match '(?s)try\s*\{.*TreatControlCAsInput.*\}\s*catch')
+Assert-Equal "console control-c assignment is isolated to guarded helper" 1 ([regex]::Matches($sourceText, '\[Console\]::TreatControlCAsInput\s*=').Count)
+Assert-Equal "main loop disables console control-c through guarded helper twice" 2 ([regex]::Matches($sourceText, 'Set-RalphConsoleControlCMode -TreatAsInput \$false').Count)
 
 # Initial clean completion succeeds without invoking an agent and leaves Git
 # history, index, and worktree byte-for-byte equivalent.
