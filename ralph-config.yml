@@ -15,3 +15,9 @@ max_iterations: 10
 # Default searches PATH for 'copilot'
 # Override: SPECKIT_RALPH_AGENT_CLI env var
 agent_cli: "copilot"
+
+# Commit subject policy (optional - omit this block to preserve legacy behavior)
+# commit:
+#   style: legacy        # legacy | conventional  (default: legacy)
+#   scope: ralph         # optional; used only for conventional style; default: ralph
+#   issue: auto          # optional; infers #<issue> from branch numeric prefix

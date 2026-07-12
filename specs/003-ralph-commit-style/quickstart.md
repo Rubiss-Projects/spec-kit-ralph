@@ -13,7 +13,7 @@
 Confirm the feature documents the public config surface and generated subject rules:
 
 ```bash
-test -f ralph-config.template.yml
+test -f ralph-config.yml
 test -f specs/003-ralph-commit-style/contracts/commit-config-schema.md
 test -f specs/003-ralph-commit-style/contracts/work-unit-commit-format.md
 ```
@@ -52,7 +52,7 @@ The two regression suites must exercise equivalent temporary-Git-repository scen
 ## 4. Verify documentation and template propagation
 
 ```bash
-grep -n 'commit:' -n ralph-config.template.yml README.md
+grep -n 'commit:' ralph-config.yml README.md
 grep -n 'legacy' README.md specs/003-ralph-commit-style/contracts/*.md
 grep -n 'conventional' README.md specs/003-ralph-commit-style/contracts/*.md
 grep -n 'issue: auto' README.md specs/003-ralph-commit-style/contracts/*.md
@@ -60,8 +60,8 @@ grep -n 'issue: auto' README.md specs/003-ralph-commit-style/contracts/*.md
 
 Confirm:
 
-- the template shows the new `commit` block;
-- README explains the exact legacy default behavior, conventional scope configuration including default scope `ralph`, and issue auto-linking;
+- the configuration example shows the new `commit` block (commented out as an example);
+- README explains the exact legacy default behavior (`feat(<feature-name>): <work-unit title>`), conventional scope configuration including the default scope `ralph` (`feat(ralph): <work-unit title>`), and issue auto-linking;
 - the documented examples match the public contract artifacts.
 
 ## 5. Verify installed-extension compatibility
