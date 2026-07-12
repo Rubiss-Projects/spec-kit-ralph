@@ -34,4 +34,3 @@ body:
       options:
         - label: I checked the current README and searched existing issues.
           required: true
-

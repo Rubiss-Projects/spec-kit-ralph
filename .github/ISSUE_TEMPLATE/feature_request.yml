@@ -81,4 +81,3 @@ body:
           required: true
         - label: This request describes one focused capability or outcome.
           required: true
-
