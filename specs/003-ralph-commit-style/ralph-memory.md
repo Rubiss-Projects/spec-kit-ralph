@@ -36,4 +36,4 @@ Started: 2026-07-12T13:58:14Z
 
 ## Current Handoff
 
-- Phase 5 (US3, T018-T023) is complete. All issue auto-linking regression scenarios pass on both Bash (191 tests) and PowerShell (244 tests). Next is Phase 6 (T024-T027): update user-facing commit configuration guidance in README.md and ralph-config.template.yml, reconcile the quickstart, verify installed-extension behavior, and run the full final validation matrix.
+- Feature complete; no handoff required.

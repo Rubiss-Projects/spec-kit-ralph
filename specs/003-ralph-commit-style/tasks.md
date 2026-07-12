@@ -115,10 +115,10 @@
 
 **Purpose**: Finish user-facing documentation, installed-extension compatibility checks, and full validation.
 
-- [ ] T024 Update user-facing commit configuration guidance and examples in `README.md` and `ralph-config.template.yml`
-- [ ] T025 [P] Reconcile the runnable validation guide and installed-extension expectations, including exact legacy and default-scope `ralph` examples, in `specs/003-ralph-commit-style/quickstart.md`
-- [ ] T026 [P] Verify development-extension installation and generated project config behavior using `README.md`, `ralph-config.template.yml`, and `specs/003-ralph-commit-style/quickstart.md`
-- [ ] T027 Run `bash -n`, PowerShell parser validation, both regression suites, `git diff --check`, and the quickstart validation matrix against `scripts/bash/ralph-loop.sh`, `scripts/powershell/ralph-loop.ps1`, `tests/regression/bash/test-ralph-loop.sh`, `tests/regression/powershell/Test-RalphLoop.ps1`, `README.md`, and `ralph-config.template.yml`
+- [x] T024 Update user-facing commit configuration guidance and examples in `README.md` and `ralph-config.template.yml`
+- [x] T025 [P] Reconcile the runnable validation guide and installed-extension expectations, including exact legacy and default-scope `ralph` examples, in `specs/003-ralph-commit-style/quickstart.md`
+- [x] T026 [P] Verify development-extension installation and generated project config behavior using `README.md`, `ralph-config.template.yml`, and `specs/003-ralph-commit-style/quickstart.md`
+- [x] T027 Run `bash -n`, PowerShell parser validation, both regression suites, `git diff --check`, and the quickstart validation matrix against `scripts/bash/ralph-loop.sh`, `scripts/powershell/ralph-loop.ps1`, `tests/regression/bash/test-ralph-loop.sh`, `tests/regression/powershell/Test-RalphLoop.ps1`, `README.md`, and `ralph-config.template.yml`
 
 ---
 
