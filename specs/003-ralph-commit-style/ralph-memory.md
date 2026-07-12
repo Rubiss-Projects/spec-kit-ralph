@@ -36,4 +36,12 @@ Started: 2026-07-12T13:58:14Z
 
 ## Current Handoff
 
-- Feature complete; no handoff required.
+- Reopened after the nested `commit:` block refinement landed in the spec artifacts.
+- Current gap: both orchestrators correctly parse nested `commit:` blocks, but flattened top-level keys such as `commit.style`, `commit.scope`, and `commit.issue` are not yet rejected explicitly; they currently fall through to legacy/default behavior instead of failing as invalid config.
+- Reopen tasks T028-T032 cover the remaining work:
+  - extend invalid fixture coverage for flattened-key cases;
+  - reject flattened commit-policy keys in both orchestrators;
+  - add mirrored Bash/PowerShell regressions for the failure path;
+  - reconcile quickstart/fixture docs to nested-only examples;
+  - rerun the targeted regression and syntax checks.
+- Keep the legacy no-config behavior unchanged while enforcing invalid flattened-shape failures.

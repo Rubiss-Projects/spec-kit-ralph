@@ -47,6 +47,7 @@ The two regression suites must exercise equivalent temporary-Git-repository scen
 | `commit.issue: auto` without numeric branch prefix | Ralph creates the commit successfully with no issue suffix. |
 | `commit.issue: auto` with legacy style | Ralph still appends the inferred issue suffix. |
 | Unsupported explicit `commit.style` | Ralph exits non-zero with a clear configuration error and creates no commit. |
+| Flattened config shape such as `commit.style: conventional` | Ralph treats the config as invalid because the policy must be nested under `commit:`. |
 | Equivalent Bash and PowerShell inputs | Both orchestration paths generate the same effective subject and error behavior. |
 
 ## 4. Verify documentation and template propagation
@@ -62,6 +63,7 @@ Confirm:
 
 - the configuration example shows the new `commit` block (commented out as an example);
 - README explains the exact legacy default behavior (`feat(<feature-name>): <work-unit title>`), conventional scope configuration including the default scope `ralph` (`feat(ralph): <work-unit title>`), and issue auto-linking;
+- the examples use a nested `commit:` block rather than flattened keys;
 - the documented examples match the public contract artifacts.
 
 ## 5. Verify installed-extension compatibility
@@ -77,4 +79,4 @@ Then confirm the installed project config includes the documented commit setting
 
 ## Completion Evidence
 
-Validation is complete when both regression suites pass, no-config behavior remains unchanged, conventional/issue-auto scenarios match the documented contract, invalid-style cases fail cleanly before commit creation, and installed-extension documentation remains consistent with the implementation.
+Validation is complete when both regression suites pass, no-config behavior remains unchanged, conventional/issue-auto scenarios match the documented contract, invalid-style and malformed-shape cases fail cleanly before commit creation, and installed-extension documentation remains consistent with the implementation.

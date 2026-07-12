@@ -67,9 +67,11 @@ As a maintainer reviewing Ralph-generated history, I want commit messages to inc
 ### Edge Cases
 
 - A project enables conventional commit style but does not provide a custom scope.
+- A project provides `scope` inside the `commit` block while `style` remains `legacy`; the scope setting is ignored.
 - A branch starts with digits that are not followed by the expected separator pattern.
 - A branch has no numeric prefix at all.
 - A project has an invalid or unrecognized commit-style value; commit creation must stop with a clear configuration error.
+- A project provides flattened config keys outside the `commit:` block, such as `commit.style`; the config shape is invalid.
 - A project enables issue auto-linking while using the legacy commit style; linking behavior remains the same as in conventional style.
 - A work unit title already contains digits or punctuation that could make the final commit subject harder to parse.
 
@@ -79,24 +81,26 @@ As a maintainer reviewing Ralph-generated history, I want commit messages to inc
 
 - **FR-001**: Ralph MUST continue using the current legacy commit subject format `feat(<feature-name>): <work-unit title>` when no commit configuration is provided.
 - **FR-002**: Ralph MUST support an explicit `legacy` commit style that preserves the commit subject format `feat(<feature-name>): <work-unit title>`.
-- **FR-003**: Ralph MUST support an explicit `conventional` commit style for completed work-unit commits.
-- **FR-004**: When conventional commit style is enabled, Ralph MUST allow users to define the commit scope through project configuration.
-- **FR-005**: When conventional commit style is enabled and no custom scope is provided, Ralph MUST use `ralph` as the default scope value.
-- **FR-006**: Ralph MUST support optional automatic issue linking for generated commit messages in both `legacy` and `conventional` commit styles.
-- **FR-007**: When automatic issue linking is enabled and the current branch starts with a numeric issue prefix, Ralph MUST append the matching `#<issue>` reference to the generated commit subject.
-- **FR-008**: When automatic issue linking is enabled and no parseable numeric issue prefix is present, Ralph MUST still create the commit successfully without an issue reference.
-- **FR-009**: Failure to infer an issue number MUST NOT cause the iteration or commit step to fail.
-- **FR-010**: The legacy and conventional commit styles MUST produce consistent, predictable commit subjects for completed work units.
-- **FR-011**: Existing projects without the new commit configuration MUST behave exactly as they do today.
-- **FR-012**: Ralph MUST document the available commit-style options, scope behavior, and automatic issue-linking behavior in user-facing configuration guidance.
-- **FR-013**: Ralph MUST apply the same commit-style and issue-linking rules across every supported orchestration path.
-- **FR-014**: When `commit.style` is present but unsupported, Ralph MUST treat it as a clear configuration error and MUST NOT create a commit until the configuration is corrected.
+- **FR-003**: Ralph MUST support an optional nested `commit` configuration block in `.specify/extensions/ralph/ralph-config.yml` for work-unit commit policy.
+- **FR-004**: The `commit` block MUST support the `style`, `scope`, and `issue` subkeys.
+- **FR-005**: `commit.style` MUST accept `legacy` and `conventional` as the only supported values.
+- **FR-006**: `commit.scope` MUST apply only to `conventional` commit style and MUST default to `ralph` when omitted.
+- **FR-007**: `commit.issue` MUST support `auto` and MUST apply to both `legacy` and `conventional` commit styles.
+- **FR-008**: When automatic issue linking is enabled and the current branch starts with a numeric issue prefix, Ralph MUST append the matching `#<issue>` reference to the generated commit subject.
+- **FR-009**: When automatic issue linking is enabled and no parseable numeric issue prefix is present, Ralph MUST still create the commit successfully without an issue reference.
+- **FR-010**: Failure to infer an issue number MUST NOT cause the iteration or commit step to fail.
+- **FR-011**: The legacy and conventional commit styles MUST produce consistent, predictable commit subjects for completed work units.
+- **FR-012**: Existing projects without the new commit configuration MUST behave exactly as they do today.
+- **FR-013**: Ralph MUST document the available commit-style options, scope behavior, and automatic issue-linking behavior in user-facing configuration guidance.
+- **FR-014**: Ralph MUST apply the same commit-style and issue-linking rules across the Bash and PowerShell orchestration paths.
+- **FR-015**: When `commit.style` is present but unsupported, or when `style`, `scope`, or `issue` are provided outside the nested `commit:` block, Ralph MUST treat the configuration as invalid and MUST NOT create a commit until the configuration is corrected.
 
 ### Key Entities
 
 - **Commit Style Setting**: The project-level choice that determines whether Ralph uses the legacy commit format or the conventional commit format.
 - **Commit Scope Setting**: The configurable label used inside a conventional commit subject to describe the area the change belongs to.
 - **Issue Linking Setting**: The project-level choice that determines whether Ralph attempts to append an inferred GitHub issue reference.
+- **Commit Block**: The nested configuration object keyed by `commit` that contains the `style`, `scope`, and `issue` policy settings.
 - **Branch Issue Prefix**: The leading numeric identifier in the current branch name that may be used to infer the related GitHub issue number.
 - **Generated Commit Subject**: The final Ralph-created commit message subject for a completed work unit.
 
@@ -105,6 +109,7 @@ As a maintainer reviewing Ralph-generated history, I want commit messages to inc
 - This feature changes how Ralph formats commit messages; it does not change when Ralph decides a work unit is complete.
 - This feature does not require users to rename existing branches to use the new styles.
 - This feature does not require an issue reference when no numeric branch prefix can be inferred.
+- This feature requires commit policy settings to be expressed inside the nested `commit:` block rather than as flattened top-level keys.
 - This feature does not alter task selection, memory handoff, or completion validation behavior outside the generated commit subject.
 
 ## Success Criteria *(mandatory)*
@@ -117,11 +122,13 @@ As a maintainer reviewing Ralph-generated history, I want commit messages to inc
 - **SC-004**: In 100% of tested branches without a parseable numeric issue prefix, commit creation still succeeds and no incorrect issue reference is appended.
 - **SC-005**: User-facing configuration documentation explains the available commit styles, scope behavior, and issue auto-linking behavior well enough that 4 of 5 representative users can choose the intended option without additional clarification.
 - **SC-006**: Equivalent commit-style scenarios produce the same observable results across the Bash and PowerShell orchestration paths.
+- **SC-007**: In 100% of tested Bash and PowerShell scenarios, the nested `commit:` block is parsed consistently, and malformed or flattened commit-policy config shapes fail with the documented validation behavior.
 
 ## Assumptions
 
 - Ralph continues to generate commits only for completed work units and not for incomplete or bookkeeping-only work.
 - The preserved legacy commit subject format is `feat(<feature-name>): <work-unit title>`.
+- Commit policy settings are authored only inside a nested `commit:` block in `.specify/extensions/ralph/ralph-config.yml`.
 - The current branch name is the only source used for automatic issue-number inference in this feature.
 - Automatic issue linking is optional and may be enabled independently of whether users prefer legacy or conventional commit formatting.
 - Existing repositories may already rely on the current commit format, so backward compatibility takes precedence over changing defaults.
