@@ -72,3 +72,27 @@ Started: 2026-07-12 15:58:14
 - `New-IterationPrompt` gained an optional `[hashtable]$CommitPolicy = $null` parameter; callers `Invoke-ClaudeIteration` and `Invoke-CodexIteration` now pass `$commitPolicy` (script-level variable)
 - TDD flow: T007/T008 tests for `build_iteration_prompt`/`New-IterationPrompt` policy injection failed before T009/T010 implementation, then passed after
 ---
+---
+## Iteration 4 - 2026-07-12 16:20
+**Work Unit**: Phase 4 — User Story 2: Opt In to Cleaner Conventional Commits (T012-T017)
+**Tasks Completed**:
+- [x] T012: Add Bash regression scenarios for conventional/default-scope/invalid-style in `tests/regression/bash/test-ralph-loop.sh`
+- [x] T013: Add PowerShell parity regression scenarios for conventional/default-scope/invalid-style in `tests/regression/powershell/Test-RalphLoop.ps1`
+- [x] T014: Conventional subject formatting already implemented in `scripts/bash/ralph-loop.sh` (verified)
+- [x] T015: Conventional subject formatting already implemented in `scripts/powershell/ralph-loop.ps1` (verified)
+- [x] T016: Public contract examples already aligned in `commands/iterate.md` and `contracts/work-unit-commit-format.md` (verified)
+- [x] T017: All 182 bash and 235 PowerShell regression tests pass
+**Tasks Remaining in Work Unit**: 0
+**Commit**: This work-unit commit
+**Files Changed**:
+- tests/regression/bash/test-ralph-loop.sh
+- tests/regression/powershell/Test-RalphLoop.ps1
+- specs/003-ralph-commit-style/tasks.md
+- specs/003-ralph-commit-style/ralph-memory.md
+- specs/003-ralph-commit-style/progress.md
+**Learnings**:
+- T014/T015 implementation was already complete from Phase 2 (commit policy plumbing included conventional format handling)
+- T012-4 (bash): complex nested heredoc approach hangs; use `set +e; err_output=$(resolve_commit_policy 2>&1); set -e` pattern instead
+- Conventional fixture (ralph-config-conventional.yml) loads both style=conventional and scope=myapp correctly
+- Invalid-style (squash) triggers preflight exit before any agent or git operations
+---
