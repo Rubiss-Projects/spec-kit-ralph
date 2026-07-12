@@ -930,7 +930,10 @@ function New-CopilotIterationPrompt {
 }
 
 function New-IterationPrompt {
-    param([int]$Iteration)
+    param(
+        [int]$Iteration,
+        [hashtable]$CommitPolicy = $null
+    )
 
     if (Test-Path $IterateCommandPath) {
         $commandText = Get-Content -Path $IterateCommandPath -Raw
@@ -938,13 +941,28 @@ function New-IterationPrompt {
         $commandText = "Complete at most one work unit from tasks.md. Mark completed tasks, update progress.md, commit only when the current user story is complete, and output <promise>COMPLETE</promise> when all tasks are done."
     }
 
-    return @"
+    $prompt = @"
 You are running Ralph iteration $Iteration.
 
 Follow the speckit.ralph.iterate command below exactly for this single iteration.
 
 $commandText
 "@
+
+    if ($null -ne $CommitPolicy -and $CommitPolicy.Count -gt 0) {
+        $issueValue = if ($CommitPolicy.Issue) { $CommitPolicy.Issue } else { 'disabled' }
+        $prompt += @"
+
+## Resolved Commit Policy
+
+The Ralph orchestrator has pre-validated the commit configuration. Use this format when creating the work-unit commit:
+- Style: $($CommitPolicy.Style)
+- Scope: $($CommitPolicy.Scope)
+- Issue: $issueValue
+"@
+    }
+
+    return $prompt
 }
 
 function Invoke-CopilotIteration {
@@ -1056,7 +1074,7 @@ function Invoke-ClaudeIteration {
 
     # Claude Code has no registered speckit.ralph.iterate agent (that's a Copilot mechanism),
     # so inline the iterate command text into the prompt, the same way the codex path does.
-    $prompt = New-IterationPrompt -Iteration $Iteration
+    $prompt = New-IterationPrompt -Iteration $Iteration -CommitPolicy $commitPolicy
 
     if ($Verbose) {
         Write-Host "DEBUG: Prompt = Ralph iteration $Iteration using $IterateCommandPath" -ForegroundColor Magenta
@@ -1124,7 +1142,7 @@ function Invoke-CodexIteration {
         [switch]$Verbose
     )
 
-    $prompt = New-IterationPrompt -Iteration $Iteration
+    $prompt = New-IterationPrompt -Iteration $Iteration -CommitPolicy $commitPolicy
 
     if ($Verbose) {
         Write-Host "DEBUG: Prompt = Ralph iteration $Iteration using $IterateCommandPath" -ForegroundColor Magenta

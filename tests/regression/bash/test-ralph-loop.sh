@@ -1083,6 +1083,69 @@ rm -rf "$TMP_PROGRESS"
 
 #endregion
 
+#region Tests: commit policy — US1 legacy and no-config scenarios (T007)
+
+section "commit policy — US1 legacy and no-config scenarios"
+
+# T007-1: no-config resolves to legacy style and default scope
+CONFIG_COMMIT_STYLE="" ; CONFIG_COMMIT_SCOPE="" ; CONFIG_COMMIT_ISSUE=""
+COMMIT_POLICY_STYLE="" ; COMMIT_POLICY_SCOPE="" ; COMMIT_POLICY_ISSUE=""
+resolve_commit_policy
+assert_eq "no-config resolves to legacy style" "legacy" "$COMMIT_POLICY_STYLE"
+assert_eq "no-config scope defaults to ralph" "ralph" "$COMMIT_POLICY_SCOPE"
+
+# T007-2: explicit legacy config resolves to legacy style
+CONFIG_COMMIT_STYLE="legacy" ; CONFIG_COMMIT_SCOPE="" ; CONFIG_COMMIT_ISSUE=""
+COMMIT_POLICY_STYLE="" ; COMMIT_POLICY_SCOPE="" ; COMMIT_POLICY_ISSUE=""
+resolve_commit_policy
+assert_eq "explicit legacy resolves to legacy style" "legacy" "$COMMIT_POLICY_STYLE"
+
+# T007-3: no-config legacy commit subject matches exact contract format
+CONFIG_COMMIT_STYLE="" ; CONFIG_COMMIT_SCOPE="" ; CONFIG_COMMIT_ISSUE=""
+COMMIT_POLICY_STYLE="" ; COMMIT_POLICY_SCOPE="" ; COMMIT_POLICY_ISSUE=""
+resolve_commit_policy
+result=$(build_commit_subject "my-feature" "US-001 Keep existing behavior" "main")
+assert_eq "no-config legacy subject matches exact format" \
+    "feat(my-feature): US-001 Keep existing behavior" "$result"
+
+# T007-4: explicit legacy config commit subject matches exact contract format
+CONFIG_COMMIT_STYLE="legacy" ; CONFIG_COMMIT_SCOPE="" ; CONFIG_COMMIT_ISSUE=""
+COMMIT_POLICY_STYLE="" ; COMMIT_POLICY_SCOPE="" ; COMMIT_POLICY_ISSUE=""
+resolve_commit_policy
+result=$(build_commit_subject "my-feature" "US-001 Keep existing behavior" "main")
+assert_eq "explicit legacy subject matches exact format" \
+    "feat(my-feature): US-001 Keep existing behavior" "$result"
+
+# T007-5: load legacy config fixture sets commit style
+TMP_LEGACY_REPO=$(mktemp -d)
+mkdir -p "$TMP_LEGACY_REPO/.specify/extensions/ralph"
+cp "$FIXTURE_DIR/ralph-config-legacy.yml" "$TMP_LEGACY_REPO/.specify/extensions/ralph/ralph-config.yml"
+CONFIG_COMMIT_STYLE="" ; CONFIG_COMMIT_SCOPE="" ; CONFIG_COMMIT_ISSUE=""
+load_ralph_config "$TMP_LEGACY_REPO"
+assert_eq "legacy fixture sets commit style" "legacy" "$CONFIG_COMMIT_STYLE"
+rm -rf "$TMP_LEGACY_REPO"
+CONFIG_COMMIT_STYLE="" ; CONFIG_COMMIT_SCOPE="" ; CONFIG_COMMIT_ISSUE=""
+
+# T007-6: iteration prompt includes resolved commit policy when COMMIT_POLICY_STYLE is set
+# This test fails before T009 (which wires the policy into build_iteration_prompt).
+COMMIT_POLICY_STYLE="legacy"
+COMMIT_POLICY_SCOPE="ralph"
+COMMIT_POLICY_ISSUE=""
+TMP_POLICY_PROMPT=$(mktemp -d)
+old_iterate_path="$ITERATE_COMMAND_PATH"
+ITERATE_COMMAND_PATH="$TMP_POLICY_PROMPT/iterate.md"
+printf '%s\n' "Fake iterate command." > "$ITERATE_COMMAND_PATH"
+policy_prompt=$(build_iteration_prompt 1)
+ITERATE_COMMAND_PATH="$old_iterate_path"
+rm -rf "$TMP_POLICY_PROMPT"
+COMMIT_POLICY_STYLE="" ; COMMIT_POLICY_SCOPE="" ; COMMIT_POLICY_ISSUE=""
+assert_true "prompt includes resolved commit policy section" \
+    grep -q "Resolved Commit Policy" <<< "$policy_prompt"
+assert_true "prompt includes legacy style in policy section" \
+    grep -q "legacy" <<< "$policy_prompt"
+
+#endregion
+
 #region Summary
 
 echo ""

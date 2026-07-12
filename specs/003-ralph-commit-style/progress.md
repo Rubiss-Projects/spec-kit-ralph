@@ -48,3 +48,27 @@ Started: 2026-07-12 15:58:14
 - PowerShell `$inCommitBlock` must be declared before the `ForEach-Object` pipeline to persist across lines
 - All 165 existing bash regression tests pass unchanged
 ---
+
+## Iteration 3 - 2026-07-12 16:08
+**Work Unit**: Phase 3 — User Story 1: Keep Existing Commit Behavior by Default (T007-T011)
+**Tasks Completed**:
+- [x] T007: Add Bash regression scenarios for no-config and explicit legacy commit behavior
+- [x] T008: Add PowerShell parity regression scenarios for no-config and explicit legacy commit behavior
+- [x] T009: Wire resolved legacy-default commit policy into `build_iteration_prompt` in `scripts/bash/ralph-loop.sh`
+- [x] T010: Wire resolved legacy-default commit policy into `New-IterationPrompt` in `scripts/powershell/ralph-loop.ps1`; update `Invoke-ClaudeIteration` and `Invoke-CodexIteration` callers
+- [x] T011: All 173 bash and 228 PowerShell regression tests pass
+**Tasks Remaining in Work Unit**: 0
+**Commit**: This work-unit commit
+**Files Changed**:
+- tests/regression/bash/test-ralph-loop.sh
+- tests/regression/powershell/Test-RalphLoop.ps1
+- scripts/bash/ralph-loop.sh
+- scripts/powershell/ralph-loop.ps1
+- specs/003-ralph-commit-style/tasks.md
+- specs/003-ralph-commit-style/ralph-memory.md
+- specs/003-ralph-commit-style/progress.md
+**Learnings**:
+- `build_iteration_prompt` (bash) and `New-IterationPrompt` (PS) now append a `## Resolved Commit Policy` section when `COMMIT_POLICY_STYLE` / `CommitPolicy` is set, so agents receive the pre-resolved format without re-reading config
+- `New-IterationPrompt` gained an optional `[hashtable]$CommitPolicy = $null` parameter; callers `Invoke-ClaudeIteration` and `Invoke-CodexIteration` now pass `$commitPolicy` (script-level variable)
+- TDD flow: T007/T008 tests for `build_iteration_prompt`/`New-IterationPrompt` policy injection failed before T009/T010 implementation, then passed after
+---

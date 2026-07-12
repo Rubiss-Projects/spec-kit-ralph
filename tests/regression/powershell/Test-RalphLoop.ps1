@@ -1340,6 +1340,56 @@ Remove-Item $tmpDir -Recurse -Force
 
 #endregion
 
+#region Tests: commit policy — US1 legacy and no-config scenarios (T008)
+
+Write-Section "commit policy — US1 legacy and no-config scenarios"
+
+# T008-1: no-config resolves to legacy style and default scope
+$emptyConfig = @{}
+$policy = Resolve-RalphCommitPolicy -Config $emptyConfig
+Assert-Equal "no-config resolves to legacy style" "legacy" $policy.Style
+Assert-Equal "no-config scope defaults to ralph" "ralph" $policy.Scope
+
+# T008-2: explicit legacy config resolves to legacy style
+$legacyConfig = @{ "commit.style" = "legacy" }
+$policy = Resolve-RalphCommitPolicy -Config $legacyConfig
+Assert-Equal "explicit legacy resolves to legacy style" "legacy" $policy.Style
+
+# T008-3: no-config legacy commit subject matches exact contract format
+$noConfigPolicy = Resolve-RalphCommitPolicy -Config @{}
+$result = Build-RalphCommitSubject -FeatureName "my-feature" -WorkUnitTitle "US-001 Keep existing behavior" -Branch "main" -Policy $noConfigPolicy
+Assert-Equal "no-config legacy subject matches exact format" "feat(my-feature): US-001 Keep existing behavior" $result
+
+# T008-4: explicit legacy config commit subject matches exact contract format
+$legacyPolicy = Resolve-RalphCommitPolicy -Config @{ "commit.style" = "legacy" }
+$result = Build-RalphCommitSubject -FeatureName "my-feature" -WorkUnitTitle "US-001 Keep existing behavior" -Branch "main" -Policy $legacyPolicy
+Assert-Equal "explicit legacy subject matches exact format" "feat(my-feature): US-001 Keep existing behavior" $result
+
+# T008-5: load legacy config fixture sets commit style
+$tmpLegacyRepo = Join-Path ([System.IO.Path]::GetTempPath()) "ralph-legacy-$PID"
+$tmpLegacyConfigDir = Join-Path $tmpLegacyRepo ".specify\extensions\ralph"
+New-Item -ItemType Directory -Path $tmpLegacyConfigDir -Force | Out-Null
+Copy-Item (Join-Path $FixtureDir "ralph-config-legacy.yml") (Join-Path $tmpLegacyConfigDir "ralph-config.yml")
+$legacyRepoConfig = Read-RalphConfig -RepoRoot $tmpLegacyRepo
+Assert-Equal "legacy fixture sets commit style" "legacy" $legacyRepoConfig["commit.style"]
+Remove-Item $tmpLegacyRepo -Recurse -Force
+
+# T008-6: iteration prompt includes resolved commit policy when CommitPolicy is passed
+# This test fails before T010 (which wires the policy into New-IterationPrompt).
+$testPolicy = @{ Style = "legacy"; Scope = "ralph"; Issue = "" }
+$tmpPolicyPromptDir = Join-Path ([System.IO.Path]::GetTempPath()) "ralph-policy-prompt-$PID"
+New-Item -ItemType Directory -Path $tmpPolicyPromptDir -Force | Out-Null
+$savedIteratePath = $script:IterateCommandPath
+$script:IterateCommandPath = Join-Path $tmpPolicyPromptDir "iterate.md"
+"Fake iterate command." | Set-Content -Path $script:IterateCommandPath -Encoding UTF8
+$policyPrompt = New-IterationPrompt -Iteration 1 -CommitPolicy $testPolicy
+$script:IterateCommandPath = $savedIteratePath
+Remove-Item $tmpPolicyPromptDir -Recurse -Force
+Assert-True "prompt includes resolved commit policy section" ($policyPrompt -match "Resolved Commit Policy")
+Assert-True "prompt includes legacy style in policy section" ($policyPrompt -match "legacy")
+
+#endregion
+
 #region Summary
 
 Write-Host ""
