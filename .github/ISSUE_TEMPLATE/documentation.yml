@@ -1,0 +1,37 @@
+name: Documentation issue
+description: Report missing, incorrect, or unclear documentation
+title: "docs: "
+labels:
+  - documentation
+body:
+  - type: textarea
+    id: location
+    attributes:
+      label: Documentation location
+      description: Link to the page or name the file and section involved.
+      placeholder: README.md, Configuration > Agent CLI Support
+    validations:
+      required: true
+
+  - type: textarea
+    id: issue
+    attributes:
+      label: What is missing, incorrect, or unclear?
+      description: Quote only the small relevant excerpt, if helpful.
+    validations:
+      required: true
+
+  - type: textarea
+    id: suggestion
+    attributes:
+      label: Suggested improvement
+      description: Optional. Describe the wording, example, or information that would resolve the issue.
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Submission checklist
+      options:
+        - label: I checked the current README and searched existing issues.
+          required: true
+

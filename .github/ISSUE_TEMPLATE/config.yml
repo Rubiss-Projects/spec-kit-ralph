@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security vulnerability privately
+    url: https://github.com/Rubiss-Projects/spec-kit-ralph/security/advisories/new
+    about: Privately report command injection, credential exposure, arbitrary execution, or other security-sensitive behavior.
+  - name: Ralph Loop documentation
+    url: https://github.com/Rubiss-Projects/spec-kit-ralph#readme
+    about: Review installation, configuration, supported agent CLIs, and troubleshooting guidance before opening an issue.
