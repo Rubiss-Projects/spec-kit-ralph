@@ -38,14 +38,16 @@ As a Ralph user who prefers cleaner history, I want to opt in to a conventional 
 
 **Why this priority**: This is the new user-facing capability that improves readability while remaining optional.
 
-**Independent Test**: Configure Ralph to use conventional commits with a chosen scope, complete a work unit, and verify the commit subject follows the configured style and scope.
+**Independent Test**: Configure Ralph to use conventional commits with a chosen scope, complete a work unit, and verify the commit subject follows the configured style and scope while using a concise summary of the actual completed change rather than the raw work-unit heading.
 
 **Acceptance Scenarios**:
 
 1. **Given** a project with `commit.style` set to `conventional`, **When** Ralph creates a commit for a completed work unit, **Then** the commit subject uses conventional commit formatting instead of the legacy format.
 2. **Given** a project with `commit.style` set to `conventional` and `commit.scope` set to a custom value, **When** Ralph creates a commit, **Then** the configured scope appears in the commit subject.
-3. **Given** a project with `commit.style` set to `conventional`, **When** Ralph creates multiple completed work-unit commits, **Then** the formatting remains consistent across those commits.
-4. **Given** a project with an unsupported `commit.style` value, **When** Ralph prepares to create a completed work-unit commit, **Then** it stops with a clear configuration error instead of creating a commit with an unintended format.
+3. **Given** a project with `commit.style` set to `conventional`, **When** Ralph creates a completed work-unit commit, **Then** the text after `feat(<scope>):` is a concise summary of the actual completed change rather than the raw user-story or phase heading from `tasks.md`.
+4. **Given** a completed work unit whose planning title begins with labels such as `US1`, `US-003`, `Phase 6`, or task ranges, **When** Ralph creates a conventional commit, **Then** those planning prefixes do not appear in the commit subject payload.
+5. **Given** a project with `commit.style` set to `conventional`, **When** Ralph creates multiple completed work-unit commits, **Then** the formatting and summary style remain consistent across those commits.
+6. **Given** a project with an unsupported `commit.style` value, **When** Ralph prepares to create a completed work-unit commit, **Then** it stops with a clear configuration error instead of creating a commit with an unintended format.
 
 ---
 
@@ -74,6 +76,8 @@ As a maintainer reviewing Ralph-generated history, I want commit messages to inc
 - A project provides flattened config keys outside the `commit:` block, such as `commit.style`; the config shape is invalid.
 - A project enables issue auto-linking while using the legacy commit style; linking behavior remains the same as in conventional style.
 - A work unit title already contains digits or punctuation that could make the final commit subject harder to parse.
+- A conventional commit is generated from a work unit whose title is broad or audit-oriented rather than commit-friendly.
+- A meaningful conventional commit summary needs to preserve important acronyms or proper nouns while still avoiding noisy title-style capitalization.
 
 ## Requirements *(mandatory)*
 
@@ -90,10 +94,14 @@ As a maintainer reviewing Ralph-generated history, I want commit messages to inc
 - **FR-009**: When automatic issue linking is enabled and no parseable numeric issue prefix is present, Ralph MUST still create the commit successfully without an issue reference.
 - **FR-010**: Failure to infer an issue number MUST NOT cause the iteration or commit step to fail.
 - **FR-011**: The legacy and conventional commit styles MUST produce consistent, predictable commit subjects for completed work units.
-- **FR-012**: Existing projects without the new commit configuration MUST behave exactly as they do today.
-- **FR-013**: Ralph MUST document the available commit-style options, scope behavior, and automatic issue-linking behavior in user-facing configuration guidance.
-- **FR-014**: Ralph MUST apply the same commit-style and issue-linking rules across the Bash and PowerShell orchestration paths.
-- **FR-015**: When `commit.style` is present but unsupported, or when `style`, `scope`, or `issue` are provided outside the nested `commit:` block, Ralph MUST treat the configuration as invalid and MUST NOT create a commit until the configuration is corrected.
+- **FR-012**: When `commit.style` resolves to `conventional`, Ralph MUST generate the subject payload from a dedicated commit summary of the completed change rather than reusing the raw work-unit title verbatim.
+- **FR-013**: A conventional commit summary MUST omit planning-only prefixes or labels such as user-story identifiers, phase labels, and task-range annotations.
+- **FR-014**: A conventional commit summary MUST use concise commit-friendly phrasing and normalized casing/punctuation appropriate for a Git commit subject while preserving meaningful technical terms where needed.
+- **FR-015**: Ralph MUST preserve the work-unit title separately for progress and audit tracking even when the generated conventional commit subject uses a different summary.
+- **FR-016**: Existing projects without the new commit configuration MUST behave exactly as they do today.
+- **FR-017**: Ralph MUST document the available commit-style options, scope behavior, commit-summary behavior, and automatic issue-linking behavior in user-facing configuration guidance.
+- **FR-018**: Ralph MUST apply the same commit-style, commit-summary, and issue-linking rules across the Bash and PowerShell orchestration paths.
+- **FR-019**: When `commit.style` is present but unsupported, or when `style`, `scope`, or `issue` are provided outside the nested `commit:` block, Ralph MUST treat the configuration as invalid and MUST NOT create a commit until the configuration is corrected.
 
 ### Key Entities
 
@@ -101,6 +109,7 @@ As a maintainer reviewing Ralph-generated history, I want commit messages to inc
 - **Commit Scope Setting**: The configurable label used inside a conventional commit subject to describe the area the change belongs to.
 - **Issue Linking Setting**: The project-level choice that determines whether Ralph attempts to append an inferred GitHub issue reference.
 - **Commit Block**: The nested configuration object keyed by `commit` that contains the `style`, `scope`, and `issue` policy settings.
+- **Commit Summary**: The concise summary of the actual completed change used as the subject payload for conventional commits.
 - **Branch Issue Prefix**: The leading numeric identifier in the current branch name that may be used to infer the related GitHub issue number.
 - **Generated Commit Subject**: The final Ralph-created commit message subject for a completed work unit.
 
@@ -111,6 +120,7 @@ As a maintainer reviewing Ralph-generated history, I want commit messages to inc
 - This feature does not require an issue reference when no numeric branch prefix can be inferred.
 - This feature requires commit policy settings to be expressed inside the nested `commit:` block rather than as flattened top-level keys.
 - This feature does not alter task selection, memory handoff, or completion validation behavior outside the generated commit subject.
+- This feature improves conventional commit subject content without changing the exact legacy subject format.
 
 ## Success Criteria *(mandatory)*
 
@@ -120,15 +130,18 @@ As a maintainer reviewing Ralph-generated history, I want commit messages to inc
 - **SC-002**: In 100% of tested projects configured for the conventional style, Ralph-generated commit subjects follow the conventional format and include either the configured scope or the default scope `ralph`.
 - **SC-003**: In 100% of tested branches with a numeric issue prefix and issue auto-linking enabled, Ralph-generated commit subjects end with the matching `#<issue>` reference.
 - **SC-004**: In 100% of tested branches without a parseable numeric issue prefix, commit creation still succeeds and no incorrect issue reference is appended.
-- **SC-005**: User-facing configuration documentation explains the available commit styles, scope behavior, and issue auto-linking behavior well enough that 4 of 5 representative users can choose the intended option without additional clarification.
-- **SC-006**: Equivalent commit-style scenarios produce the same observable results across the Bash and PowerShell orchestration paths.
-- **SC-007**: In 100% of tested Bash and PowerShell scenarios, the nested `commit:` block is parsed consistently, and malformed or flattened commit-policy config shapes fail with the documented validation behavior.
+- **SC-005**: In 100% of tested conventional-commit scenarios, the generated subject payload does not include planning prefixes such as `US1`, `US-003`, `Phase 6`, or task-range annotations.
+- **SC-006**: In 100% of tested conventional-commit scenarios, the generated subject payload is a concise commit-friendly summary of the completed change rather than a verbatim copy of the work-unit heading.
+- **SC-007**: User-facing configuration documentation explains the available commit styles, scope behavior, commit-summary behavior, and issue auto-linking behavior well enough that 4 of 5 representative users can choose the intended option without additional clarification.
+- **SC-008**: Equivalent commit-style scenarios produce the same observable results across the Bash and PowerShell orchestration paths.
+- **SC-009**: In 100% of tested Bash and PowerShell scenarios, the nested `commit:` block is parsed consistently, and malformed or flattened commit-policy config shapes fail with the documented validation behavior.
 
 ## Assumptions
 
 - Ralph continues to generate commits only for completed work units and not for incomplete or bookkeeping-only work.
 - The preserved legacy commit subject format is `feat(<feature-name>): <work-unit title>`.
 - Commit policy settings are authored only inside a nested `commit:` block in `.specify/extensions/ralph/ralph-config.yml`.
+- Conventional commit subjects should read like concise Git history entries rather than planning headings.
 - The current branch name is the only source used for automatic issue-number inference in this feature.
 - Automatic issue linking is optional and may be enabled independently of whether users prefer legacy or conventional commit formatting.
 - Existing repositories may already rely on the current commit format, so backward compatibility takes precedence over changing defaults.

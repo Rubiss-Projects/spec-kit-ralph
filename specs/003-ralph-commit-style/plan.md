@@ -6,7 +6,7 @@
 
 ## Summary
 
-Add an optional Ralph commit policy that preserves the legacy work-unit commit subject `feat(<feature-name>): <work-unit title>` by default, supports an opt-in conventional format with configurable scope and default scope `ralph`, and appends an inferred GitHub issue reference when requested. The commit policy is valid only when expressed as a nested `commit:` block in `.specify/extensions/ralph/ralph-config.yml`; flattened keys are invalid. The design resolves commit policy consistently before agent execution, updates the public iterate/config contracts, and validates the behavior through mirrored Bash and PowerShell regression coverage plus documentation updates.
+Add an optional Ralph commit policy that preserves the legacy work-unit commit subject `feat(<feature-name>): <work-unit title>` by default, supports an opt-in conventional format with configurable scope and default scope `ralph`, generates a cleaner conventional commit summary from the actual completed change instead of reusing the raw planning title, and appends an inferred GitHub issue reference when requested. The commit policy is valid only when expressed as a nested `commit:` block in `.specify/extensions/ralph/ralph-config.yml`; flattened keys are invalid. The design resolves commit policy consistently before agent execution, separates work-unit audit titles from Git commit summaries, updates the public iterate/config contracts, and validates the behavior through mirrored Bash and PowerShell regression coverage plus documentation updates.
 
 ## Technical Context
 
@@ -24,9 +24,9 @@ Add an optional Ralph commit policy that preserves the legacy work-unit commit s
 
 **Performance Goals**: Commit policy resolution adds only bounded local config and branch-name parsing before a completed work-unit commit; no extra agent iteration or network dependency is introduced
 
-**Constraints**: Preserve current behavior exactly when commit config is absent; reject unsupported `commit.style` values clearly and reject flattened commit-policy keys outside the nested `commit:` block; support `issue: auto` without failing when no issue prefix exists; avoid adding a YAML parser dependency; maintain Bash/PowerShell parity; keep the change extension-local and documentation-complete
+**Constraints**: Preserve current behavior exactly when commit config is absent; reject unsupported `commit.style` values clearly and reject flattened commit-policy keys outside the nested `commit:` block; support `issue: auto` without failing when no issue prefix exists; keep legacy subjects exact while making conventional subjects read like concise Git history entries rather than raw planning titles; avoid adding a YAML parser dependency; maintain Bash/PowerShell parity; keep the change extension-local and documentation-complete
 
-**Scale/Scope**: One public config surface, one public iterate-command contract, two orchestration scripts, two regression suites, one config template, README guidance, and example/fixture updates for exact legacy and conventional commit outputs
+**Scale/Scope**: One public config surface, one public iterate-command contract, two orchestration scripts, two regression suites, one config template, README guidance, and example/fixture updates for exact legacy subjects plus normalized conventional commit-summary outputs
 
 ## Constitution Check
 
@@ -37,9 +37,9 @@ Add an optional Ralph commit policy that preserves the legacy work-unit commit s
 | Principle / Gate | Status | Planning Evidence |
 |---|---|---|
 | I. Extension-First Architecture | PASS | All changes stay within the extension's commands, scripts, config template, tests, and docs; no Spec Kit core modification is needed. |
-| II. Context Isolation | PASS | The feature changes commit-subject policy only; it does not alter Ralph's fresh-process iteration model or memory contract. |
+| II. Context Isolation | PASS | The feature changes commit-subject policy only; it does not alter Ralph's fresh-process iteration model or memory contract beyond separating audit titles from commit summaries. |
 | III. Spec-Kit Compatibility | PASS | The config remains optional and backward-compatible; no new command, hook, schema, or installation requirement is introduced. |
-| IV. Progress Persistence | PASS | Commit subject formatting does not change task, memory, or progress persistence rules. |
+| IV. Progress Persistence | PASS | Commit subject generation is separated from progress tracking so audit titles remain durable even when conventional commit summaries differ. |
 | V. Agent Agnosticism | PASS | Commit policy is defined through extension config and shared orchestration behavior rather than a single agent-specific implementation. |
 | VI. Graceful Termination | PASS | Unsupported config becomes an explicit, non-success validation outcome instead of a silent fallback. |
 | Manifest Gate | PASS | Existing command/config registration remains sufficient; only referenced files and docs change. |
@@ -57,7 +57,7 @@ Add an optional Ralph commit policy that preserves the legacy work-unit commit s
 | I. Extension-First Architecture | PASS | The design is captured in [commit-config-schema.md](contracts/commit-config-schema.md) and [work-unit-commit-format.md](contracts/work-unit-commit-format.md), both extension-local artifacts. |
 | II. Context Isolation | PASS | The resolved commit policy is an on-disk/config-derived input to each fresh iteration and does not depend on reused in-memory state. |
 | III. Spec-Kit Compatibility | PASS | [research.md](research.md) keeps the config optional and avoids any core/runtime dependency expansion. |
-| IV. Progress Persistence | PASS | [work-unit-commit-format.md](contracts/work-unit-commit-format.md) changes only commit-subject construction, not the coordinated persistence contract. |
+| IV. Progress Persistence | PASS | [work-unit-commit-format.md](contracts/work-unit-commit-format.md) changes commit-subject construction while keeping the coordinated persistence contract and progress log structure intact. |
 | V. Agent Agnosticism | PASS | The plan resolves policy in mirrored orchestrators and exposes one shared contract to Copilot, Codex, and Claude paths. |
 | VI. Graceful Termination | PASS | Invalid present config is a deterministic preflight failure with no silent fallback and no history mutation. |
 | Script Gate | PASS BY DESIGN | The same config-resolution, issue-inference, and validation scenarios are planned for both scripts and both regression suites. |
