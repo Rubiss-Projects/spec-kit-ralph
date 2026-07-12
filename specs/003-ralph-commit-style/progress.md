@@ -122,3 +122,27 @@ Started: 2026-07-12 15:58:14
 - ralph-config-conventional.yml fixture already had `issue: auto` — T018-8/T019-8 fixture load tests confirmed the field is parsed correctly
 - PowerShell `Get-RalphInferredIssueNumber` returns `$null` (not empty string) for no-match; Bash `infer_issue_number` returns empty string — tests must assert accordingly
 ---
+
+---
+
+## Iteration 6 - 2026-07-12 16:30
+**Work Unit**: Phase 6 — Polish & Cross-Cutting Validation (T024-T027)
+**Tasks Completed**:
+- [x] T024: Added `commit:` block to `README.md` Configuration section with legacy/conventional/issue-auto examples; added commented-out `commit:` block to `ralph-config.template.yml`
+- [x] T025: Fixed duplicate `-n` flag in quickstart.md step 4 grep command; updated confirmation bullets to include exact legacy and default-scope `ralph` subject formats
+- [x] T026: `specify extension list` confirms Ralph Loop v1.3.0 enabled; installed `ralph-config.yml` has no commit block (correct: legacy behavior by default); `ralph-config.template.yml` shows the new commit block as commented-out example
+- [x] T027: All gates pass — bash -n, PowerShell parser, 191/191 bash tests, 244/244 PowerShell tests, git diff --check, quickstart grep commands all exit 0
+**Tasks Remaining in Work Unit**: 0
+**Commit**: This work-unit commit
+**Files Changed**:
+- README.md
+- ralph-config.template.yml
+- specs/003-ralph-commit-style/quickstart.md
+- specs/003-ralph-commit-style/tasks.md
+- specs/003-ralph-commit-style/ralph-memory.md
+- specs/003-ralph-commit-style/progress.md
+**Learnings**:
+- Quickstart had a duplicate `-n` flag (`grep -n 'commit:' -n`) — fixed to `grep -n 'commit:'`
+- ralph-config.template.yml commit block should be commented out (example/reference), not active config
+- Feature complete: all 8 commit-style scenarios validated across Bash and PowerShell paths
+---
