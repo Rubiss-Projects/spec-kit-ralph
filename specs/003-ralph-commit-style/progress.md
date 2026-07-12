@@ -146,3 +146,25 @@ Started: 2026-07-12 15:58:14
 - ralph-config.template.yml commit block should be commented out (example/reference), not active config
 - Feature complete: all 8 commit-style scenarios validated across Bash and PowerShell paths
 ---
+
+## Iteration 7 - 2026-07-12 17:58
+**Work Unit**: Reopen feature for nested `commit:` shape enforcement rerun (T028-T032)
+**Tasks Completed**:
+- [x] Reassessed the refined spec/contracts against current implementation and identified the remaining nested-config enforcement gap
+- [x] Reopened execution state for a follow-up Ralph pass
+**Tasks Remaining in Work Unit**: 5
+**Commit**: Reopen-for-rerun coordination commit
+**Files Changed**:
+- specs/003-ralph-commit-style/spec.md
+- specs/003-ralph-commit-style/plan.md
+- specs/003-ralph-commit-style/data-model.md
+- specs/003-ralph-commit-style/contracts/commit-config-schema.md
+- specs/003-ralph-commit-style/quickstart.md
+- specs/003-ralph-commit-style/tasks.md
+- specs/003-ralph-commit-style/ralph-memory.md
+- specs/003-ralph-commit-style/progress.md
+**Learnings**:
+- Current Bash and PowerShell loaders parse nested `commit:` blocks, but flattened keys such as `commit.style` are ignored instead of being rejected as invalid config
+- The invalid config fixture and regression coverage do not yet prove the required flattened-shape failure path end to end
+- Some supporting docs still describe scenarios with flattened shorthand and need to be reconciled to nested-only examples before the feature can be declared complete again
+---

@@ -4,6 +4,8 @@
 
 Represents the user-authored project policy for Ralph-generated work-unit commit subjects.
 
+The configuration is a nested object keyed by `commit`, with `style`, `scope`, and `issue` as properties of that object.
+
 ### Fields
 
 | Field | Type | Required | Rules |
@@ -16,7 +18,9 @@ Represents the user-authored project policy for Ralph-generated work-unit commit
 
 - The configuration lives in `.specify/extensions/ralph/ralph-config.yml`.
 - The `commit` block is optional.
+- `style`, `scope`, and `issue` are valid only as members of the nested `commit` object.
 - Unsupported `style` values are a blocking configuration error.
+- Flattened keys outside the `commit` block are an invalid configuration shape.
 - A missing `scope` must not block commit generation.
 - A missing or unsupported `issue` value must resolve to no issue suffix unless the implementation explicitly defines and documents stronger validation.
 
@@ -85,5 +89,6 @@ Represents the final Ralph-created commit subject for a completed work unit.
 ## Relationships
 
 - One active project configuration resolves to one Resolved Commit Policy per Ralph run.
+- One Commit Configuration object is keyed by `commit` and owns the `style`, `scope`, and `issue` properties together.
 - One current branch may produce zero or one Branch Issue Reference.
 - One completed work unit produces one Generated Commit Subject using the resolved policy and any inferred issue suffix.

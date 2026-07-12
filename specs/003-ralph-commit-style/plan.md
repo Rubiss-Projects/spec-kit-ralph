@@ -6,7 +6,7 @@
 
 ## Summary
 
-Add an optional Ralph commit policy that preserves the legacy work-unit commit subject `feat(<feature-name>): <work-unit title>` by default, supports an opt-in conventional format with configurable scope and default scope `ralph`, and appends an inferred GitHub issue reference when requested. The design resolves commit policy consistently before agent execution, updates the public iterate/config contracts, and validates the behavior through mirrored Bash and PowerShell regression coverage plus documentation updates.
+Add an optional Ralph commit policy that preserves the legacy work-unit commit subject `feat(<feature-name>): <work-unit title>` by default, supports an opt-in conventional format with configurable scope and default scope `ralph`, and appends an inferred GitHub issue reference when requested. The commit policy is valid only when expressed as a nested `commit:` block in `.specify/extensions/ralph/ralph-config.yml`; flattened keys are invalid. The design resolves commit policy consistently before agent execution, updates the public iterate/config contracts, and validates the behavior through mirrored Bash and PowerShell regression coverage plus documentation updates.
 
 ## Technical Context
 
@@ -24,7 +24,7 @@ Add an optional Ralph commit policy that preserves the legacy work-unit commit s
 
 **Performance Goals**: Commit policy resolution adds only bounded local config and branch-name parsing before a completed work-unit commit; no extra agent iteration or network dependency is introduced
 
-**Constraints**: Preserve current behavior exactly when commit config is absent; reject unsupported `commit.style` values clearly; support `issue: auto` without failing when no issue prefix exists; avoid adding a YAML parser dependency; maintain Bash/PowerShell parity; keep the change extension-local and documentation-complete
+**Constraints**: Preserve current behavior exactly when commit config is absent; reject unsupported `commit.style` values clearly and reject flattened commit-policy keys outside the nested `commit:` block; support `issue: auto` without failing when no issue prefix exists; avoid adding a YAML parser dependency; maintain Bash/PowerShell parity; keep the change extension-local and documentation-complete
 
 **Scale/Scope**: One public config surface, one public iterate-command contract, two orchestration scripts, two regression suites, one config template, README guidance, and example/fixture updates for exact legacy and conventional commit outputs
 
