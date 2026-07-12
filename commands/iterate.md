@@ -66,14 +66,22 @@ You **MUST** consider the user input before proceeding (if not empty).
      - Leave those state changes uncommitted so the next substantive work-unit commit includes them
 
 6. **Create one substantive commit only after coordinated persistence**:
-   - When ALL tasks in the selected user story are complete (`[x]`), create exactly one commit:
+   - Before creating the commit, resolve the effective commit policy from `.specify/extensions/ralph/ralph-config.yml` (or `.local.yml` override):
+     - If the `commit` block is **absent**, use legacy format (default).
+     - If `commit.style` is present but unsupported, **stop immediately** with a clear configuration error — do not create a commit.
+     - If `commit.style` is `legacy` (or absent), use: `feat(<feature-name>): <user story title>`
+     - If `commit.style` is `conventional`, use: `feat(<scope>): <user story title>` where `<scope>` defaults to `ralph` when `commit.scope` is not set.
+     - If `commit.issue: auto` is set, infer an issue number from a leading numeric branch prefix (e.g. `069-...` → `#69`) and append ` #<N>` when inference succeeds; omit the suffix silently when no numeric prefix exists.
+   - When ALL tasks in the selected user story are complete (`[x]`), create exactly one commit using the resolved subject:
 
      ```sh
      git add -A
-     git commit -m "feat(<feature-name>): <user story title>"
+     git commit -m "<resolved commit subject>"
      ```
 
-   - Example: `git commit -m "feat(001-ralph-loop-implement): US-001 Initialize Ralph Command"`
+   - Legacy example (no config): `git commit -m "feat(001-ralph-loop-implement): US-001 Initialize Ralph Command"`
+   - Conventional example: `git commit -m "feat(ralph): US-001 Initialize Ralph Command"`
+   - Conventional with issue: `git commit -m "feat(myapp): US-001 Initialize Ralph Command #42"`
    - Never create a commit containing only `tasks.md`, `ralph-memory.md`, and/or `progress.md`
    - Never amend or create a follow-up bookkeeping commit to insert a commit hash into the audit log
    - After committing, leave no bookkeeping change outside the commit

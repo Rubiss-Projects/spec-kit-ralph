@@ -132,23 +132,99 @@ load_ralph_config() {
     local repo_root=$1
     local config_path="$repo_root/.specify/extensions/ralph/ralph-config.yml"
     local local_config_path="$repo_root/.specify/extensions/ralph/ralph-config.local.yml"
+    local cfg in_commit_block raw_line line trimmed key value
 
     for cfg in "$config_path" "$local_config_path"; do
         if [[ -f "$cfg" ]]; then
-            while IFS= read -r line; do
-                line=$(printf '%s\n' "$line" | sed 's/^[[:space:]]*//' | sed 's/[[:space:]]*$//')
+            in_commit_block=false
+            while IFS= read -r raw_line; do
+                # Strip trailing whitespace/CRLF only; preserve leading whitespace to detect nesting
+                line=$(printf '%s\n' "$raw_line" | sed 's/[[:space:]]*$//')
                 [[ -z "$line" || "$line" == \#* ]] && continue
-                key=$(printf '%s\n' "$line" | sed 's/:.*//' | tr -d ' ')
-                value=$(printf '%s\n' "$line" | sed 's/^[^:]*:[[:space:]]*//' | sed 's/^"//' | sed 's/"$//')
-                case "$key" in
-                    model) CONFIG_MODEL="$value" ;;
-                    max_iterations) CONFIG_MAX_ITERATIONS="$value" ;;
-                    agent_cli) CONFIG_AGENT_CLI="$value" ;;
-                esac
+                if [[ "$line" == [[:space:]]* ]]; then
+                    # Indented line — process only when inside the commit: block
+                    if [[ "$in_commit_block" == "true" ]]; then
+                        trimmed=$(printf '%s\n' "$line" | sed 's/^[[:space:]]*//')
+                        key=$(printf '%s\n' "$trimmed" | sed 's/:.*//' | tr -d ' ')
+                        value=$(printf '%s\n' "$trimmed" | sed 's/^[^:]*:[[:space:]]*//' | sed 's/^"//' | sed 's/"$//')
+                        case "$key" in
+                            style) CONFIG_COMMIT_STYLE="$value" ;;
+                            scope) CONFIG_COMMIT_SCOPE="$value" ;;
+                            issue) CONFIG_COMMIT_ISSUE="$value" ;;
+                        esac
+                    fi
+                else
+                    # Top-level key — exit any active nested block first
+                    in_commit_block=false
+                    key=$(printf '%s\n' "$line" | sed 's/:.*//' | tr -d ' ')
+                    value=$(printf '%s\n' "$line" | sed 's/^[^:]*:[[:space:]]*//' | sed 's/^"//' | sed 's/"$//')
+                    case "$key" in
+                        model) CONFIG_MODEL="$value" ;;
+                        max_iterations) CONFIG_MAX_ITERATIONS="$value" ;;
+                        agent_cli) CONFIG_AGENT_CLI="$value" ;;
+                        commit) in_commit_block=true ;;
+                    esac
+                fi
             done < "$cfg"
         fi
     done
 }
+
+resolve_commit_policy() {
+    local raw_style="${CONFIG_COMMIT_STYLE:-}"
+
+    if [[ -z "$raw_style" ]]; then
+        COMMIT_POLICY_STYLE="legacy"
+    elif [[ "$raw_style" == "legacy" || "$raw_style" == "conventional" ]]; then
+        COMMIT_POLICY_STYLE="$raw_style"
+    else
+        printf 'commit-policy-invalid: unsupported commit.style value: %s\n' "$raw_style" >&2
+        return 1
+    fi
+
+    COMMIT_POLICY_SCOPE="${CONFIG_COMMIT_SCOPE:-ralph}"
+    COMMIT_POLICY_ISSUE="${CONFIG_COMMIT_ISSUE:-}"
+    return 0
+}
+
+infer_issue_number() {
+    local branch="$1"
+    if [[ "$branch" =~ ^([0-9]+)[-_] ]]; then
+        printf '%d\n' "$((10#${BASH_REMATCH[1]}))"
+    fi
+}
+
+build_commit_subject() {
+    local feature_name="$1"
+    local work_unit_title="$2"
+    local branch="$3"
+    local issue_suffix=""
+
+    if [[ "${COMMIT_POLICY_ISSUE:-}" == "auto" ]]; then
+        local issue_num
+        issue_num=$(infer_issue_number "$branch")
+        if [[ -n "$issue_num" ]]; then
+            issue_suffix=" #$issue_num"
+        fi
+    fi
+
+    if [[ "${COMMIT_POLICY_STYLE:-legacy}" == "conventional" ]]; then
+        local scope="${COMMIT_POLICY_SCOPE:-ralph}"
+        printf '%s\n' "feat($scope): $work_unit_title$issue_suffix"
+    else
+        printf '%s\n' "feat($feature_name): $work_unit_title$issue_suffix"
+    fi
+}
+
+# Commit policy config variables (populated by load_ralph_config)
+CONFIG_COMMIT_STYLE=""
+CONFIG_COMMIT_SCOPE=""
+CONFIG_COMMIT_ISSUE=""
+
+# Resolved commit policy variables (populated by resolve_commit_policy)
+COMMIT_POLICY_STYLE=""
+COMMIT_POLICY_SCOPE=""
+COMMIT_POLICY_ISSUE=""
 
 # Load config from YAML files
 load_ralph_config "$REPO_ROOT"
@@ -1073,6 +1149,11 @@ trap cleanup SIGINT SIGTERM
 
 # Prepare durable context before any task selection or agent invocation.
 if ! prepare_ralph_memory "$MEMORY_TEMPLATE_PATH" "$MEMORY_PATH" "$FEATURE_NAME"; then
+    exit 1
+fi
+
+# Validate commit policy before any agent invocation.
+if ! resolve_commit_policy; then
     exit 1
 fi
 

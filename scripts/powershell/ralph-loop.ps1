@@ -110,16 +110,92 @@ function Read-RalphConfig {
     
     foreach ($configPath in $configPaths) {
         if (Test-Path $configPath) {
+            $inCommitBlock = $false
             Get-Content $configPath | ForEach-Object {
-                $line = $_.Trim()
-                if ($line -and -not $line.StartsWith('#') -and $line -match '^(\w+)\s*:\s*"?(.+?)"?\s*$') {
-                    $config[$Matches[1]] = $Matches[2]
+                $rawLine = $_ -replace '\s+$', ''
+                if (-not $rawLine -or $rawLine.TrimStart().StartsWith('#')) { return }
+                if ($rawLine -match '^[ \t]') {
+                    # Indented line — process only when inside the commit: block
+                    if ($inCommitBlock) {
+                        $trimmed = $rawLine.Trim()
+                        if ($trimmed -match '^(\w+)\s*:\s*"?(.+?)"?\s*$') {
+                            $config["commit.$($Matches[1])"] = $Matches[2]
+                        }
+                    }
+                } else {
+                    # Top-level key — exit any active nested block
+                    $inCommitBlock = $false
+                    $line = $rawLine.Trim()
+                    if ($line -match '^(\w+)\s*:\s*"?(.+?)"?\s*$') {
+                        $config[$Matches[1]] = $Matches[2]
+                    } elseif ($line -match '^commit\s*:\s*$') {
+                        $inCommitBlock = $true
+                    } elseif ($line -match '^(\w+)\s*:') {
+                        # Top-level key with no value (e.g., block opener)
+                        if ($Matches[1] -eq 'commit') { $inCommitBlock = $true }
+                    }
                 }
             }
         }
     }
     
     return $config
+}
+
+function Resolve-RalphCommitPolicy {
+    param([hashtable]$Config)
+
+    $rawStyle = if ($Config.ContainsKey('commit.style')) { $Config['commit.style'] } else { '' }
+    $rawScope = if ($Config.ContainsKey('commit.scope')) { $Config['commit.scope'] } else { '' }
+    $rawIssue = if ($Config.ContainsKey('commit.issue')) { $Config['commit.issue'] } else { '' }
+
+    $resolvedStyle = if ($rawStyle -eq '') {
+        'legacy'
+    } elseif ($rawStyle -eq 'legacy' -or $rawStyle -eq 'conventional') {
+        $rawStyle
+    } else {
+        Write-Error "commit-policy-invalid: unsupported commit.style value: $rawStyle"
+        return $null
+    }
+
+    return @{
+        Style = $resolvedStyle
+        Scope = if ($rawScope) { $rawScope } else { 'ralph' }
+        Issue = $rawIssue
+    }
+}
+
+function Get-RalphInferredIssueNumber {
+    param([string]$Branch)
+
+    if ($Branch -match '^([0-9]+)[-_]') {
+        return [int]$Matches[1]
+    }
+    return $null
+}
+
+function Build-RalphCommitSubject {
+    param(
+        [string]$FeatureName,
+        [string]$WorkUnitTitle,
+        [string]$Branch,
+        [hashtable]$Policy
+    )
+
+    $issueSuffix = ''
+    if ($Policy.Issue -eq 'auto') {
+        $issueNum = Get-RalphInferredIssueNumber -Branch $Branch
+        if ($null -ne $issueNum) {
+            $issueSuffix = " #$issueNum"
+        }
+    }
+
+    if ($Policy.Style -eq 'conventional') {
+        $scope = if ($Policy.Scope) { $Policy.Scope } else { 'ralph' }
+        return "feat($scope): $WorkUnitTitle$issueSuffix"
+    } else {
+        return "feat($FeatureName): $WorkUnitTitle$issueSuffix"
+    }
 }
 
 # Apply config defaults (only when script parameter was not explicitly provided)
@@ -1242,6 +1318,12 @@ function Test-RalphCompletionGate {
 
 # Prepare durable memory before any task selection, then initialize audit history.
 if (-not (Prepare-RalphMemory -Path $MemoryPath -TemplatePath $MemoryTemplatePath -Feature $FeatureName)) {
+    exit 1
+}
+
+# Validate commit policy before any agent invocation.
+$commitPolicy = Resolve-RalphCommitPolicy -Config $config
+if ($null -eq $commitPolicy) {
     exit 1
 }
 

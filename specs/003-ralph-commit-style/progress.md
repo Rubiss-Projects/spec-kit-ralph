@@ -25,3 +25,26 @@ Started: 2026-07-12 15:58:14
 - Existing config loader is top-level key/value only; Phase 2 needs nested `commit:` block handling
 - All 165 existing regression tests pass unchanged
 ---
+
+## Iteration 2 - 2026-07-12 16:00
+**Work Unit**: Phase 2 — Foundational: Shared Commit Policy Plumbing (T004-T006)
+**Tasks Completed**:
+- [x] T004: Implement commit policy helpers in `scripts/bash/ralph-loop.sh`
+- [x] T005: Implement parity commit policy helpers in `scripts/powershell/ralph-loop.ps1`
+- [x] T006: Update policy-aware commit instructions in `commands/iterate.md`
+**Tasks Remaining in Work Unit**: 0
+**Commit**: This work-unit commit
+**Files Changed**:
+- scripts/bash/ralph-loop.sh
+- scripts/powershell/ralph-loop.ps1
+- commands/iterate.md
+- tests/regression/bash/test-ralph-loop.sh
+- specs/003-ralph-commit-style/tasks.md
+- specs/003-ralph-commit-style/ralph-memory.md
+- specs/003-ralph-commit-style/progress.md
+**Learnings**:
+- `load_ralph_config` extended with `in_commit_block` tracking to parse nested `commit.style/scope/issue` keys
+- `printf '%d'` treats leading-zero strings as octal; use `$((10#N))` to force base-10 branch prefix extraction
+- PowerShell `$inCommitBlock` must be declared before the `ForEach-Object` pipeline to persist across lines
+- All 165 existing bash regression tests pass unchanged
+---
