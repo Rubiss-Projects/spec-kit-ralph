@@ -95,9 +95,59 @@ max_iterations: 10
 # Path or name of the agent CLI binary
 # Supported: copilot, codex, claude
 agent_cli: "copilot"
+
+# Commit subject policy (optional — omit this block to preserve today's behavior)
+commit:
+  style: legacy        # legacy | conventional
+  scope: ralph         # optional; used only for conventional style; default: ralph
+  issue: auto          # optional; auto-links commits to inferred GitHub issue number
 ```
 
 The installed extension contains only the active `ralph-config.yml`, which is also the manifest's canonical configuration source.
+
+### Commit Style
+
+Ralph generates work-unit commit subjects in the format `feat(<feature-name>): <work-unit title>` by default. The optional `commit` block lets you change this behavior without affecting projects that have no `commit` configuration.
+
+**Legacy (default)** — preserves the existing format exactly:
+
+```yaml
+commit:
+  style: legacy
+```
+
+Result: `feat(<feature-name>): <work-unit title>`
+
+**Conventional** — uses a short, configurable scope:
+
+```yaml
+commit:
+  style: conventional
+  scope: myteam
+```
+
+Result: `feat(myteam): <work-unit title>`
+
+Omit `scope` to use the default scope `ralph`:
+
+```yaml
+commit:
+  style: conventional
+```
+
+Result: `feat(ralph): <work-unit title>`
+
+**Issue auto-linking** — appends `#<issue>` when the branch name starts with a numeric prefix (e.g. `069-some-feature` → `#69`). Works with both `legacy` and `conventional` styles. If no numeric prefix is found, the commit is created without a suffix.
+
+```yaml
+commit:
+  style: conventional
+  issue: auto
+```
+
+Result (on branch `069-some-feature`): `feat(ralph): <work-unit title> #69`
+
+Setting an unsupported `commit.style` value causes Ralph to stop with a clear configuration error before creating any commit.
 
 ### Agent CLI Support
 
