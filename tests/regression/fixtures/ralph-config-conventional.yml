@@ -1,0 +1,8 @@
+# Test fixture: conventional commit style with explicit scope and issue auto-linking
+model: "gpt-4o"
+max_iterations: 5
+agent_cli: "copilot"
+commit:
+  style: conventional
+  scope: myapp
+  issue: auto
