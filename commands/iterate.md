@@ -69,8 +69,8 @@ You **MUST** consider the user input before proceeding (if not empty).
    - Before creating the commit, resolve the effective commit policy from `.specify/extensions/ralph/ralph-config.yml` (or `.local.yml` override):
      - If the `commit` block is **absent**, use legacy format (default).
      - If `commit.style` is present but unsupported, **stop immediately** with a clear configuration error — do not create a commit.
-     - If `commit.style` is `legacy` (or absent), use: `feat(<feature-name>): <user story title>`
-     - If `commit.style` is `conventional`, use: `feat(<scope>): <user story title>` where `<scope>` defaults to `ralph` when `commit.scope` is not set.
+     - If `commit.style` is `legacy` (or absent), use: `feat(<feature-name>): <work-unit title>` — preserve the work-unit title exactly as the commit subject payload.
+     - If `commit.style` is `conventional`, use: `feat(<scope>): <commit summary>` where `<scope>` defaults to `ralph` when `commit.scope` is not set, and `<commit summary>` is a concise description of the completed change. The work-unit title is preserved separately in the progress/audit log but **must not** appear verbatim as the conventional commit subject payload. Planning labels such as `US-`, `US1`, `Phase`, and task ranges must be omitted from `<commit summary>`.
      - If `commit.issue: auto` is set, infer an issue number from a leading numeric branch prefix (e.g. `069-...` → `#69`) and append ` #<N>` when inference succeeds; omit the suffix silently when no numeric prefix exists.
    - When ALL tasks in the selected user story are complete (`[x]`), create exactly one commit using the resolved subject:
 
@@ -81,8 +81,8 @@ You **MUST** consider the user input before proceeding (if not empty).
 
    - Legacy example (no config): `git commit -m "feat(001-ralph-loop-implement): US-001 Initialize Ralph Command"`
    - Legacy with issue: `git commit -m "feat(069-ctx-list-filter): US-001 Initialize Ralph Command #69"`
-   - Conventional example: `git commit -m "feat(ralph): US-001 Initialize Ralph Command"`
-   - Conventional with issue: `git commit -m "feat(myapp): US-001 Initialize Ralph Command #42"`
+   - Conventional example: `git commit -m "feat(ralph): initialize ralph command"`
+   - Conventional with issue: `git commit -m "feat(myapp): add context list filter flag #42"`
    - Never create a commit containing only `tasks.md`, `ralph-memory.md`, and/or `progress.md`
    - Never amend or create a follow-up bookkeeping commit to insert a commit hash into the audit log
    - After committing, leave no bookkeeping change outside the commit

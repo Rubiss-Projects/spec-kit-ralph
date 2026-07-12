@@ -204,6 +204,7 @@ build_commit_subject() {
     local feature_name="$1"
     local work_unit_title="$2"
     local branch="$3"
+    local commit_summary="${4:-}"
     local issue_suffix=""
 
     if [[ "${COMMIT_POLICY_ISSUE:-}" == "auto" ]]; then
@@ -216,7 +217,8 @@ build_commit_subject() {
 
     if [[ "${COMMIT_POLICY_STYLE:-legacy}" == "conventional" ]]; then
         local scope="${COMMIT_POLICY_SCOPE:-ralph}"
-        printf '%s\n' "feat($scope): $work_unit_title$issue_suffix"
+        local payload="${commit_summary:-$work_unit_title}"
+        printf '%s\n' "feat($scope): $payload$issue_suffix"
     else
         printf '%s\n' "feat($feature_name): $work_unit_title$issue_suffix"
     fi

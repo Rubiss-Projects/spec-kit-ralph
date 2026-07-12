@@ -36,12 +36,4 @@ Started: 2026-07-12T13:58:14Z
 
 ## Current Handoff
 
-- Reopened after validating the nested `commit:` enforcement work in a real project and seeing that conventional commits still echo planning titles such as `US3 ...` or `Phase 6 ...`.
-- Current gap: configurable formatting works, but conventional commits still use the raw work-unit title as the subject payload; that does not produce cleaner Git history than the legacy format.
-- Reopen tasks T033-T037 cover the remaining work:
-  - update the iterate contract so work-unit title and commit summary are separate outputs;
-  - preserve the work-unit title for progress/audit while using a dedicated conventional commit summary for Git commits;
-  - add mirrored Bash/PowerShell regressions proving `US-`, `Phase`, and task-range labels do not leak into conventional subjects;
-  - reconcile the public commit-format contract and quickstart guidance;
-  - rerun the targeted regression and syntax checks.
-- Legacy subjects must remain byte-for-byte unchanged when no `commit` block is present or when `style: legacy` is selected.
+- Feature complete; no handoff required.
