@@ -1442,6 +1442,56 @@ Remove-Item $tmpInvalidRepo -Recurse -Force
 
 #endregion
 
+#region Tests: commit policy — US3 issue auto-linking scenarios (T019)
+
+Write-Section "commit policy — US3 issue auto-linking scenarios"
+
+# T019-1: Get-RalphInferredIssueNumber returns base-10 number for numeric-prefix branch
+$issueNum = Get-RalphInferredIssueNumber -Branch "069-ctx-list-filter"
+Assert-Equal "numeric-prefix branch infers issue number" 69 $issueNum
+
+# T019-2: Get-RalphInferredIssueNumber returns null for no-prefix branch
+$issueNum = Get-RalphInferredIssueNumber -Branch "main"
+Assert-True "no-prefix branch returns null issue number" ($null -eq $issueNum)
+
+# T019-3: Get-RalphInferredIssueNumber returns null for non-numeric prefix branch
+$issueNum = Get-RalphInferredIssueNumber -Branch "feature-add-login"
+Assert-True "non-numeric prefix branch returns null issue number" ($null -eq $issueNum)
+
+# T019-4: issue:auto on numeric-prefix branch appends #N suffix (legacy style)
+$legacyIssuePolicy = Resolve-RalphCommitPolicy -Config @{ "commit.issue" = "auto" }
+$result = Build-RalphCommitSubject -FeatureName "my-feature" -WorkUnitTitle "US-003 Link commits to issue" -Branch "069-ctx-list-filter" -Policy $legacyIssuePolicy
+Assert-Equal "legacy+issue:auto on numeric-prefix branch appends suffix" "feat(my-feature): US-003 Link commits to issue #69" $result
+
+# T019-5: issue:auto on no-prefix branch omits suffix (legacy style)
+$result = Build-RalphCommitSubject -FeatureName "my-feature" -WorkUnitTitle "US-003 Link commits to issue" -Branch "main" -Policy $legacyIssuePolicy
+Assert-Equal "legacy+issue:auto on no-prefix branch omits suffix" "feat(my-feature): US-003 Link commits to issue" $result
+
+# T019-6: issue:auto on numeric-prefix branch appends #N suffix (conventional style)
+$convIssuePolicy = Resolve-RalphCommitPolicy -Config @{ "commit.style" = "conventional"; "commit.issue" = "auto" }
+$result = Build-RalphCommitSubject -FeatureName "my-feature" -WorkUnitTitle "US-003 Link commits to issue" -Branch "069-ctx-list-filter" -Policy $convIssuePolicy
+Assert-Equal "conventional+issue:auto on numeric-prefix branch appends suffix" "feat(ralph): US-003 Link commits to issue #69" $result
+
+# T019-7: issue:auto on no-prefix branch omits suffix (conventional style)
+$result = Build-RalphCommitSubject -FeatureName "my-feature" -WorkUnitTitle "US-003 Link commits to issue" -Branch "main" -Policy $convIssuePolicy
+Assert-Equal "conventional+issue:auto on no-prefix branch omits suffix" "feat(ralph): US-003 Link commits to issue" $result
+
+# T019-8: load conventional config fixture sets issue auto field
+$tmpConvIssueRepo = Join-Path ([System.IO.Path]::GetTempPath()) "ralph-conv-issue-$PID"
+$tmpConvIssueConfigDir = Join-Path $tmpConvIssueRepo ".specify\extensions\ralph"
+New-Item -ItemType Directory -Path $tmpConvIssueConfigDir -Force | Out-Null
+Copy-Item (Join-Path $FixtureDir "ralph-config-conventional.yml") (Join-Path $tmpConvIssueConfigDir "ralph-config.yml")
+$convIssueRepoConfig = Read-RalphConfig -RepoRoot $tmpConvIssueRepo
+Assert-Equal "conventional fixture sets issue auto" "auto" $convIssueRepoConfig["commit.issue"]
+Remove-Item $tmpConvIssueRepo -Recurse -Force
+
+# T019-9: issue not set means no suffix (issue policy disabled)
+$noIssuePolicy = Resolve-RalphCommitPolicy -Config @{}
+$result = Build-RalphCommitSubject -FeatureName "my-feature" -WorkUnitTitle "US-003 Link commits to issue" -Branch "069-ctx-list-filter" -Policy $noIssuePolicy
+Assert-Equal "no-issue-config on numeric-prefix branch omits suffix" "feat(my-feature): US-003 Link commits to issue" $result
+
+#endregion
+
 #region Summary
 
 Write-Host ""

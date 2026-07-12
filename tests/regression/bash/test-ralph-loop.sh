@@ -1230,6 +1230,74 @@ rm -rf "$TMP_INVALID_LOOP"
 
 #endregion
 
+#region Tests: commit policy — US3 issue auto-linking scenarios (T018)
+
+section "commit policy — US3 issue auto-linking scenarios"
+
+# T018-1: infer_issue_number returns base-10 number for numeric-prefix branch
+result=$(infer_issue_number "069-ctx-list-filter")
+assert_eq "numeric-prefix branch infers issue number" "69" "$result"
+
+# T018-2: infer_issue_number returns empty for no-prefix branch
+result=$(infer_issue_number "main")
+assert_eq "no-prefix branch returns empty issue number" "" "$result"
+
+# T018-3: infer_issue_number returns empty for non-numeric prefix branch
+result=$(infer_issue_number "feature-add-login")
+assert_eq "non-numeric prefix branch returns empty issue number" "" "$result"
+
+# T018-4: issue:auto on numeric-prefix branch appends #N suffix (legacy style)
+CONFIG_COMMIT_STYLE="" ; CONFIG_COMMIT_SCOPE="" ; CONFIG_COMMIT_ISSUE="auto"
+COMMIT_POLICY_STYLE="" ; COMMIT_POLICY_SCOPE="" ; COMMIT_POLICY_ISSUE=""
+resolve_commit_policy
+result=$(build_commit_subject "my-feature" "US-003 Link commits to issue" "069-ctx-list-filter")
+assert_eq "legacy+issue:auto on numeric-prefix branch appends suffix" \
+    "feat(my-feature): US-003 Link commits to issue #69" "$result"
+
+# T018-5: issue:auto on no-prefix branch omits suffix (legacy style)
+CONFIG_COMMIT_STYLE="" ; CONFIG_COMMIT_SCOPE="" ; CONFIG_COMMIT_ISSUE="auto"
+COMMIT_POLICY_STYLE="" ; COMMIT_POLICY_SCOPE="" ; COMMIT_POLICY_ISSUE=""
+resolve_commit_policy
+result=$(build_commit_subject "my-feature" "US-003 Link commits to issue" "main")
+assert_eq "legacy+issue:auto on no-prefix branch omits suffix" \
+    "feat(my-feature): US-003 Link commits to issue" "$result"
+
+# T018-6: issue:auto on numeric-prefix branch appends #N suffix (conventional style)
+CONFIG_COMMIT_STYLE="conventional" ; CONFIG_COMMIT_SCOPE="" ; CONFIG_COMMIT_ISSUE="auto"
+COMMIT_POLICY_STYLE="" ; COMMIT_POLICY_SCOPE="" ; COMMIT_POLICY_ISSUE=""
+resolve_commit_policy
+result=$(build_commit_subject "my-feature" "US-003 Link commits to issue" "069-ctx-list-filter")
+assert_eq "conventional+issue:auto on numeric-prefix branch appends suffix" \
+    "feat(ralph): US-003 Link commits to issue #69" "$result"
+
+# T018-7: issue:auto on no-prefix branch omits suffix (conventional style)
+CONFIG_COMMIT_STYLE="conventional" ; CONFIG_COMMIT_SCOPE="" ; CONFIG_COMMIT_ISSUE="auto"
+COMMIT_POLICY_STYLE="" ; COMMIT_POLICY_SCOPE="" ; COMMIT_POLICY_ISSUE=""
+resolve_commit_policy
+result=$(build_commit_subject "my-feature" "US-003 Link commits to issue" "main")
+assert_eq "conventional+issue:auto on no-prefix branch omits suffix" \
+    "feat(ralph): US-003 Link commits to issue" "$result"
+
+# T018-8: load conventional config fixture sets issue auto field
+TMP_CONV_ISSUE_REPO=$(mktemp -d)
+mkdir -p "$TMP_CONV_ISSUE_REPO/.specify/extensions/ralph"
+cp "$FIXTURE_DIR/ralph-config-conventional.yml" "$TMP_CONV_ISSUE_REPO/.specify/extensions/ralph/ralph-config.yml"
+CONFIG_COMMIT_STYLE="" ; CONFIG_COMMIT_SCOPE="" ; CONFIG_COMMIT_ISSUE=""
+load_ralph_config "$TMP_CONV_ISSUE_REPO"
+assert_eq "conventional fixture sets issue auto" "auto" "$CONFIG_COMMIT_ISSUE"
+rm -rf "$TMP_CONV_ISSUE_REPO"
+CONFIG_COMMIT_STYLE="" ; CONFIG_COMMIT_SCOPE="" ; CONFIG_COMMIT_ISSUE=""
+
+# T018-9: issue not set means no suffix (issue policy disabled)
+CONFIG_COMMIT_STYLE="" ; CONFIG_COMMIT_SCOPE="" ; CONFIG_COMMIT_ISSUE=""
+COMMIT_POLICY_STYLE="" ; COMMIT_POLICY_SCOPE="" ; COMMIT_POLICY_ISSUE=""
+resolve_commit_policy
+result=$(build_commit_subject "my-feature" "US-003 Link commits to issue" "069-ctx-list-filter")
+assert_eq "no-issue-config on numeric-prefix branch omits suffix" \
+    "feat(my-feature): US-003 Link commits to issue" "$result"
+
+#endregion
+
 #region Summary
 
 echo ""

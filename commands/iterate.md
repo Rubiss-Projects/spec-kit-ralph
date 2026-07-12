@@ -80,6 +80,7 @@ You **MUST** consider the user input before proceeding (if not empty).
      ```
 
    - Legacy example (no config): `git commit -m "feat(001-ralph-loop-implement): US-001 Initialize Ralph Command"`
+   - Legacy with issue: `git commit -m "feat(069-ctx-list-filter): US-001 Initialize Ralph Command #69"`
    - Conventional example: `git commit -m "feat(ralph): US-001 Initialize Ralph Command"`
    - Conventional with issue: `git commit -m "feat(myapp): US-001 Initialize Ralph Command #42"`
    - Never create a commit containing only `tasks.md`, `ralph-memory.md`, and/or `progress.md`

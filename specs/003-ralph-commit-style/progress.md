@@ -96,3 +96,29 @@ Started: 2026-07-12 15:58:14
 - Conventional fixture (ralph-config-conventional.yml) loads both style=conventional and scope=myapp correctly
 - Invalid-style (squash) triggers preflight exit before any agent or git operations
 ---
+
+---
+
+## Iteration 5 - 2026-07-12 16:30
+**Work Unit**: US-003 Link Commits Back to the Issue Automatically (T018-T023)
+**Tasks Completed**:
+- [x] T018: Add Bash US3 regression scenarios (9 new tests) to `tests/regression/bash/test-ralph-loop.sh`
+- [x] T019: Add PowerShell US3 regression scenarios (9 new tests) to `tests/regression/powershell/Test-RalphLoop.ps1`
+- [x] T020: Conditional issue-suffix appending already implemented in `scripts/bash/ralph-loop.sh` (carried from Phase 2 scaffolding)
+- [x] T021: Parity conditional issue-suffix appending already implemented in `scripts/powershell/ralph-loop.ps1` (carried from Phase 2 scaffolding)
+- [x] T022: Added legacy+issue example to `commands/iterate.md`; contracts already complete
+- [x] T023: Bash suite 191/191 passed; PowerShell suite 244/244 passed
+**Tasks Remaining in Work Unit**: 0
+**Commit**: This work-unit commit
+**Files Changed**:
+- tests/regression/bash/test-ralph-loop.sh
+- tests/regression/powershell/Test-RalphLoop.ps1
+- commands/iterate.md
+- specs/003-ralph-commit-style/tasks.md
+- specs/003-ralph-commit-style/ralph-memory.md
+- specs/003-ralph-commit-style/progress.md
+**Learnings**:
+- T020/T021 were already implemented in prior iterations as part of the commit policy plumbing (build_commit_subject/Build-RalphCommitSubject)
+- ralph-config-conventional.yml fixture already had `issue: auto` — T018-8/T019-8 fixture load tests confirmed the field is parsed correctly
+- PowerShell `Get-RalphInferredIssueNumber` returns `$null` (not empty string) for no-match; Bash `infer_issue_number` returns empty string — tests must assert accordingly
+---

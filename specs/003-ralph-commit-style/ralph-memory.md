@@ -36,4 +36,4 @@ Started: 2026-07-12T13:58:14Z
 
 ## Current Handoff
 
-- Phase 4 (US2, T012-T017) is complete. Next is Phase 5 (T018-T023): add Bash and PowerShell regression scenarios for US3 issue auto-linking (numeric-prefix inference, no-prefix fallback, legacy+issue-auto), implement conditional issue-suffix appending in both orchestrators (already scaffolded in `build_commit_subject`/`Build-RalphCommitSubject`), align public config and issue-linking contracts, and run the US3 parity scenarios.
+- Phase 5 (US3, T018-T023) is complete. All issue auto-linking regression scenarios pass on both Bash (191 tests) and PowerShell (244 tests). Next is Phase 6 (T024-T027): update user-facing commit configuration guidance in README.md and ralph-config.template.yml, reconcile the quickstart, verify installed-extension behavior, and run the full final validation matrix.
