@@ -1442,6 +1442,43 @@ Remove-Item $tmpInvalidRepo -Recurse -Force
 
 #endregion
 
+#region Tests: commit policy — Phase 7 flattened config rejection scenarios (T030)
+
+Write-Section "commit policy — Phase 7 flattened config rejection scenarios"
+
+# T030-1: Read-RalphConfig sets _commit_flattened when flat commit.style key is present
+$tmpFlatRepo = Join-Path ([System.IO.Path]::GetTempPath()) "ralph-flat-$PID"
+$tmpFlatConfigDir = Join-Path $tmpFlatRepo ".specify\extensions\ralph"
+New-Item -ItemType Directory -Path $tmpFlatConfigDir -Force | Out-Null
+Copy-Item (Join-Path $FixtureDir "ralph-config-invalid-flat.yml") (Join-Path $tmpFlatConfigDir "ralph-config.yml")
+$flatRepoConfig = Read-RalphConfig -RepoRoot $tmpFlatRepo
+Assert-True "flattened config fixture sets _commit_flattened flag" ($flatRepoConfig.ContainsKey('_commit_flattened') -and $flatRepoConfig['_commit_flattened'] -eq 'true')
+Remove-Item $tmpFlatRepo -Recurse -Force
+
+# T030-2: Resolve-RalphCommitPolicy returns null for flattened config
+$flatConfig = @{ '_commit_flattened' = 'true' }
+$flatPolicy = $null
+try {
+    $flatPolicy = Resolve-RalphCommitPolicy -Config $flatConfig
+} catch { }
+Assert-True "flattened config returns null policy" ($null -eq $flatPolicy)
+
+# T030-3: Resolve-RalphCommitPolicy reports commit-policy-invalid for flattened config
+$flatErrorMsg = $null
+try {
+    Resolve-RalphCommitPolicy -Config @{ '_commit_flattened' = 'true' } | Out-Null
+} catch {
+    $flatErrorMsg = $_.Exception.Message
+}
+Assert-True "flattened config reports commit-policy-invalid" ($null -ne $flatErrorMsg -and $flatErrorMsg -match "commit-policy-invalid")
+
+# T030-4: valid nested commit: block still resolves correctly after flattened detection logic
+$nestedValidPolicy = Resolve-RalphCommitPolicy -Config @{ "commit.style" = "conventional"; "commit.scope" = "myapp" }
+$result = Build-RalphCommitSubject -FeatureName "my-feature" -WorkUnitTitle "US valid nested config" -Branch "main" -Policy $nestedValidPolicy
+Assert-Equal "valid nested config still builds correct subject" "feat(myapp): US valid nested config" $result
+
+#endregion
+
 #region Tests: commit policy — US3 issue auto-linking scenarios (T019)
 
 Write-Section "commit policy — US3 issue auto-linking scenarios"

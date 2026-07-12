@@ -1,0 +1,8 @@
+# Test fixture: flattened commit-policy keys (triggers preflight configuration error)
+# These keys must be nested under a `commit:` block, not written as top-level dot-separated keys.
+model: "gpt-4o"
+max_iterations: 5
+agent_cli: "copilot"
+commit.style: conventional
+commit.scope: myapp
+commit.issue: auto

@@ -126,11 +126,11 @@
 
 **Purpose**: Bring runtime behavior and regression coverage into line with the refined spec that requires a nested `commit:` block and rejects flattened commit-policy keys.
 
-- [ ] T028 Create fixture coverage for both unsupported nested style values and invalid flattened commit-policy keys in `tests/regression/fixtures/ralph-config-invalid.yml` and `tests/regression/fixtures/README.md`
-- [ ] T029 Implement explicit invalid flattened-shape detection so Bash and PowerShell reject `commit.style`, `commit.scope`, and `commit.issue` outside the nested `commit:` block in `scripts/bash/ralph-loop.sh` and `scripts/powershell/ralph-loop.ps1`
-- [ ] T030 Add mirrored Bash and PowerShell regression scenarios proving flattened config keys fail clearly while valid nested `commit:` blocks still work in `tests/regression/bash/test-ralph-loop.sh` and `tests/regression/powershell/Test-RalphLoop.ps1`
-- [ ] T031 Reconcile quickstart and fixture documentation so user-facing examples consistently show the nested `commit:` block in `specs/003-ralph-commit-style/quickstart.md` and `tests/regression/fixtures/README.md`
-- [ ] T032 Run the targeted Bash and PowerShell regression selectors plus syntax checks for the reopened nested-config scenarios in `tests/regression/bash/test-ralph-loop.sh`, `tests/regression/powershell/Test-RalphLoop.ps1`, `scripts/bash/ralph-loop.sh`, and `scripts/powershell/ralph-loop.ps1`
+- [x] T028 Create fixture coverage for both unsupported nested style values and invalid flattened commit-policy keys in `tests/regression/fixtures/ralph-config-invalid.yml` and `tests/regression/fixtures/README.md`
+- [x] T029 Implement explicit invalid flattened-shape detection so Bash and PowerShell reject `commit.style`, `commit.scope`, and `commit.issue` outside the nested `commit:` block in `scripts/bash/ralph-loop.sh` and `scripts/powershell/ralph-loop.ps1`
+- [x] T030 Add mirrored Bash and PowerShell regression scenarios proving flattened config keys fail clearly while valid nested `commit:` blocks still work in `tests/regression/bash/test-ralph-loop.sh` and `tests/regression/powershell/Test-RalphLoop.ps1`
+- [x] T031 Reconcile quickstart and fixture documentation so user-facing examples consistently show the nested `commit:` block in `specs/003-ralph-commit-style/quickstart.md` and `tests/regression/fixtures/README.md`
+- [x] T032 Run the targeted Bash and PowerShell regression selectors plus syntax checks for the reopened nested-config scenarios in `tests/regression/bash/test-ralph-loop.sh`, `tests/regression/powershell/Test-RalphLoop.ps1`, `scripts/bash/ralph-loop.sh`, and `scripts/powershell/ralph-loop.ps1`
 
 ---
 
