@@ -18,9 +18,9 @@
 
 **Purpose**: Create reusable configuration fixtures and reference inputs shared by all commit-style scenarios.
 
-- [ ] T001 Create a legacy-style commit config fixture in `tests/regression/fixtures/ralph-config-legacy.yml`
-- [ ] T002 [P] Create a conventional-style commit config fixture in `tests/regression/fixtures/ralph-config-conventional.yml`
-- [ ] T003 [P] Create an invalid commit-style fixture and document the new fixture set in `tests/regression/fixtures/ralph-config-invalid.yml` and `tests/regression/fixtures/README.md`
+- [x] T001 Create a legacy-style commit config fixture in `tests/regression/fixtures/ralph-config-legacy.yml`
+- [x] T002 [P] Create a conventional-style commit config fixture in `tests/regression/fixtures/ralph-config-conventional.yml`
+- [x] T003 [P] Create an invalid commit-style fixture and document the new fixture set in `tests/regression/fixtures/ralph-config-invalid.yml` and `tests/regression/fixtures/README.md`
 
 **Checkpoint**: Shared config inputs exist for default, conventional, and invalid-style regression scenarios.
 
