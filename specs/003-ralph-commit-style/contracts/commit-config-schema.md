@@ -1,0 +1,50 @@
+# Contract: Ralph Commit Configuration Schema
+
+## Purpose
+
+Define the public project configuration shape for Ralph-generated work-unit commit subjects.
+
+## Config Location
+
+Project configuration lives at:
+
+```text
+.specify/extensions/ralph/ralph-config.yml
+```
+
+The repository source continues to ship the reference template at:
+
+```text
+ralph-config.template.yml
+```
+
+## Contract Shape
+
+```yaml
+commit:
+  style: legacy        # legacy | conventional
+  scope: ralph         # optional; used for conventional style
+  issue: auto          # optional; infers #<issue> from branch prefix
+```
+
+## Field Semantics
+
+| Field | Allowed Values | Required | Meaning |
+|---|---|---|---|
+| `commit.style` | `legacy`, `conventional` | no | Selects commit-subject format. Missing means preserve today's legacy behavior. |
+| `commit.scope` | short string | no | Conventional scope label. Ignored by legacy formatting. Missing means use the default scope `ralph`. |
+| `commit.issue` | `auto` | no | Enables branch-prefix issue inference. Missing disables issue suffix generation. |
+
+## Resolution Rules
+
+1. If the `commit` block is absent, Ralph uses legacy behavior.
+2. If `commit.style` is present and unsupported, Ralph stops with a clear configuration error and creates no commit.
+3. If `commit.style` is `conventional` and `commit.scope` is absent, Ralph uses the default scope `ralph`.
+4. If `commit.issue` is `auto`, Ralph attempts issue inference from the current branch prefix.
+5. If issue inference fails, Ralph omits the issue suffix and still creates the commit successfully.
+
+## Compatibility Rules
+
+- Existing projects without `commit` configuration must behave exactly as they do today.
+- The configuration is optional across all supported orchestration paths.
+- The same effective policy must be observed by Bash and PowerShell launch paths.
