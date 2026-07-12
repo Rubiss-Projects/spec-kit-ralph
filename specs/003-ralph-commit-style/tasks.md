@@ -97,15 +97,15 @@
 
 > Write these tests first and confirm the new cases fail before implementation.
 
-- [ ] T018 [P] [US3] Add Bash regression scenarios for numeric-prefix inference, no-prefix fallback, and legacy-plus-issue-auto behavior in `tests/regression/bash/test-ralph-loop.sh`
-- [ ] T019 [P] [US3] Add equivalent PowerShell regression scenarios for numeric-prefix inference, no-prefix fallback, and legacy-plus-issue-auto behavior in `tests/regression/powershell/Test-RalphLoop.ps1`
+- [x] T018 [P] [US3] Add Bash regression scenarios for numeric-prefix inference, no-prefix fallback, and legacy-plus-issue-auto behavior in `tests/regression/bash/test-ralph-loop.sh`
+- [x] T019 [P] [US3] Add equivalent PowerShell regression scenarios for numeric-prefix inference, no-prefix fallback, and legacy-plus-issue-auto behavior in `tests/regression/powershell/Test-RalphLoop.ps1`
 
 ### Implementation for User Story 3
 
-- [ ] T020 [US3] Implement conditional issue-suffix appending for both legacy and conventional commit styles in `scripts/bash/ralph-loop.sh`
-- [ ] T021 [US3] Implement parity conditional issue-suffix appending for both legacy and conventional commit styles in `scripts/powershell/ralph-loop.ps1`
-- [ ] T022 [US3] Update the public config and issue-linking contract guidance in `commands/iterate.md`, `specs/003-ralph-commit-style/contracts/commit-config-schema.md`, and `specs/003-ralph-commit-style/contracts/work-unit-commit-format.md`
-- [ ] T023 [US3] Run the US3 issue-auto parity scenarios in `tests/regression/bash/test-ralph-loop.sh` and `tests/regression/powershell/Test-RalphLoop.ps1`
+- [x] T020 [US3] Implement conditional issue-suffix appending for both legacy and conventional commit styles in `scripts/bash/ralph-loop.sh`
+- [x] T021 [US3] Implement parity conditional issue-suffix appending for both legacy and conventional commit styles in `scripts/powershell/ralph-loop.ps1`
+- [x] T022 [US3] Update the public config and issue-linking contract guidance in `commands/iterate.md`, `specs/003-ralph-commit-style/contracts/commit-config-schema.md`, and `specs/003-ralph-commit-style/contracts/work-unit-commit-format.md`
+- [x] T023 [US3] Run the US3 issue-auto parity scenarios in `tests/regression/bash/test-ralph-loop.sh` and `tests/regression/powershell/Test-RalphLoop.ps1`
 
 **Checkpoint**: Issue auto-linking works for both commit styles, omits the suffix safely when inference fails, and remains consistent across Bash and PowerShell.
 
