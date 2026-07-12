@@ -138,11 +138,11 @@
 
 **Purpose**: Preserve exact legacy subjects while making conventional commits describe the real completed change instead of echoing planning titles.
 
-- [ ] T033 Update the iterate contract so a completed work unit yields both a progress/audit title and a separate conventional commit summary in `commands/iterate.md`
-- [ ] T034 Implement Bash and PowerShell support for preserving the work-unit title while building conventional commit subjects from a dedicated commit summary in `scripts/bash/ralph-loop.sh` and `scripts/powershell/ralph-loop.ps1`
-- [ ] T035 Add mirrored Bash and PowerShell regression scenarios proving conventional commits omit `US-`, `Phase`, and task-range labels and use concise change summaries while legacy commits remain unchanged in `tests/regression/bash/test-ralph-loop.sh` and `tests/regression/powershell/Test-RalphLoop.ps1`
-- [ ] T036 Reconcile the public commit-format contract and validation guide with the new conventional commit-summary behavior in `specs/003-ralph-commit-style/contracts/work-unit-commit-format.md` and `specs/003-ralph-commit-style/quickstart.md`
-- [ ] T037 Run the targeted Bash and PowerShell regression selectors plus syntax checks for the reopened conventional commit-summary scenarios in `tests/regression/bash/test-ralph-loop.sh`, `tests/regression/powershell/Test-RalphLoop.ps1`, `scripts/bash/ralph-loop.sh`, and `scripts/powershell/ralph-loop.ps1`
+- [x] T033 Update the iterate contract so a completed work unit yields both a progress/audit title and a separate conventional commit summary in `commands/iterate.md`
+- [x] T034 Implement Bash and PowerShell support for preserving the work-unit title while building conventional commit subjects from a dedicated commit summary in `scripts/bash/ralph-loop.sh` and `scripts/powershell/ralph-loop.ps1`
+- [x] T035 Add mirrored Bash and PowerShell regression scenarios proving conventional commits omit `US-`, `Phase`, and task-range labels and use concise change summaries while legacy commits remain unchanged in `tests/regression/bash/test-ralph-loop.sh` and `tests/regression/powershell/Test-RalphLoop.ps1`
+- [x] T036 Reconcile the public commit-format contract and validation guide with the new conventional commit-summary behavior in `specs/003-ralph-commit-style/contracts/work-unit-commit-format.md` and `specs/003-ralph-commit-style/quickstart.md`
+- [x] T037 Run the targeted Bash and PowerShell regression selectors plus syntax checks for the reopened conventional commit-summary scenarios in `tests/regression/bash/test-ralph-loop.sh`, `tests/regression/powershell/Test-RalphLoop.ps1`, `scripts/bash/ralph-loop.sh`, and `scripts/powershell/ralph-loop.ps1`
 
 ---
 

@@ -1360,6 +1360,59 @@ assert_eq "no-issue-config on numeric-prefix branch omits suffix" \
 
 #endregion
 
+#region Tests: commit policy — Phase 8 conventional commit-summary quality scenarios (T035)
+
+section "commit policy — Phase 8 conventional commit-summary quality scenarios"
+
+# T035-1: conventional commit with explicit commit_summary omits planning labels
+CONFIG_COMMIT_STYLE="conventional" ; CONFIG_COMMIT_SCOPE="" ; CONFIG_COMMIT_ISSUE=""
+COMMIT_POLICY_STYLE="" ; COMMIT_POLICY_SCOPE="" ; COMMIT_POLICY_ISSUE=""
+resolve_commit_policy
+result=$(build_commit_subject "my-feature" "US-001 Keep existing behavior" "main" "preserve legacy commit behavior by default")
+assert_eq "conventional+summary: commit summary replaces planning title" \
+    "feat(ralph): preserve legacy commit behavior by default" "$result"
+
+# T035-2: conventional commit with commit_summary does not contain US- prefix
+result=$(build_commit_subject "my-feature" "US-003 Phase 2 Link commits to issue" "main" "add issue auto-link suffix to commit subject")
+assert_false "conventional+summary: US- label absent from subject" \
+    grep -q "US-" <<< "$result"
+
+# T035-3: conventional commit with commit_summary does not contain Phase label
+result=$(build_commit_subject "my-feature" "Phase 6 Polish & Validation" "main" "update readme and template for polish phase")
+assert_false "conventional+summary: Phase label absent from subject" \
+    grep -q "Phase " <<< "$result"
+
+# T035-4: legacy commit with planning labels is preserved exactly (US- must appear)
+CONFIG_COMMIT_STYLE="" ; CONFIG_COMMIT_SCOPE="" ; CONFIG_COMMIT_ISSUE=""
+COMMIT_POLICY_STYLE="" ; COMMIT_POLICY_SCOPE="" ; COMMIT_POLICY_ISSUE=""
+resolve_commit_policy
+result=$(build_commit_subject "my-feature" "US-001 Keep existing behavior" "main" "ignored summary")
+assert_eq "legacy: work-unit title preserved exactly (summary ignored)" \
+    "feat(my-feature): US-001 Keep existing behavior" "$result"
+
+# T035-5: legacy commit with Phase label is preserved exactly
+result=$(build_commit_subject "my-feature" "Phase 6 Polish" "main" "ignored summary")
+assert_eq "legacy: Phase label in title preserved exactly (summary ignored)" \
+    "feat(my-feature): Phase 6 Polish" "$result"
+
+# T035-6: conventional commit falls back to work_unit_title when no commit_summary given
+CONFIG_COMMIT_STYLE="conventional" ; CONFIG_COMMIT_SCOPE="" ; CONFIG_COMMIT_ISSUE=""
+COMMIT_POLICY_STYLE="" ; COMMIT_POLICY_SCOPE="" ; COMMIT_POLICY_ISSUE=""
+resolve_commit_policy
+result=$(build_commit_subject "my-feature" "US-002 Opt in to conventional commits" "main")
+assert_eq "conventional+no-summary: falls back to work-unit title" \
+    "feat(ralph): US-002 Opt in to conventional commits" "$result"
+
+# T035-7: conventional+explicit scope+commit_summary+issue:auto
+CONFIG_COMMIT_STYLE="conventional" ; CONFIG_COMMIT_SCOPE="myapp" ; CONFIG_COMMIT_ISSUE="auto"
+COMMIT_POLICY_STYLE="" ; COMMIT_POLICY_SCOPE="" ; COMMIT_POLICY_ISSUE=""
+resolve_commit_policy
+result=$(build_commit_subject "my-feature" "US-002 Phase 4 Add conventional commits" "069-ctx-list-filter" "add opt-in conventional commit formatting")
+assert_eq "conventional+scope+summary+issue: clean subject with scope, summary, and issue" \
+    "feat(myapp): add opt-in conventional commit formatting #69" "$result"
+
+#endregion
+
 #region Summary
 
 echo ""

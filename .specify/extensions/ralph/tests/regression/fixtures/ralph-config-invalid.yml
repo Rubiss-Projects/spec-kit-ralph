@@ -1,0 +1,6 @@
+# Test fixture: unsupported commit.style value (triggers preflight configuration error)
+model: "gpt-4o"
+max_iterations: 5
+agent_cli: "copilot"
+commit:
+  style: squash

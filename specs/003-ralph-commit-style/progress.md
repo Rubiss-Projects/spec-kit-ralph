@@ -215,3 +215,27 @@ Started: 2026-07-12 15:58:14
 - The missing design element is a separate conventional commit summary that reflects the actual completed change while leaving the work-unit title available for audit/progress reporting
 - Real-project output is the strongest acceptance test for this gap because the existing regression suite only validates formatting, not summary quality
 ---
+## Iteration 10 - 2026-07-12 21:29
+**Work Unit**: Phase 8 — Reopened: Conventional Commit Summary Quality (T033-T037)
+**Tasks Completed**:
+- [x] T033: Update `commands/iterate.md` — conventional subject uses `<commit summary>`, not raw work-unit title; legacy subject preserved exactly
+- [x] T034: Update `build_commit_subject` (Bash) and `Build-RalphCommitSubject` (PowerShell) with optional `commit_summary` parameter; conventional style uses it when provided, legacy always uses work-unit title
+- [x] T035: Add 7 mirrored Bash and 7 PowerShell regression scenarios proving planning labels absent from conventional subjects and legacy subjects byte-for-byte unchanged
+- [x] T036: Verified `contracts/work-unit-commit-format.md` and `quickstart.md` already reflect correct commit-summary semantics (updated in previous iteration)
+- [x] T037: Bash syntax OK, PS syntax OK, 204 Bash tests passed, 255 PowerShell tests passed, `git diff --check` clean
+**Tasks Remaining in Work Unit**: 0
+**Commit**: This work-unit commit
+**Files Changed**:
+- commands/iterate.md
+- scripts/bash/ralph-loop.sh
+- scripts/powershell/ralph-loop.ps1
+- tests/regression/bash/test-ralph-loop.sh
+- tests/regression/powershell/Test-RalphLoop.ps1
+- specs/003-ralph-commit-style/tasks.md
+- specs/003-ralph-commit-style/ralph-memory.md
+- specs/003-ralph-commit-style/progress.md
+**Learnings**:
+- `assert_true "..." ! grep ...` fails in Bash harness because `!` is a builtin; use `assert_false "..." grep ...` for negative assertions
+- PS1 test uses `Write-Section` (not `section`); always match the existing harness pattern when adding new sections
+- Optional 4th positional arg in Bash (`${4:-}`) cleanly supports the `commit_summary` without breaking existing 3-arg callers
+---

@@ -1529,6 +1529,43 @@ Assert-Equal "no-issue-config on numeric-prefix branch omits suffix" "feat(my-fe
 
 #endregion
 
+#region Tests: commit policy — Phase 8 conventional commit-summary quality scenarios (T035)
+
+Write-Section "commit policy — Phase 8 conventional commit-summary quality scenarios"
+
+# T035-1: conventional commit with CommitSummary omits planning labels
+$convPolicy = Resolve-RalphCommitPolicy -Config @{ "commit.style" = "conventional" }
+$result = Build-RalphCommitSubject -FeatureName "my-feature" -WorkUnitTitle "US-001 Keep existing behavior" -Branch "main" -Policy $convPolicy -CommitSummary "preserve legacy commit behavior by default"
+Assert-Equal "conventional+summary: commit summary replaces planning title" "feat(ralph): preserve legacy commit behavior by default" $result
+
+# T035-2: conventional commit with CommitSummary does not contain US- prefix
+$result = Build-RalphCommitSubject -FeatureName "my-feature" -WorkUnitTitle "US-003 Phase 2 Link commits to issue" -Branch "main" -Policy $convPolicy -CommitSummary "add issue auto-link suffix to commit subject"
+Assert-True "conventional+summary: US- label absent from subject" (-not ($result -match 'US-'))
+
+# T035-3: conventional commit with CommitSummary does not contain Phase label
+$result = Build-RalphCommitSubject -FeatureName "my-feature" -WorkUnitTitle "Phase 6 Polish & Validation" -Branch "main" -Policy $convPolicy -CommitSummary "update readme and template for polish phase"
+Assert-True "conventional+summary: Phase label absent from subject" (-not ($result -match 'Phase '))
+
+# T035-4: legacy commit with planning labels is preserved exactly (US- must appear)
+$legacyPolicy = Resolve-RalphCommitPolicy -Config @{}
+$result = Build-RalphCommitSubject -FeatureName "my-feature" -WorkUnitTitle "US-001 Keep existing behavior" -Branch "main" -Policy $legacyPolicy -CommitSummary "ignored summary"
+Assert-Equal "legacy: work-unit title preserved exactly (summary ignored)" "feat(my-feature): US-001 Keep existing behavior" $result
+
+# T035-5: legacy commit with Phase label is preserved exactly
+$result = Build-RalphCommitSubject -FeatureName "my-feature" -WorkUnitTitle "Phase 6 Polish" -Branch "main" -Policy $legacyPolicy -CommitSummary "ignored summary"
+Assert-Equal "legacy: Phase label in title preserved exactly (summary ignored)" "feat(my-feature): Phase 6 Polish" $result
+
+# T035-6: conventional commit falls back to WorkUnitTitle when no CommitSummary given
+$result = Build-RalphCommitSubject -FeatureName "my-feature" -WorkUnitTitle "US-002 Opt in to conventional commits" -Branch "main" -Policy $convPolicy
+Assert-Equal "conventional+no-summary: falls back to work-unit title" "feat(ralph): US-002 Opt in to conventional commits" $result
+
+# T035-7: conventional+explicit scope+CommitSummary+issue:auto
+$convScopeIssuePolicy = Resolve-RalphCommitPolicy -Config @{ "commit.style" = "conventional"; "commit.scope" = "myapp"; "commit.issue" = "auto" }
+$result = Build-RalphCommitSubject -FeatureName "my-feature" -WorkUnitTitle "US-002 Phase 4 Add conventional commits" -Branch "069-ctx-list-filter" -Policy $convScopeIssuePolicy -CommitSummary "add opt-in conventional commit formatting"
+Assert-Equal "conventional+scope+summary+issue: clean subject with scope, summary, and issue" "feat(myapp): add opt-in conventional commit formatting #69" $result
+
+#endregion
+
 #region Summary
 
 Write-Host ""

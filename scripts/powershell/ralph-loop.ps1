@@ -187,7 +187,8 @@ function Build-RalphCommitSubject {
         [string]$FeatureName,
         [string]$WorkUnitTitle,
         [string]$Branch,
-        [hashtable]$Policy
+        [hashtable]$Policy,
+        [string]$CommitSummary = ''
     )
 
     $issueSuffix = ''
@@ -200,7 +201,8 @@ function Build-RalphCommitSubject {
 
     if ($Policy.Style -eq 'conventional') {
         $scope = if ($Policy.Scope) { $Policy.Scope } else { 'ralph' }
-        return "feat($scope): $WorkUnitTitle$issueSuffix"
+        $payload = if ($CommitSummary) { $CommitSummary } else { $WorkUnitTitle }
+        return "feat($scope): $payload$issueSuffix"
     } else {
         return "feat($FeatureName): $WorkUnitTitle$issueSuffix"
     }
