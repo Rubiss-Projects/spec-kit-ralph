@@ -14,7 +14,7 @@ jobs:
     name: Bash regression tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Run bash tests
         run: bash tests/regression/bash/test-ralph-loop.sh
@@ -23,7 +23,7 @@ jobs:
     name: PowerShell regression tests
     runs-on: windows-2025
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Run PowerShell tests
         shell: pwsh
