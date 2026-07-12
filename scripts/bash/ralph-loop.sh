@@ -876,6 +876,17 @@ Follow the speckit.ralph.iterate command below exactly for this single iteration
 
 $command_text
 EOF
+
+    if [[ -n "${COMMIT_POLICY_STYLE:-}" ]]; then
+        cat << EOF
+## Resolved Commit Policy
+
+The Ralph orchestrator has pre-validated the commit configuration. Use this format when creating the work-unit commit:
+- Style: ${COMMIT_POLICY_STYLE}
+- Scope: ${COMMIT_POLICY_SCOPE:-ralph}
+- Issue: ${COMMIT_POLICY_ISSUE:-disabled}
+EOF
+    fi
 }
 
 invoke_copilot_iteration() {

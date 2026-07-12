@@ -50,14 +50,14 @@
 
 > Write these tests first and confirm the new cases fail before implementation.
 
-- [ ] T007 [P] [US1] Add Bash regression scenarios asserting the exact legacy subject `feat(<feature-name>): <work-unit title>` for no-config behavior and explicit `commit.style: legacy` in `tests/regression/bash/test-ralph-loop.sh`
-- [ ] T008 [P] [US1] Add equivalent PowerShell regression scenarios asserting the exact legacy subject `feat(<feature-name>): <work-unit title>` for no-config behavior and explicit `commit.style: legacy` in `tests/regression/powershell/Test-RalphLoop.ps1`
+- [x] T007 [P] [US1] Add Bash regression scenarios asserting the exact legacy subject `feat(<feature-name>): <work-unit title>` for no-config behavior and explicit `commit.style: legacy` in `tests/regression/bash/test-ralph-loop.sh`
+- [x] T008 [P] [US1] Add equivalent PowerShell regression scenarios asserting the exact legacy subject `feat(<feature-name>): <work-unit title>` for no-config behavior and explicit `commit.style: legacy` in `tests/regression/powershell/Test-RalphLoop.ps1`
 
 ### Implementation for User Story 1
 
-- [ ] T009 [US1] Wire the resolved legacy-default commit policy into completed work-unit commit creation in `scripts/bash/ralph-loop.sh`
-- [ ] T010 [US1] Wire the resolved legacy-default commit policy into completed work-unit commit creation in `scripts/powershell/ralph-loop.ps1`
-- [ ] T011 [US1] Run the US1 independent legacy/no-config parity scenarios in `tests/regression/bash/test-ralph-loop.sh` and `tests/regression/powershell/Test-RalphLoop.ps1`
+- [x] T009 [US1] Wire the resolved legacy-default commit policy into completed work-unit commit creation in `scripts/bash/ralph-loop.sh`
+- [x] T010 [US1] Wire the resolved legacy-default commit policy into completed work-unit commit creation in `scripts/powershell/ralph-loop.ps1`
+- [x] T011 [US1] Run the US1 independent legacy/no-config parity scenarios in `tests/regression/bash/test-ralph-loop.sh` and `tests/regression/powershell/Test-RalphLoop.ps1`
 
 **Checkpoint**: Existing projects keep their current commit history shape with or without explicit `legacy` style configuration.
 

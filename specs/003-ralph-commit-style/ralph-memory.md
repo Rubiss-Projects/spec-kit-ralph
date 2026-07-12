@@ -36,4 +36,4 @@ Started: 2026-07-12T13:58:14Z
 
 ## Current Handoff
 
-- Phase 2 foundational plumbing is complete (T004-T006). Next is Phase 3 (T007-T011): add Bash and PowerShell regression scenarios for US1 legacy/no-config behavior, wire the resolved policy into completed work-unit commits in both orchestrators, and run the US1 parity scenarios.
+- Phase 3 (US1, T007-T011) is complete. Next is Phase 4 (T012-T017): add Bash and PowerShell regression scenarios for US2 conventional/default-scope/invalid-style behavior, implement conventional subject formatting in both orchestrators, align public contract examples, and run the US2 parity scenarios.
