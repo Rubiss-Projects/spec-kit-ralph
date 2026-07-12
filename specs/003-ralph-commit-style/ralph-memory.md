@@ -21,11 +21,14 @@ Started: 2026-07-12T13:58:14Z
 
 - The existing `load_ralph_config` only handles top-level keys; nested YAML (`commit:\n  style: ...`) needs special handling — strip leading whitespace and track whether we are inside the `commit:` block
 - Do NOT introduce a YAML parser dependency; keep line-based parsing
+- `printf '%d'` treats `069` as octal — use `$((10#${BASH_REMATCH[1]}))` to force base-10 when stripping leading zeros from branch prefix numbers
+- PowerShell `Read-RalphConfig` uses `$inCommitBlock` state variable tracked within each config file; the `$inCommitBlock` variable must be declared inside the `ForEach-Object` outer scope to persist across iterations (use a script-level variable or pass via `[ref]`; inner ScriptBlock scope creates issues — use `$script:` prefix or inline the state in the outer `foreach` loop)
 
 ## Reusable Commands
 
 - Run bash regression tests: `bash tests/regression/bash/test-ralph-loop.sh`
 - Check bash syntax: `bash -n scripts/bash/ralph-loop.sh`
+- Validate PowerShell syntax: `pwsh -NoProfile -NonInteractive -Command "[System.Management.Automation.Language.Parser]::ParseFile(...)"`
 
 ## Do Not Repeat
 
@@ -33,4 +36,4 @@ Started: 2026-07-12T13:58:14Z
 
 ## Current Handoff
 
-- Phase 1 fixtures are complete (T001-T003). Next is Phase 2 (T004-T006): implement commit policy parsing helpers in `scripts/bash/ralph-loop.sh` and `scripts/powershell/ralph-loop.ps1`, and update `commands/iterate.md` with policy-aware commit instructions.
+- Phase 2 foundational plumbing is complete (T004-T006). Next is Phase 3 (T007-T011): add Bash and PowerShell regression scenarios for US1 legacy/no-config behavior, wire the resolved policy into completed work-unit commits in both orchestrators, and run the US1 parity scenarios.

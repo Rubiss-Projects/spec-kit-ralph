@@ -130,6 +130,10 @@ extract_functions() {
     sed -n '/^test_completion_signal()/,/^}/p' "$SOURCE_SCRIPT"
     # Extract load_ralph_config
     sed -n '/^load_ralph_config()/,/^}/p' "$SOURCE_SCRIPT"
+    # Extract commit policy helpers
+    sed -n '/^resolve_commit_policy()/,/^}/p' "$SOURCE_SCRIPT"
+    sed -n '/^infer_issue_number()/,/^}/p' "$SOURCE_SCRIPT"
+    sed -n '/^build_commit_subject()/,/^}/p' "$SOURCE_SCRIPT"
 }
 
 eval "$(extract_functions)"
@@ -717,6 +721,9 @@ cp "$FIXTURE_DIR/ralph-config-valid.yml" "$CONFIG_DIR/ralph-config.yml"
 CONFIG_MODEL=""
 CONFIG_MAX_ITERATIONS=""
 CONFIG_AGENT_CLI=""
+CONFIG_COMMIT_STYLE=""
+CONFIG_COMMIT_SCOPE=""
+CONFIG_COMMIT_ISSUE=""
 
 load_ralph_config "$TMP_REPO"
 
@@ -728,6 +735,9 @@ assert_eq "loads agent_cli from config" "my-custom-cli" "$CONFIG_AGENT_CLI"
 CONFIG_MODEL=""
 CONFIG_MAX_ITERATIONS=""
 CONFIG_AGENT_CLI=""
+CONFIG_COMMIT_STYLE=""
+CONFIG_COMMIT_SCOPE=""
+CONFIG_COMMIT_ISSUE=""
 
 load_ralph_config "/tmp/_ralph_test_no_config_$$"
 
@@ -744,6 +754,9 @@ LOCALCFG
 CONFIG_MODEL=""
 CONFIG_MAX_ITERATIONS=""
 CONFIG_AGENT_CLI=""
+CONFIG_COMMIT_STYLE=""
+CONFIG_COMMIT_SCOPE=""
+CONFIG_COMMIT_ISSUE=""
 
 load_ralph_config "$TMP_REPO"
 

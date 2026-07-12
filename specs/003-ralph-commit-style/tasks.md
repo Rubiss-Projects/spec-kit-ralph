@@ -32,9 +32,9 @@
 
 **⚠️ CRITICAL**: No user-story work should begin until this phase is complete.
 
-- [ ] T004 Implement commit policy parsing, default resolution, invalid-style validation, and branch-prefix issue inference helpers in `scripts/bash/ralph-loop.sh`
-- [ ] T005 [P] Implement parity commit policy parsing, default resolution, invalid-style validation, and branch-prefix issue inference helpers in `scripts/powershell/ralph-loop.ps1`
-- [ ] T006 Update policy-aware work-unit commit instructions, legacy-default behavior, and invalid-style stop conditions in `commands/iterate.md`
+- [x] T004 Implement commit policy parsing, default resolution, invalid-style validation, and branch-prefix issue inference helpers in `scripts/bash/ralph-loop.sh`
+- [x] T005 [P] Implement parity commit policy parsing, default resolution, invalid-style validation, and branch-prefix issue inference helpers in `scripts/powershell/ralph-loop.ps1`
+- [x] T006 Update policy-aware work-unit commit instructions, legacy-default behavior, and invalid-style stop conditions in `commands/iterate.md`
 
 **Checkpoint**: Both orchestrators can resolve one normalized commit policy before any completed work-unit commit is attempted.
 
