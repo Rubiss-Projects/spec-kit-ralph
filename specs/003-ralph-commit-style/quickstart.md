@@ -41,8 +41,9 @@ The two regression suites must exercise equivalent temporary-Git-repository scen
 |---|---|
 | No `commit` config | Ralph generates the legacy subject `feat(<feature-name>): <work-unit title>` exactly. |
 | `commit.style: legacy` | Ralph generates the same legacy subject as the no-config case. |
-| `commit.style: conventional` with explicit scope | Ralph generates a conventional subject using the configured scope. |
-| `commit.style: conventional` without scope | Ralph generates a conventional subject using the default scope `ralph`. |
+| `commit.style: conventional` with explicit scope | Ralph generates a conventional subject using the configured scope and a concise summary of the completed change. |
+| `commit.style: conventional` without scope | Ralph generates a conventional subject using the default scope `ralph` and a concise summary of the completed change. |
+| Conventional work-unit title contains `US-`, `Phase`, or task-range labels | Ralph omits those planning labels from the conventional commit subject payload. |
 | `commit.issue: auto` with numeric branch prefix | Ralph appends the matching `#<issue>` suffix. |
 | `commit.issue: auto` without numeric branch prefix | Ralph creates the commit successfully with no issue suffix. |
 | `commit.issue: auto` with legacy style | Ralph still appends the inferred issue suffix. |
@@ -62,7 +63,8 @@ grep -n 'issue: auto' README.md specs/003-ralph-commit-style/contracts/*.md
 Confirm:
 
 - the configuration example shows the new `commit` block (commented out as an example);
-- README explains the exact legacy default behavior (`feat(<feature-name>): <work-unit title>`), conventional scope configuration including the default scope `ralph` (`feat(ralph): <work-unit title>`), and issue auto-linking;
+- the configuration example shows the new `commit` block (commented out as an example);
+- README explains the exact legacy default behavior (`feat(<feature-name>): <work-unit title>`), conventional scope configuration including the default scope `ralph`, the cleaner conventional commit-summary behavior, and issue auto-linking;
 - the examples use a nested `commit:` block rather than flattened keys;
 - the documented examples match the public contract artifacts.
 
@@ -79,4 +81,4 @@ Then confirm the installed project config includes the documented commit setting
 
 ## Completion Evidence
 
-Validation is complete when both regression suites pass, no-config behavior remains unchanged, conventional/issue-auto scenarios match the documented contract, invalid-style and malformed-shape cases fail cleanly before commit creation, and installed-extension documentation remains consistent with the implementation.
+Validation is complete when both regression suites pass, no-config behavior remains unchanged, conventional/issue-auto scenarios match the documented contract, conventional subjects use cleaner change summaries rather than raw planning titles, invalid-style and malformed-shape cases fail cleanly before commit creation, and installed-extension documentation remains consistent with the implementation.

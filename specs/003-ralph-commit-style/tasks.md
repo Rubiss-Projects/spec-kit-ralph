@@ -4,7 +4,7 @@
 
 **Prerequisites**: [plan.md](plan.md), [spec.md](spec.md), [research.md](research.md), [data-model.md](data-model.md), [contracts/](contracts/), [quickstart.md](quickstart.md)
 
-**Tests**: Required by SC-001 through SC-007, the Script Gate, the Compatibility Gate, and the quickstart validation scenarios. Regression tasks appear before implementation tasks in each user-story phase.
+**Tests**: Required by SC-001 through SC-009, the Script Gate, the Compatibility Gate, and the quickstart validation scenarios. Regression tasks appear before implementation tasks in each user-story phase.
 
 **Organization**: Tasks are grouped by user story to preserve independent implementation and validation of default legacy behavior, opt-in conventional formatting, and optional issue auto-linking.
 
@@ -134,6 +134,18 @@
 
 ---
 
+## Phase 8: Reopened Work — Improve Conventional Commit Summary Quality
+
+**Purpose**: Preserve exact legacy subjects while making conventional commits describe the real completed change instead of echoing planning titles.
+
+- [ ] T033 Update the iterate contract so a completed work unit yields both a progress/audit title and a separate conventional commit summary in `commands/iterate.md`
+- [ ] T034 Implement Bash and PowerShell support for preserving the work-unit title while building conventional commit subjects from a dedicated commit summary in `scripts/bash/ralph-loop.sh` and `scripts/powershell/ralph-loop.ps1`
+- [ ] T035 Add mirrored Bash and PowerShell regression scenarios proving conventional commits omit `US-`, `Phase`, and task-range labels and use concise change summaries while legacy commits remain unchanged in `tests/regression/bash/test-ralph-loop.sh` and `tests/regression/powershell/Test-RalphLoop.ps1`
+- [ ] T036 Reconcile the public commit-format contract and validation guide with the new conventional commit-summary behavior in `specs/003-ralph-commit-style/contracts/work-unit-commit-format.md` and `specs/003-ralph-commit-style/quickstart.md`
+- [ ] T037 Run the targeted Bash and PowerShell regression selectors plus syntax checks for the reopened conventional commit-summary scenarios in `tests/regression/bash/test-ralph-loop.sh`, `tests/regression/powershell/Test-RalphLoop.ps1`, `scripts/bash/ralph-loop.sh`, and `scripts/powershell/ralph-loop.ps1`
+
+---
+
 ## Dependencies & Execution Order
 
 ### Phase Dependencies
@@ -145,6 +157,7 @@
 - **Phase 5 — US3**: Depends on Phase 2 and on the completion of US1 and US2 because it extends their resolved subject behavior.
 - **Phase 6 — Polish**: Depends on all selected user stories being complete.
 - **Phase 7 — Reopened Work**: Depends on Phase 6 and captures the post-review nested-config enforcement delta before declaring the feature complete again.
+- **Phase 8 — Reopened Work**: Depends on Phase 7 and captures the post-review conventional commit-summary quality delta before declaring the feature complete again.
 
 ### User Story Dependency Graph
 
@@ -156,6 +169,7 @@ Shared Config Fixtures (T001-T003)
               └─> US3 Issue Auto-Linking (T018-T023)
                     └─> Polish & Validation (T024-T027)
                           └─> Reopened Nested Config Enforcement (T028-T032)
+                                └─> Reopened Conventional Commit Summary Quality (T033-T037)
 ```
 
 ### User Story Independence
@@ -164,6 +178,7 @@ Shared Config Fixtures (T001-T003)
 - **US2 (P2)**: Independently testable after Phase 2 with conventional scope and invalid-style scenarios.
 - **US3 (P3)**: Independently testable after US1 and US2 are complete, using numeric-prefix and no-prefix branch scenarios on top of the established legacy and conventional subject behavior.
 - **Phase 7 reopened delta**: Independently testable after the original feature is complete by proving flattened keys are rejected and nested examples remain the only documented shape.
+- **Phase 8 reopened delta**: Independently testable after Phase 7 by proving conventional commits use cleaner change summaries while legacy subjects remain byte-for-byte unchanged.
 
 ### Within Each User Story
 
@@ -176,12 +191,13 @@ Shared Config Fixtures (T001-T003)
 
 | Requirement Set | Covered By |
 |---|---|
-| FR-001, FR-002, FR-012 legacy default preservation | T007-T011 |
+| FR-001, FR-002, FR-016 legacy default preservation | T007-T011 |
 | FR-003, FR-004, FR-005 nested config shape and supported style values | T004-T006, T024 |
 | FR-006, FR-011 conventional scope behavior and predictable conventional subject formatting | T004-T006, T012-T017 |
 | FR-007, FR-008, FR-009, FR-010 issue auto-linking and no-prefix fallback | T018-T023 |
-| FR-013 documentation and FR-014 parity | T024-T027, T031-T032 |
-| FR-015 invalid explicit style and invalid config shape handling | T028-T032 |
+| FR-012, FR-013, FR-014, FR-015 conventional commit-summary quality and audit separation | T033-T037 |
+| FR-017 documentation and FR-018 parity | T024-T027, T031-T032, T036-T037 |
+| FR-019 invalid explicit style and invalid config shape handling | T028-T032 |
 
 ## Parallel Opportunities
 
@@ -231,6 +247,15 @@ Parallel tests/docs:     T030 + T031 after T029
 Final join:              T032 after T030 and T031
 ```
 
+### Reopened Conventional Commit Summary Quality
+
+```text
+Contract first:          T033
+Parallel implementation: T034 (Bash + PowerShell coordinated change)
+Parallel tests/docs:     T035 + T036 after T034
+Final join:              T037 after T035 and T036
+```
+
 ## Implementation Strategy
 
 ### MVP First — User Story 1
@@ -248,6 +273,7 @@ Final join:              T032 after T030 and T031
 4. **US3**: Add optional issue auto-linking across both styles.
 5. **Polish**: Finalize docs, installed-extension behavior, and full regression coverage.
 6. **Reopened delta**: Enforce nested-only config validity and close the flattened-key gap.
+7. **Reopened delta**: Separate conventional commit summaries from planning titles and improve Git history readability.
 
 ### Parallel Team Strategy
 
@@ -264,3 +290,4 @@ With multiple developers:
 - Keep the legacy subject truly unchanged for no-config projects; new behavior must be opt-in except for explicit invalid-style failures.
 - Do not introduce new runtime dependencies for config parsing or issue inference.
 - Phase 7 exists because the refined spec now makes nested `commit:` shape enforcement normative; the current implementation parses nested config but does not yet clearly reject flattened keys across both platforms.
+- Phase 8 exists because configurable formatting alone is insufficient when conventional commits still reuse broad planning titles; the conventional payload must reflect the actual completed change while leaving legacy subjects unchanged.

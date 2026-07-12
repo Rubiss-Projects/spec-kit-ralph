@@ -73,7 +73,8 @@ Represents the final Ralph-created commit subject for a completed work unit.
 
 | Field | Type | Required | Rules |
 |---|---|---|---|
-| `work_unit_title` | string | yes | Derived from the completed work unit selected by Ralph. |
+| `work_unit_title` | string | yes | Derived from the completed work unit selected by Ralph and preserved for audit/progress logging. |
+| `commit_summary` | string | conditional | Required for conventional style. Describes the actual completed change in concise commit-friendly phrasing rather than copying the work-unit title verbatim. |
 | `style` | enum | yes | Comes from Resolved Commit Policy. |
 | `scope_segment` | string | conditional | Present only for conventional style. |
 | `issue_suffix` | string | conditional | Present only when issue auto-linking is enabled and inference succeeds. |
@@ -82,7 +83,9 @@ Represents the final Ralph-created commit subject for a completed work unit.
 ### Generation Rules
 
 - Legacy style preserves the subject format `feat(<feature-name>): <work-unit title>`.
-- Conventional style emits a conventional-commit subject using the resolved scope and work-unit title, with `ralph` as the default scope when none is configured.
+- Conventional style emits a conventional-commit subject using the resolved scope and `commit_summary`, with `ralph` as the default scope when none is configured.
+- Conventional `commit_summary` omits planning labels such as user-story identifiers, phase names, and task-range annotations.
+- Conventional `commit_summary` uses concise commit-friendly phrasing while preserving meaningful technical terms.
 - The issue suffix, when present, is appended to both styles.
 - No generated subject may be used when the resolved policy is invalid.
 
@@ -91,4 +94,4 @@ Represents the final Ralph-created commit subject for a completed work unit.
 - One active project configuration resolves to one Resolved Commit Policy per Ralph run.
 - One Commit Configuration object is keyed by `commit` and owns the `style`, `scope`, and `issue` properties together.
 - One current branch may produce zero or one Branch Issue Reference.
-- One completed work unit produces one Generated Commit Subject using the resolved policy and any inferred issue suffix.
+- One completed work unit produces one Generated Commit Subject using the resolved policy, the preserved audit title, the conventional commit summary when applicable, and any inferred issue suffix.

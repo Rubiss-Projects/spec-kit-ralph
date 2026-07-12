@@ -194,3 +194,24 @@ Started: 2026-07-12 15:58:14
 - PowerShell regex `^commit\.\w+\s*:` detects flattened dot-notation keys before the normal `^(\w+)\s*:` patterns
 - `assert_true` in the Bash harness wraps `"$@"` — `[[ ... ]]` must become `test` for compound-comparison assertions
 ---
+## Iteration 9 - 2026-07-12 21:22
+**Work Unit**: Reopen feature for conventional commit-summary quality rerun (T033-T037)
+**Tasks Completed**:
+- [x] Reassessed the implemented feature against real-project output and identified that conventional commits still reuse planning titles instead of cleaner change summaries
+- [x] Reopened execution state for a follow-up Ralph pass focused on commit-subject quality
+**Tasks Remaining in Work Unit**: 5
+**Commit**: No commit - no completed work unit
+**Files Changed**:
+- specs/003-ralph-commit-style/spec.md
+- specs/003-ralph-commit-style/plan.md
+- specs/003-ralph-commit-style/data-model.md
+- specs/003-ralph-commit-style/contracts/work-unit-commit-format.md
+- specs/003-ralph-commit-style/quickstart.md
+- specs/003-ralph-commit-style/tasks.md
+- specs/003-ralph-commit-style/ralph-memory.md
+- specs/003-ralph-commit-style/progress.md
+**Learnings**:
+- Configurable `feat(<scope>): ...` formatting alone does not improve history readability when the payload still mirrors broad work-unit headings
+- The missing design element is a separate conventional commit summary that reflects the actual completed change while leaving the work-unit title available for audit/progress reporting
+- Real-project output is the strongest acceptance test for this gap because the existing regression suite only validates formatting, not summary quality
+---

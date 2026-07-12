@@ -13,7 +13,7 @@ Started: 2026-07-12T13:58:14Z
 ## Decisions
 
 - Legacy format: `feat(<feature-name>): <work-unit title>` — preserved unchanged when no `commit` block is present
-- Conventional format: `feat(<scope>): <work-unit title>` with default scope `ralph`
+- Target conventional format: `feat(<scope>): <commit summary>` with default scope `ralph`, while preserving the work-unit title separately for audit/progress
 - Issue suffix: ` #<N>` appended when `issue: auto` and branch starts with numeric prefix (e.g. `069-...` → `#69`)
 - Unsupported `commit.style` is a preflight error; no commit is created
 
@@ -36,4 +36,12 @@ Started: 2026-07-12T13:58:14Z
 
 ## Current Handoff
 
-- Feature complete; no handoff required.
+- Reopened after validating the nested `commit:` enforcement work in a real project and seeing that conventional commits still echo planning titles such as `US3 ...` or `Phase 6 ...`.
+- Current gap: configurable formatting works, but conventional commits still use the raw work-unit title as the subject payload; that does not produce cleaner Git history than the legacy format.
+- Reopen tasks T033-T037 cover the remaining work:
+  - update the iterate contract so work-unit title and commit summary are separate outputs;
+  - preserve the work-unit title for progress/audit while using a dedicated conventional commit summary for Git commits;
+  - add mirrored Bash/PowerShell regressions proving `US-`, `Phase`, and task-range labels do not leak into conventional subjects;
+  - reconcile the public commit-format contract and quickstart guidance;
+  - rerun the targeted regression and syntax checks.
+- Legacy subjects must remain byte-for-byte unchanged when no `commit` block is present or when `style: legacy` is selected.
