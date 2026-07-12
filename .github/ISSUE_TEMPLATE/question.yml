@@ -1,6 +1,5 @@
 name: Question or support request
 description: Ask about setup, configuration, or expected Ralph Loop behavior
-title: "question: "
 labels:
   - question
 body:

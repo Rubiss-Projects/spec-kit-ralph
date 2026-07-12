@@ -1,6 +1,6 @@
 name: Documentation issue
 description: Report missing, incorrect, or unclear documentation
-title: "docs: "
+type: Task
 labels:
   - documentation
 body:
