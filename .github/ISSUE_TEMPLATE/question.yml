@@ -1,0 +1,55 @@
+name: Question or support request
+description: Ask about setup, configuration, or expected Ralph Loop behavior
+title: "question: "
+labels:
+  - question
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please check the README and existing issues first. Never include API keys, authentication tokens, or other credentials.
+
+  - type: textarea
+    id: goal
+    attributes:
+      label: What are you trying to do?
+      description: Describe your goal and where you are stuck.
+    validations:
+      required: true
+
+  - type: textarea
+    id: attempted
+    attributes:
+      label: What have you tried?
+      description: Include commands, relevant configuration, results, and documentation you already consulted.
+    validations:
+      required: true
+
+  - type: input
+    id: versions
+    attributes:
+      label: Ralph Loop, Spec Kit, and agent CLI versions
+      placeholder: Ralph v1.3.0; Spec Kit 0.x; Copilot/Codex/Claude x.y
+
+  - type: input
+    id: environment
+    attributes:
+      label: Operating system and shell
+      placeholder: Windows 11 / PowerShell 7.5
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Add sanitized logs, screenshots, or links to related issues.
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Submission checklist
+      options:
+        - label: I checked the README and searched existing issues.
+          required: true
+        - label: I removed credentials, tokens, and private data.
+          required: true
+

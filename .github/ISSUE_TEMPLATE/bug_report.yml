@@ -1,0 +1,122 @@
+name: Bug report
+description: Report reproducible behavior that is not working as expected
+title: "bug: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve Ralph Loop. Please remove secrets, tokens, and private repository content from logs before submitting.
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: What happened?
+      description: Describe the failure and its impact in a few sentences.
+      placeholder: Ralph stopped after opening a terminal, but no iteration process started.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Include the command you ran and the smallest sequence that reliably triggers the problem.
+      placeholder: |
+        1. Initialize a Spec Kit project and create tasks.md.
+        2. Configure agent_cli: copilot.
+        3. Run /speckit.ralph.run.
+        4. Observe ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior and logs
+      description: Paste relevant terminal output, exit codes, stack traces, or screenshots. Use a code block for text and redact secrets.
+    validations:
+      required: true
+
+  - type: input
+    id: ralph-version
+    attributes:
+      label: Ralph Loop version, commit, or installation source
+      description: If you cannot determine it, enter "Unknown" and say how Ralph was installed.
+      placeholder: v1.3.0, a commit SHA, marketplace install, or Unknown
+    validations:
+      required: true
+
+  - type: input
+    id: speckit-version
+    attributes:
+      label: Spec Kit version
+      description: Run `specify --version` when available; otherwise enter "Unknown".
+      placeholder: specify --version output or Unknown
+    validations:
+      required: true
+
+  - type: dropdown
+    id: agent-cli
+    attributes:
+      label: Agent CLI
+      options:
+        - GitHub Copilot CLI
+        - OpenAI Codex CLI
+        - Claude Code
+        - Other or not applicable
+    validations:
+      required: true
+
+  - type: input
+    id: agent-details
+    attributes:
+      label: Agent CLI name, version, and model
+      description: Required. If you selected Other, name the CLI. Enter "N/A" only when no agent CLI was involved.
+      placeholder: opencode x.y.z, provider/model-name
+    validations:
+      required: true
+
+  - type: input
+    id: environment
+    attributes:
+      label: Operating system and shell
+      placeholder: Windows 11 / PowerShell 7.5, macOS 15 / Bash 3.2, Ubuntu 24.04 / Bash 5.2
+    validations:
+      required: true
+
+  - type: dropdown
+    id: invocation
+    attributes:
+      label: How was Ralph started?
+      options:
+        - Agent command (/speckit.ralph.run)
+        - Bash orchestrator script
+        - PowerShell orchestrator script
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Add relevant configuration (without credentials), repository state, workarounds, or related issues.
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Submission checklist
+      options:
+        - label: I searched existing issues for the same problem.
+          required: true
+        - label: I removed credentials, tokens, and private data from this report.
+          required: true

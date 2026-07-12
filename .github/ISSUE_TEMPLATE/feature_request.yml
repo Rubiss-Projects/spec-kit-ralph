@@ -1,0 +1,84 @@
+name: Feature request
+description: Propose an improvement or new capability for Ralph Loop
+title: "feat: "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Strong proposals start with the user problem and describe observable success. An implementation design is welcome, but not required.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or opportunity
+      description: Who is affected, what are they trying to do, and why is the current behavior insufficient?
+    validations:
+      required: true
+
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Desired outcome
+      description: Describe the behavior you want from a user's perspective.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed approach
+      description: Optional. Include configuration, command, file-contract, or workflow examples if useful.
+
+  - type: checkboxes
+    id: surfaces
+    attributes:
+      label: Affected areas
+      description: Select every area you expect this change to touch.
+      options:
+        - label: Bash orchestrator (macOS/Linux)
+        - label: PowerShell orchestrator (Windows)
+        - label: Agent command or prompt contract
+        - label: Agent CLI integration (Copilot, Codex, Claude, or another CLI)
+        - label: Configuration or extension manifest
+        - label: Memory, progress, tasks, or Git lifecycle
+        - label: Documentation
+        - label: Not sure
+
+  - type: textarea
+    id: compatibility
+    attributes:
+      label: Compatibility and migration
+      description: Note expected defaults, backward-compatibility needs, cross-platform behavior, or breaking changes. Write "None known" if not applicable.
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: List concrete, testable conditions that would make this feature complete.
+      placeholder: |
+        - Existing configurations continue to work unchanged.
+        - Bash and PowerShell produce equivalent results.
+        - Regression coverage exercises the new behavior.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives and workarounds
+      description: What do users do today, and what other approaches did you consider?
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Submission checklist
+      options:
+        - label: I searched existing issues for related requests.
+          required: true
+        - label: This request describes one focused capability or outcome.
+          required: true
+
