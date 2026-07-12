@@ -1,8 +1,6 @@
 name: Feature request
 description: Propose an improvement or new capability for Ralph Loop
-title: "feat: "
-labels:
-  - enhancement
+type: Feature
 body:
   - type: markdown
     attributes:
