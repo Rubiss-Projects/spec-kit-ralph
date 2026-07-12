@@ -73,15 +73,15 @@
 
 > Write these tests first and confirm the new cases fail before implementation.
 
-- [ ] T012 [P] [US2] Add Bash regression scenarios for explicit-scope conventional commits, default-scope `feat(ralph): ...` conventional commits, and unsupported explicit styles in `tests/regression/bash/test-ralph-loop.sh`
-- [ ] T013 [P] [US2] Add equivalent PowerShell regression scenarios for explicit-scope conventional commits, default-scope `feat(ralph): ...` conventional commits, and unsupported explicit styles in `tests/regression/powershell/Test-RalphLoop.ps1`
+- [x] T012 [P] [US2] Add Bash regression scenarios for explicit-scope conventional commits, default-scope `feat(ralph): ...` conventional commits, and unsupported explicit styles in `tests/regression/bash/test-ralph-loop.sh`
+- [x] T013 [P] [US2] Add equivalent PowerShell regression scenarios for explicit-scope conventional commits, default-scope `feat(ralph): ...` conventional commits, and unsupported explicit styles in `tests/regression/powershell/Test-RalphLoop.ps1`
 
 ### Implementation for User Story 2
 
-- [ ] T014 [US2] Implement conventional subject formatting and default-scope `ralph` handling in `scripts/bash/ralph-loop.sh`
-- [ ] T015 [US2] Implement parity conventional subject formatting and default-scope `ralph` handling in `scripts/powershell/ralph-loop.ps1`
-- [ ] T016 [US2] Align the public conventional commit contract examples in `commands/iterate.md` and `specs/003-ralph-commit-style/contracts/work-unit-commit-format.md`
-- [ ] T017 [US2] Run the US2 conventional/default-scope/invalid-style scenarios in `tests/regression/bash/test-ralph-loop.sh` and `tests/regression/powershell/Test-RalphLoop.ps1`
+- [x] T014 [US2] Implement conventional subject formatting and default-scope `ralph` handling in `scripts/bash/ralph-loop.sh`
+- [x] T015 [US2] Implement parity conventional subject formatting and default-scope `ralph` handling in `scripts/powershell/ralph-loop.ps1`
+- [x] T016 [US2] Align the public conventional commit contract examples in `commands/iterate.md` and `specs/003-ralph-commit-style/contracts/work-unit-commit-format.md`
+- [x] T017 [US2] Run the US2 conventional/default-scope/invalid-style scenarios in `tests/regression/bash/test-ralph-loop.sh` and `tests/regression/powershell/Test-RalphLoop.ps1`
 
 **Checkpoint**: Opt-in conventional commit generation works consistently across both platforms and invalid explicit styles fail fast before commit creation.
 

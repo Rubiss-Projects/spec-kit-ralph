@@ -1146,6 +1146,90 @@ assert_true "prompt includes legacy style in policy section" \
 
 #endregion
 
+#region Tests: commit policy — US2 conventional, default-scope, and invalid-style scenarios (T012)
+
+section "commit policy — US2 conventional, default-scope, and invalid-style scenarios"
+
+# T012-1: explicit-scope conventional commit subject matches exact contract format
+CONFIG_COMMIT_STYLE="conventional" ; CONFIG_COMMIT_SCOPE="myapp" ; CONFIG_COMMIT_ISSUE=""
+COMMIT_POLICY_STYLE="" ; COMMIT_POLICY_SCOPE="" ; COMMIT_POLICY_ISSUE=""
+resolve_commit_policy
+result=$(build_commit_subject "my-feature" "US-002 Opt in to conventional commits" "069-ctx-list-filter")
+assert_eq "explicit-scope conventional subject matches exact format" \
+    "feat(myapp): US-002 Opt in to conventional commits" "$result"
+
+# T012-2: default-scope conventional commit produces feat(ralph): ... when no scope configured
+CONFIG_COMMIT_STYLE="conventional" ; CONFIG_COMMIT_SCOPE="" ; CONFIG_COMMIT_ISSUE=""
+COMMIT_POLICY_STYLE="" ; COMMIT_POLICY_SCOPE="" ; COMMIT_POLICY_ISSUE=""
+resolve_commit_policy
+result=$(build_commit_subject "my-feature" "US-002 Opt in to conventional commits" "main")
+assert_eq "default-scope conventional subject uses ralph scope" \
+    "feat(ralph): US-002 Opt in to conventional commits" "$result"
+
+# T012-3: resolve_commit_policy fails for unsupported explicit style
+CONFIG_COMMIT_STYLE="squash" ; CONFIG_COMMIT_SCOPE="" ; CONFIG_COMMIT_ISSUE=""
+COMMIT_POLICY_STYLE="" ; COMMIT_POLICY_SCOPE="" ; COMMIT_POLICY_ISSUE=""
+assert_false "unsupported explicit style causes resolve failure" resolve_commit_policy
+CONFIG_COMMIT_STYLE="" ; CONFIG_COMMIT_SCOPE="" ; CONFIG_COMMIT_ISSUE=""
+COMMIT_POLICY_STYLE="" ; COMMIT_POLICY_SCOPE="" ; COMMIT_POLICY_ISSUE=""
+
+# T012-4: invalid-style preflight error is reported to stderr
+CONFIG_COMMIT_STYLE="squash" ; CONFIG_COMMIT_SCOPE="" ; CONFIG_COMMIT_ISSUE=""
+COMMIT_POLICY_STYLE="" ; COMMIT_POLICY_SCOPE="" ; COMMIT_POLICY_ISSUE=""
+set +e
+err_output=$(resolve_commit_policy 2>&1)
+set -e
+CONFIG_COMMIT_STYLE="" ; CONFIG_COMMIT_SCOPE="" ; CONFIG_COMMIT_ISSUE=""
+COMMIT_POLICY_STYLE="" ; COMMIT_POLICY_SCOPE="" ; COMMIT_POLICY_ISSUE=""
+assert_true "unsupported style reports commit-policy-invalid to stderr" \
+    grep -q "commit-policy-invalid" <<< "$err_output"
+
+# T012-5: load conventional config fixture sets commit style and scope
+TMP_CONV_REPO=$(mktemp -d)
+mkdir -p "$TMP_CONV_REPO/.specify/extensions/ralph"
+cp "$FIXTURE_DIR/ralph-config-conventional.yml" "$TMP_CONV_REPO/.specify/extensions/ralph/ralph-config.yml"
+CONFIG_COMMIT_STYLE="" ; CONFIG_COMMIT_SCOPE="" ; CONFIG_COMMIT_ISSUE=""
+load_ralph_config "$TMP_CONV_REPO"
+assert_eq "conventional fixture sets commit style" "conventional" "$CONFIG_COMMIT_STYLE"
+assert_eq "conventional fixture sets commit scope" "myapp" "$CONFIG_COMMIT_SCOPE"
+rm -rf "$TMP_CONV_REPO"
+CONFIG_COMMIT_STYLE="" ; CONFIG_COMMIT_SCOPE="" ; CONFIG_COMMIT_ISSUE=""
+
+# T012-6: load invalid-style config fixture sets unsupported style value
+TMP_INVALID_REPO=$(mktemp -d)
+mkdir -p "$TMP_INVALID_REPO/.specify/extensions/ralph"
+cp "$FIXTURE_DIR/ralph-config-invalid.yml" "$TMP_INVALID_REPO/.specify/extensions/ralph/ralph-config.yml"
+CONFIG_COMMIT_STYLE="" ; CONFIG_COMMIT_SCOPE="" ; CONFIG_COMMIT_ISSUE=""
+load_ralph_config "$TMP_INVALID_REPO"
+assert_eq "invalid fixture sets unsupported commit style" "squash" "$CONFIG_COMMIT_STYLE"
+rm -rf "$TMP_INVALID_REPO"
+CONFIG_COMMIT_STYLE="" ; CONFIG_COMMIT_SCOPE="" ; CONFIG_COMMIT_ISSUE=""
+
+# T012-7: ralph-loop exits non-zero with commit-policy-invalid when invalid style config is present
+TMP_INVALID_LOOP=$(mktemp -d)
+TMP_INVALID_SPEC="$TMP_INVALID_LOOP/specs/test-feature"
+mkdir -p "$TMP_INVALID_SPEC" "$TMP_INVALID_LOOP/.specify/extensions/ralph"
+cp "$FIXTURE_DIR/ralph-config-invalid.yml" "$TMP_INVALID_LOOP/.specify/extensions/ralph/ralph-config.yml"
+printf '%s\n' '- [ ] T001 Work to do' > "$TMP_INVALID_SPEC/tasks.md"
+git -C "$TMP_INVALID_LOOP" init -q
+git -C "$TMP_INVALID_LOOP" config user.name "Ralph Test"
+git -C "$TMP_INVALID_LOOP" config user.email "ralph@example.test"
+set +e
+invalid_output=$(cd "$TMP_INVALID_LOOP" && bash "$SOURCE_SCRIPT" \
+    --feature-name "test-feature" \
+    --tasks-path "$TMP_INVALID_SPEC/tasks.md" \
+    --spec-dir "$TMP_INVALID_SPEC" \
+    --max-iterations 1 \
+    --model "fake-model" 2>&1)
+invalid_exit=$?
+set -e
+assert_eq "invalid style config causes non-zero exit" "1" "$invalid_exit"
+assert_true "invalid style config reports commit-policy-invalid" \
+    grep -q "commit-policy-invalid" <<< "$invalid_output"
+rm -rf "$TMP_INVALID_LOOP"
+
+#endregion
+
 #region Summary
 
 echo ""

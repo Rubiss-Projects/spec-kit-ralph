@@ -1390,6 +1390,58 @@ Assert-True "prompt includes legacy style in policy section" ($policyPrompt -mat
 
 #endregion
 
+#region Tests: commit policy — US2 conventional, default-scope, and invalid-style scenarios (T013)
+
+Write-Section "commit policy — US2 conventional, default-scope, and invalid-style scenarios"
+
+# T013-1: explicit-scope conventional commit subject matches exact contract format
+$convScopePolicy = Resolve-RalphCommitPolicy -Config @{ "commit.style" = "conventional"; "commit.scope" = "myapp" }
+$result = Build-RalphCommitSubject -FeatureName "my-feature" -WorkUnitTitle "US-002 Opt in to conventional commits" -Branch "069-ctx-list-filter" -Policy $convScopePolicy
+Assert-Equal "explicit-scope conventional subject matches exact format" "feat(myapp): US-002 Opt in to conventional commits" $result
+
+# T013-2: default-scope conventional commit produces feat(ralph): ... when no scope configured
+$convDefaultPolicy = Resolve-RalphCommitPolicy -Config @{ "commit.style" = "conventional" }
+$result = Build-RalphCommitSubject -FeatureName "my-feature" -WorkUnitTitle "US-002 Opt in to conventional commits" -Branch "main" -Policy $convDefaultPolicy
+Assert-Equal "default-scope conventional subject uses ralph scope" "feat(ralph): US-002 Opt in to conventional commits" $result
+
+# T013-3: resolve fails for unsupported explicit style
+$unsupportedConfig = @{ "commit.style" = "squash" }
+$invalidPolicy = $null
+try {
+    $invalidPolicy = Resolve-RalphCommitPolicy -Config $unsupportedConfig
+} catch { }
+Assert-True "unsupported explicit style returns null policy" ($null -eq $invalidPolicy)
+
+# T013-4: unsupported style reports commit-policy-invalid error
+$invalidErrorMsg = $null
+try {
+    Resolve-RalphCommitPolicy -Config @{ "commit.style" = "squash" } | Out-Null
+} catch {
+    $invalidErrorMsg = $_.Exception.Message
+}
+Assert-True "unsupported style reports commit-policy-invalid" ($null -ne $invalidErrorMsg -and $invalidErrorMsg -match "commit-policy-invalid")
+
+# T013-5: load conventional config fixture sets commit style and scope
+$tmpConvRepo = Join-Path ([System.IO.Path]::GetTempPath()) "ralph-conv-$PID"
+$tmpConvConfigDir = Join-Path $tmpConvRepo ".specify\extensions\ralph"
+New-Item -ItemType Directory -Path $tmpConvConfigDir -Force | Out-Null
+Copy-Item (Join-Path $FixtureDir "ralph-config-conventional.yml") (Join-Path $tmpConvConfigDir "ralph-config.yml")
+$convRepoConfig = Read-RalphConfig -RepoRoot $tmpConvRepo
+Assert-Equal "conventional fixture sets commit style" "conventional" $convRepoConfig["commit.style"]
+Assert-Equal "conventional fixture sets commit scope" "myapp" $convRepoConfig["commit.scope"]
+Remove-Item $tmpConvRepo -Recurse -Force
+
+# T013-6: load invalid-style config fixture sets unsupported style value
+$tmpInvalidRepo = Join-Path ([System.IO.Path]::GetTempPath()) "ralph-invalid-$PID"
+$tmpInvalidConfigDir = Join-Path $tmpInvalidRepo ".specify\extensions\ralph"
+New-Item -ItemType Directory -Path $tmpInvalidConfigDir -Force | Out-Null
+Copy-Item (Join-Path $FixtureDir "ralph-config-invalid.yml") (Join-Path $tmpInvalidConfigDir "ralph-config.yml")
+$invalidRepoConfig = Read-RalphConfig -RepoRoot $tmpInvalidRepo
+Assert-Equal "invalid fixture sets unsupported commit style" "squash" $invalidRepoConfig["commit.style"]
+Remove-Item $tmpInvalidRepo -Recurse -Force
+
+#endregion
+
 #region Summary
 
 Write-Host ""

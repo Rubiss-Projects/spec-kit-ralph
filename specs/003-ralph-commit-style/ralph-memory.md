@@ -36,4 +36,4 @@ Started: 2026-07-12T13:58:14Z
 
 ## Current Handoff
 
-- Phase 3 (US1, T007-T011) is complete. Next is Phase 4 (T012-T017): add Bash and PowerShell regression scenarios for US2 conventional/default-scope/invalid-style behavior, implement conventional subject formatting in both orchestrators, align public contract examples, and run the US2 parity scenarios.
+- Phase 4 (US2, T012-T017) is complete. Next is Phase 5 (T018-T023): add Bash and PowerShell regression scenarios for US3 issue auto-linking (numeric-prefix inference, no-prefix fallback, legacy+issue-auto), implement conditional issue-suffix appending in both orchestrators (already scaffolded in `build_commit_subject`/`Build-RalphCommitSubject`), align public config and issue-linking contracts, and run the US3 parity scenarios.
