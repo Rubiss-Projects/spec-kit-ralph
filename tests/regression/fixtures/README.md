@@ -23,9 +23,17 @@ and `commit.issue: auto` enabled. Used by US2 and US3 regression scenarios to
 verify conventional subject formatting and issue auto-linking.
 
 ## ralph-config-invalid.yml
-A config fixture with an unsupported `commit.style` value (`squash`). Used by
-US2 regression scenarios to verify that Ralph stops with a clear configuration
-error before creating any commit when an unsupported style is present.
+A config fixture with an unsupported `commit.style` value (`squash`) inside a
+nested `commit:` block. Used by US2 regression scenarios to verify that Ralph
+stops with a clear configuration error before creating any commit when an
+unsupported style is present.
+
+## ralph-config-invalid-flat.yml
+A config fixture with flattened commit-policy keys (`commit.style`,
+`commit.scope`, `commit.issue`) written as top-level dot-separated keys instead
+of under a nested `commit:` block. Used by Phase 7 regression scenarios to
+verify that Ralph rejects this invalid config shape with a clear error and
+creates no commit.
 
 ## ralph-memory-valid-active.md
 A canonical active memory file with a nonterminal handoff.

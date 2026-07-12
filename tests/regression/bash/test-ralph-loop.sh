@@ -1230,6 +1230,68 @@ rm -rf "$TMP_INVALID_LOOP"
 
 #endregion
 
+#region Tests: commit policy — Phase 7 flattened config rejection scenarios (T030)
+
+section "commit policy — Phase 7 flattened config rejection scenarios"
+
+# T030-1: load_ralph_config sets CONFIG_COMMIT_FLATTENED when flat commit.style key is present
+TMP_FLAT_REPO=$(mktemp -d)
+mkdir -p "$TMP_FLAT_REPO/.specify/extensions/ralph"
+cp "$FIXTURE_DIR/ralph-config-invalid-flat.yml" "$TMP_FLAT_REPO/.specify/extensions/ralph/ralph-config.yml"
+CONFIG_COMMIT_STYLE="" ; CONFIG_COMMIT_SCOPE="" ; CONFIG_COMMIT_ISSUE="" ; CONFIG_COMMIT_FLATTENED=false
+load_ralph_config "$TMP_FLAT_REPO"
+assert_true "flattened config fixture sets CONFIG_COMMIT_FLATTENED=true" \
+    test "$CONFIG_COMMIT_FLATTENED" = "true"
+rm -rf "$TMP_FLAT_REPO"
+CONFIG_COMMIT_STYLE="" ; CONFIG_COMMIT_SCOPE="" ; CONFIG_COMMIT_ISSUE="" ; CONFIG_COMMIT_FLATTENED=false
+
+# T030-2: resolve_commit_policy fails when CONFIG_COMMIT_FLATTENED is true
+CONFIG_COMMIT_STYLE="" ; CONFIG_COMMIT_SCOPE="" ; CONFIG_COMMIT_ISSUE="" ; CONFIG_COMMIT_FLATTENED=true
+assert_false "flattened config causes resolve_commit_policy to fail" resolve_commit_policy
+CONFIG_COMMIT_STYLE="" ; CONFIG_COMMIT_SCOPE="" ; CONFIG_COMMIT_ISSUE="" ; CONFIG_COMMIT_FLATTENED=false
+
+# T030-3: resolve_commit_policy reports commit-policy-invalid to stderr for flattened config
+CONFIG_COMMIT_STYLE="" ; CONFIG_COMMIT_SCOPE="" ; CONFIG_COMMIT_ISSUE="" ; CONFIG_COMMIT_FLATTENED=true
+set +e
+flat_err_output=$(resolve_commit_policy 2>&1)
+set -e
+CONFIG_COMMIT_STYLE="" ; CONFIG_COMMIT_SCOPE="" ; CONFIG_COMMIT_ISSUE="" ; CONFIG_COMMIT_FLATTENED=false
+assert_true "flattened config reports commit-policy-invalid to stderr" \
+    grep -q "commit-policy-invalid" <<< "$flat_err_output"
+
+# T030-4: ralph-loop exits non-zero with commit-policy-invalid when flattened config is present
+TMP_FLAT_LOOP=$(mktemp -d)
+TMP_FLAT_SPEC="$TMP_FLAT_LOOP/specs/test-feature"
+mkdir -p "$TMP_FLAT_SPEC" "$TMP_FLAT_LOOP/.specify/extensions/ralph"
+cp "$FIXTURE_DIR/ralph-config-invalid-flat.yml" "$TMP_FLAT_LOOP/.specify/extensions/ralph/ralph-config.yml"
+printf '%s\n' '- [ ] T001 Work to do' > "$TMP_FLAT_SPEC/tasks.md"
+git -C "$TMP_FLAT_LOOP" init -q
+git -C "$TMP_FLAT_LOOP" config user.name "Ralph Test"
+git -C "$TMP_FLAT_LOOP" config user.email "ralph@example.test"
+set +e
+flat_loop_output=$(cd "$TMP_FLAT_LOOP" && bash "$SOURCE_SCRIPT" \
+    --feature-name "test-feature" \
+    --tasks-path "$TMP_FLAT_SPEC/tasks.md" \
+    --spec-dir "$TMP_FLAT_SPEC" \
+    --max-iterations 1 \
+    --model "fake-model" 2>&1)
+flat_loop_exit=$?
+set -e
+assert_eq "flattened config causes non-zero exit" "1" "$flat_loop_exit"
+assert_true "flattened config reports commit-policy-invalid" \
+    grep -q "commit-policy-invalid" <<< "$flat_loop_output"
+rm -rf "$TMP_FLAT_LOOP"
+
+# T030-5: valid nested commit: block still works correctly after flattened detection logic
+CONFIG_COMMIT_STYLE="conventional" ; CONFIG_COMMIT_SCOPE="myapp" ; CONFIG_COMMIT_ISSUE="" ; CONFIG_COMMIT_FLATTENED=false
+resolve_commit_policy
+result=$(build_commit_subject "my-feature" "US valid nested config" "main")
+assert_eq "valid nested config still builds correct subject" \
+    "feat(myapp): US valid nested config" "$result"
+CONFIG_COMMIT_STYLE="" ; CONFIG_COMMIT_SCOPE="" ; CONFIG_COMMIT_ISSUE="" ; CONFIG_COMMIT_FLATTENED=false
+
+#endregion
+
 #region Tests: commit policy — US3 issue auto-linking scenarios (T018)
 
 section "commit policy — US3 issue auto-linking scenarios"

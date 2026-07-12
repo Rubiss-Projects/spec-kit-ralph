@@ -47,7 +47,7 @@ The two regression suites must exercise equivalent temporary-Git-repository scen
 | `commit.issue: auto` without numeric branch prefix | Ralph creates the commit successfully with no issue suffix. |
 | `commit.issue: auto` with legacy style | Ralph still appends the inferred issue suffix. |
 | Unsupported explicit `commit.style` | Ralph exits non-zero with a clear configuration error and creates no commit. |
-| Flattened config shape such as `commit.style: conventional` | Ralph treats the config as invalid because the policy must be nested under `commit:`. |
+| Flattened config shape (`commit.style: conventional` as a top-level key instead of under `commit:`) | Ralph exits non-zero with a clear configuration error and creates no commit. |
 | Equivalent Bash and PowerShell inputs | Both orchestration paths generate the same effective subject and error behavior. |
 
 ## 4. Verify documentation and template propagation

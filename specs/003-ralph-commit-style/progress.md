@@ -168,3 +168,29 @@ Started: 2026-07-12 15:58:14
 - The invalid config fixture and regression coverage do not yet prove the required flattened-shape failure path end to end
 - Some supporting docs still describe scenarios with flattened shorthand and need to be reconciled to nested-only examples before the feature can be declared complete again
 ---
+## Iteration 8 - 2026-07-12 18:07
+**Work Unit**: Phase 7 — Enforce Nested `commit:` Config Shape (T028-T032)
+**Tasks Completed**:
+- [x] T028: Added `ralph-config-invalid-flat.yml` fixture; updated `tests/regression/fixtures/README.md`
+- [x] T029: Bash `load_ralph_config` now sets `CONFIG_COMMIT_FLATTENED=true` for `commit.*` top-level keys; `resolve_commit_policy` fails with `commit-policy-invalid`. PowerShell `Read-RalphConfig` sets `_commit_flattened`; `Resolve-RalphCommitPolicy` returns null with error.
+- [x] T030: Added mirrored Bash (5 tests) and PowerShell (4 tests) flattened-config rejection scenarios
+- [x] T031: Updated `quickstart.md` flattened scenario description; updated fixture `README.md` with `ralph-config-invalid-flat.yml` docs
+- [x] T032: All 197 Bash + 248 PowerShell tests pass; Bash and PS syntax clean; `git diff --check` clean
+**Tasks Remaining in Work Unit**: 0
+**Commit**: This work-unit commit
+**Files Changed**:
+- tests/regression/fixtures/ralph-config-invalid-flat.yml (new)
+- tests/regression/fixtures/README.md
+- scripts/bash/ralph-loop.sh
+- scripts/powershell/ralph-loop.ps1
+- tests/regression/bash/test-ralph-loop.sh
+- tests/regression/powershell/Test-RalphLoop.ps1
+- specs/003-ralph-commit-style/quickstart.md
+- specs/003-ralph-commit-style/tasks.md
+- specs/003-ralph-commit-style/ralph-memory.md
+- specs/003-ralph-commit-style/progress.md
+**Learnings**:
+- Bash case pattern `commit.*)` correctly matches `commit.style`, `commit.scope`, etc. at the top-level key stage
+- PowerShell regex `^commit\.\w+\s*:` detects flattened dot-notation keys before the normal `^(\w+)\s*:` patterns
+- `assert_true` in the Bash harness wraps `"$@"` — `[[ ... ]]` must become `test` for compound-comparison assertions
+---

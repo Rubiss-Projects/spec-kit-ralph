@@ -163,6 +163,7 @@ load_ralph_config() {
                         max_iterations) CONFIG_MAX_ITERATIONS="$value" ;;
                         agent_cli) CONFIG_AGENT_CLI="$value" ;;
                         commit) in_commit_block=true ;;
+                        commit.*) CONFIG_COMMIT_FLATTENED=true ;;
                     esac
                 fi
             done < "$cfg"
@@ -172,6 +173,11 @@ load_ralph_config() {
 
 resolve_commit_policy() {
     local raw_style="${CONFIG_COMMIT_STYLE:-}"
+
+    if [[ "${CONFIG_COMMIT_FLATTENED:-false}" == "true" ]]; then
+        printf 'commit-policy-invalid: commit policy keys must be nested under a commit: block, not as top-level dot-separated keys\n' >&2
+        return 1
+    fi
 
     if [[ -z "$raw_style" ]]; then
         COMMIT_POLICY_STYLE="legacy"
@@ -220,6 +226,7 @@ build_commit_subject() {
 CONFIG_COMMIT_STYLE=""
 CONFIG_COMMIT_SCOPE=""
 CONFIG_COMMIT_ISSUE=""
+CONFIG_COMMIT_FLATTENED=false
 
 # Resolved commit policy variables (populated by resolve_commit_policy)
 COMMIT_POLICY_STYLE=""

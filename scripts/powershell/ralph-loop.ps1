@@ -126,7 +126,10 @@ function Read-RalphConfig {
                     # Top-level key — exit any active nested block
                     $inCommitBlock = $false
                     $line = $rawLine.Trim()
-                    if ($line -match '^(\w+)\s*:\s*"?(.+?)"?\s*$') {
+                    if ($line -match '^commit\.\w+\s*:') {
+                        # Flattened commit-policy key — mark as invalid
+                        $config['_commit_flattened'] = 'true'
+                    } elseif ($line -match '^(\w+)\s*:\s*"?(.+?)"?\s*$') {
                         $config[$Matches[1]] = $Matches[2]
                     } elseif ($line -match '^commit\s*:\s*$') {
                         $inCommitBlock = $true
@@ -148,6 +151,11 @@ function Resolve-RalphCommitPolicy {
     $rawStyle = if ($Config.ContainsKey('commit.style')) { $Config['commit.style'] } else { '' }
     $rawScope = if ($Config.ContainsKey('commit.scope')) { $Config['commit.scope'] } else { '' }
     $rawIssue = if ($Config.ContainsKey('commit.issue')) { $Config['commit.issue'] } else { '' }
+
+    if ($Config.ContainsKey('_commit_flattened') -and $Config['_commit_flattened'] -eq 'true') {
+        Write-Error "commit-policy-invalid: commit policy keys must be nested under a commit: block, not as top-level dot-separated keys"
+        return $null
+    }
 
     $resolvedStyle = if ($rawStyle -eq '') {
         'legacy'
