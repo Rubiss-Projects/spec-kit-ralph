@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Expanded the contributing guide with the `main` pull request target, changelog requirements, cross-platform test commands, release ownership, and repository-specific review guidance; CI no longer retains obsolete `master` branch triggers.
+
 ## [1.3.0] - 2026-07-11
 
 ### Added
