@@ -706,6 +706,7 @@ function Test-RalphIterationPostconditions {
 
 function Test-RalphInitialStatePostconditions {
     param(
+        [string]$RepoRoot,
         [string]$TasksPath,
         [string]$SpecDir
     )
@@ -721,6 +722,20 @@ function Test-RalphInitialStatePostconditions {
     $progressPath = Join-Path $SpecDir "progress.md"
     if (-not (Test-Path -LiteralPath $progressPath -PathType Leaf)) {
         $defects.Add("state-artifact-missing: required progress file not found: $progressPath")
+    }
+    $memoryPath = Join-Path $SpecDir "ralph-memory.md"
+    if (-not (Test-Path -LiteralPath $memoryPath -PathType Leaf)) {
+        $defects.Add("state-artifact-missing: required memory file not found: $memoryPath")
+    }
+    foreach ($statePath in @($TasksPath, $progressPath, $memoryPath)) {
+        if (-not (Test-Path -LiteralPath $statePath -PathType Leaf)) {
+            continue
+        }
+        $relativePath = ConvertTo-RalphGitPath -RepoRoot $RepoRoot -Path $statePath
+        & git -C $RepoRoot ls-files --error-unmatch -- $relativePath *> $null
+        if ($LASTEXITCODE -ne 0) {
+            $defects.Add("state-artifact-untracked: required feature state file is not Git-tracked: $relativePath")
+        }
     }
 
     return [pscustomobject]@{
@@ -1234,6 +1249,7 @@ if (-not (Prepare-RalphMemory -Path $MemoryPath -TemplatePath $MemoryTemplatePat
 $initialTasks = Get-IncompleteTaskCount -Path $TasksPath
 if ($initialTasks -eq 0) {
     $initialPostconditions = Test-RalphInitialStatePostconditions `
+        -RepoRoot $RepoRoot `
         -TasksPath $TasksPath `
         -SpecDir $SpecDir
     $initialCompletion = Test-RalphCompletionGate `
