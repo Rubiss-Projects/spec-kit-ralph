@@ -600,13 +600,21 @@ validate_iteration_commit_history() {
 }
 
 validate_initial_state_postconditions() {
-    local progress_path=$1
+    local tasks_path=$1
+    local progress_path=$2
+    local defects=()
 
     # Existing commits predate this Ralph process and may legitimately be
     # human-authored spec/task refinements. Coordinated commit shape is only
     # enforceable for commits created after an iteration snapshots HEAD.
+    if [[ ! -f "$tasks_path" ]]; then
+        defects+=("state-artifact-missing: required tasks file not found: $tasks_path")
+    fi
     if [[ ! -f "$progress_path" ]]; then
-        printf 'state-artifact-missing: required progress file not found: %s\n' "$progress_path" >&2
+        defects+=("state-artifact-missing: required progress file not found: $progress_path")
+    fi
+    if [[ ${#defects[@]} -gt 0 ]]; then
+        printf '%s\n' "${defects[@]}" >&2
         return 1
     fi
     return 0
@@ -1058,7 +1066,7 @@ fi
 INITIAL_TASKS=$(get_incomplete_task_count "$TASKS_PATH")
 if [[ "$INITIAL_TASKS" -eq 0 ]]; then
     initial_state_postconditions=0
-    if ! validate_initial_state_postconditions "$PROGRESS_PATH"; then
+    if ! validate_initial_state_postconditions "$TASKS_PATH" "$PROGRESS_PATH"; then
         initial_state_postconditions=1
     fi
     if validate_completion_gate "absent" 0 "$REPO_ROOT" "$TASKS_PATH" "$MEMORY_TEMPLATE_PATH" "$MEMORY_PATH" "$FEATURE_NAME" "$initial_state_postconditions"; then

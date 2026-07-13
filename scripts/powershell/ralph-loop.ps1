@@ -706,6 +706,7 @@ function Test-RalphIterationPostconditions {
 
 function Test-RalphInitialStatePostconditions {
     param(
+        [string]$TasksPath,
         [string]$SpecDir
     )
 
@@ -714,6 +715,9 @@ function Test-RalphInitialStatePostconditions {
     # History before this process may contain legitimate human-authored spec or
     # task refinements. Ralph owns and validates only commits created after an
     # iteration captures its starting HEAD.
+    if (-not (Test-Path -LiteralPath $TasksPath -PathType Leaf)) {
+        $defects.Add("state-artifact-missing: required tasks file not found: $TasksPath")
+    }
     $progressPath = Join-Path $SpecDir "progress.md"
     if (-not (Test-Path -LiteralPath $progressPath -PathType Leaf)) {
         $defects.Add("state-artifact-missing: required progress file not found: $progressPath")
@@ -1230,6 +1234,7 @@ if (-not (Prepare-RalphMemory -Path $MemoryPath -TemplatePath $MemoryTemplatePat
 $initialTasks = Get-IncompleteTaskCount -Path $TasksPath
 if ($initialTasks -eq 0) {
     $initialPostconditions = Test-RalphInitialStatePostconditions `
+        -TasksPath $TasksPath `
         -SpecDir $SpecDir
     $initialCompletion = Test-RalphCompletionGate `
         -RepoRoot $RepoRoot `
