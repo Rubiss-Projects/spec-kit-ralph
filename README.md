@@ -195,13 +195,13 @@ export SPECKIT_RALPH_AGENT_CLI="codex"
 3. The agent implements and validates one work unit. Durable patterns, decisions, gotchas, commands, failed approaches, and the next handoff are compacted in memory.
 4. For completed work, the agent updates tasks and memory, appends progress, then creates one substantive commit containing implementation, `tasks.md`, `ralph-memory.md`, and `progress.md`. The audit uses `This work-unit commit`; it never requires a future hash or a bookkeeping amend.
 5. Failed or no-work attempts leave tasks and `HEAD` unchanged. Useful memory and audit updates remain uncommitted and join the next substantive commit.
-6. The orchestrator validates history without repairing it, then either launches the next fresh context or evaluates strict completion.
+6. The orchestrator validates only commits created after it snapshots `HEAD` for the current iteration. Earlier human-authored spec or task refinements form the trusted starting boundary, so a clean branch can be rerun without rewriting history.
 
 ### Termination Conditions
 
 | Condition | Exit Code | Meaning |
 |---|---|---|
-| Zero tasks, valid terminal handoff, valid coordinated history, clean repository | `0` | Completion contract passed |
+| Zero tasks, valid terminal handoff, required current state files, clean repository | `0` | Completion contract passed; historical commits from before this run are not reclassified as Ralph work-unit commits |
 | Zero tasks but stale handoff, invalid memory, invalid commit, Git error, or any dirty path | `1` | Blocked immediately; all relevant diagnostics are printed and no agent is launched |
 | Completion signal with remaining tasks or a failed agent | `1` | Inconsistent protocol; the signal cannot force success |
 | Max iterations reached | `1` | Safety limit — increase `max_iterations` if needed |

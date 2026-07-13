@@ -704,55 +704,19 @@ function Test-RalphIterationPostconditions {
     }
 }
 
-function Test-RalphInitialCommitPostconditions {
+function Test-RalphInitialStatePostconditions {
     param(
-        [string]$RepoRoot,
-        [string]$TasksPath,
         [string]$SpecDir
     )
 
     $defects = New-Object System.Collections.Generic.List[string]
-    $stateArtifacts = @(
-        ConvertTo-RalphGitPath -RepoRoot $RepoRoot -Path $TasksPath
-        ConvertTo-RalphGitPath -RepoRoot $RepoRoot -Path (Join-Path $SpecDir "ralph-memory.md")
-        ConvertTo-RalphGitPath -RepoRoot $RepoRoot -Path (Join-Path $SpecDir "progress.md")
-    )
 
-    if (-not (Test-RalphGitRepository -RepoRoot $RepoRoot)) {
-        $defects.Add("coordinated-commit-invalid: completion requires a Git worktree")
-        return [pscustomobject]@{
-            IsValid = $false
-            Defects = @($defects.ToArray())
-        }
-    }
-
-    $commitOutput = @(& git -C $RepoRoot log -1 --format=%H -- @stateArtifacts 2>$null)
-    if ($LASTEXITCODE -ne 0 -or $commitOutput.Count -eq 0) {
-        $defects.Add("coordinated-commit-invalid: no commit contains the active feature state artifacts")
-        return [pscustomobject]@{
-            IsValid = $false
-            Defects = @($defects.ToArray())
-        }
-    }
-
-    $commitId = ([string]($commitOutput | Select-Object -First 1)).Trim()
-    $changedPaths = @(& git -C $RepoRoot diff-tree --root --no-commit-id --name-only -r $commitId 2>$null | Where-Object { $_ })
-    if ($LASTEXITCODE -ne 0) {
-        $defects.Add("coordinated-commit-invalid: cannot inspect commit $commitId")
-        return [pscustomobject]@{
-            IsValid = $false
-            Defects = @($defects.ToArray())
-        }
-    }
-
-    $substantivePaths = @($changedPaths | Where-Object { $stateArtifacts -notcontains $_ })
-    if ($substantivePaths.Count -eq 0) {
-        $defects.Add("bookkeeping-only: commit $commitId contains no substantive path")
-    }
-    foreach ($stateArtifact in $stateArtifacts) {
-        if ($changedPaths -notcontains $stateArtifact) {
-            $defects.Add("coordinated-commit-invalid: commit $commitId is missing coordinated state artifact $stateArtifact")
-        }
+    # History before this process may contain legitimate human-authored spec or
+    # task refinements. Ralph owns and validates only commits created after an
+    # iteration captures its starting HEAD.
+    $progressPath = Join-Path $SpecDir "progress.md"
+    if (-not (Test-Path -LiteralPath $progressPath -PathType Leaf)) {
+        $defects.Add("state-artifact-missing: required progress file not found: $progressPath")
     }
 
     return [pscustomobject]@{
@@ -1183,7 +1147,8 @@ function Test-RalphCompletionGate {
         [string]$TemplatePath,
         [switch]$AgentResultPresent,
         [int]$AgentExitCode = 0,
-        $CommitPostconditions = $null
+        $CommitPostconditions = $null,
+        $StatePostconditions = $null
     )
 
     $defects = New-Object System.Collections.Generic.List[string]
@@ -1212,6 +1177,13 @@ function Test-RalphCompletionGate {
             $defects.Add($defect)
         }
         $defects.Add("commit-postcondition-invalid: iteration history failed coordinated commit validation")
+    }
+
+    if ($null -ne $StatePostconditions -and -not $StatePostconditions.IsValid) {
+        foreach ($defect in $StatePostconditions.Defects) {
+            $defects.Add($defect)
+        }
+        $defects.Add("state-postcondition-invalid: current feature state failed validation")
     }
 
     $gitStatusExit = 1
@@ -1257,9 +1229,7 @@ if (-not (Prepare-RalphMemory -Path $MemoryPath -TemplatePath $MemoryTemplatePat
 # Check initial task count
 $initialTasks = Get-IncompleteTaskCount -Path $TasksPath
 if ($initialTasks -eq 0) {
-    $initialPostconditions = Test-RalphInitialCommitPostconditions `
-        -RepoRoot $RepoRoot `
-        -TasksPath $TasksPath `
+    $initialPostconditions = Test-RalphInitialStatePostconditions `
         -SpecDir $SpecDir
     $initialCompletion = Test-RalphCompletionGate `
         -RepoRoot $RepoRoot `
@@ -1267,7 +1237,7 @@ if ($initialTasks -eq 0) {
         -SpecDir $SpecDir `
         -Feature $FeatureName `
         -TemplatePath $MemoryTemplatePath `
-        -CommitPostconditions $initialPostconditions
+        -StatePostconditions $initialPostconditions
     if ($initialCompletion.IsValid) {
         Write-Host "All tasks are already complete!" -ForegroundColor Green
         Write-Host "<promise>COMPLETE</promise>"

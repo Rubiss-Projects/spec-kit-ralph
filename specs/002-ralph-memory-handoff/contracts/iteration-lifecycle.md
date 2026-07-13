@@ -83,7 +83,7 @@ The record never requires a future commit hash. Existing progress content is an 
 
 ## Commit Postcondition Validation
 
-The orchestrator snapshots `HEAD` and task state before invocation and inspects new history afterward without mutation.
+The orchestrator snapshots `HEAD` and task state before invocation and inspects only the new history after that snapshot without mutation. Existing history is the trusted starting boundary for the process: human-authored spec or task refinements committed before the snapshot are not reclassified as Ralph-owned work-unit commits.
 
 - A failed/no-work iteration must not advance `HEAD`.
 - Each new work-unit commit includes the three active feature state artifacts and at least one substantive path outside them.
@@ -100,7 +100,7 @@ Every completion candidate—initial task-zero, standalone completion signal, or
 | Incomplete tasks | Exactly zero |
 | Memory structure | Valid |
 | `Current Handoff` | Exactly one `Feature complete; no handoff required.` entry |
-| Commit postconditions | No detected bookkeeping-only or incomplete coordinated commit |
+| Commit postconditions | For a post-iteration candidate, no invalid coordinated commit after the iteration's `HEAD` snapshot; an initial task-zero candidate validates current state without revalidating historical commit shape |
 | Git status command | Exits zero |
 | `git status --short --untracked-files=all` | Emits no lines |
 

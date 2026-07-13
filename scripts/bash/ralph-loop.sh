@@ -599,52 +599,14 @@ validate_iteration_commit_history() {
     return 0
 }
 
-validate_initial_commit_postconditions() {
-    local repo_root=$1
-    local tasks_path=$2
-    local progress_path=$3
-    local memory_path=$4
-    local tasks_relative=${tasks_path#"$repo_root"/}
-    local progress_relative=${progress_path#"$repo_root"/}
-    local memory_relative=${memory_path#"$repo_root"/}
-    local commit
-    local paths
-    local path
-    local has_tasks=false
-    local has_progress=false
-    local has_memory=false
-    local has_substantive=false
-    local defects=()
+validate_initial_state_postconditions() {
+    local progress_path=$1
 
-    commit=$(git -C "$repo_root" log -1 --format=%H -- "$tasks_relative" "$progress_relative" "$memory_relative" 2>/dev/null) || true
-    if [[ -z "$commit" ]]; then
-        printf '%s\n' "coordinated-commit-invalid: no commit contains the active feature state artifacts" >&2
-        return 1
-    fi
-
-    paths=$(git -C "$repo_root" diff-tree --root --no-commit-id --name-only -r "$commit" 2>/dev/null) || {
-        printf 'coordinated-commit-invalid: cannot inspect commit %s\n' "$commit" >&2
-        return 1
-    }
-    while IFS= read -r path; do
-        [[ -z "$path" ]] && continue
-        case "$path" in
-            "$tasks_relative") has_tasks=true ;;
-            "$progress_relative") has_progress=true ;;
-            "$memory_relative") has_memory=true ;;
-            *) has_substantive=true ;;
-        esac
-    done <<< "$paths"
-
-    if [[ "$has_substantive" == "false" ]]; then
-        defects+=("bookkeeping-only: commit $commit contains no substantive path")
-    fi
-    if [[ "$has_tasks" == "false" || "$has_progress" == "false" || "$has_memory" == "false" ]]; then
-        defects+=("coordinated-commit-invalid: commit $commit must include tasks.md, progress.md, and ralph-memory.md")
-    fi
-
-    if [[ ${#defects[@]} -gt 0 ]]; then
-        printf '%s\n' "${defects[@]}" >&2
+    # Existing commits predate this Ralph process and may legitimately be
+    # human-authored spec/task refinements. Coordinated commit shape is only
+    # enforceable for commits created after an iteration snapshots HEAD.
+    if [[ ! -f "$progress_path" ]]; then
+        printf 'state-artifact-missing: required progress file not found: %s\n' "$progress_path" >&2
         return 1
     fi
     return 0
@@ -658,6 +620,7 @@ validate_completion_gate() {
     local template_path=$5
     local memory_path=$6
     local feature=$7
+    local state_postconditions=${8:-0}
     local incomplete
     local memory_output
     local status_output
@@ -682,6 +645,9 @@ validate_completion_gate() {
 
     if [[ "$commit_postconditions" -ne 0 ]]; then
         defects+=("commit-postcondition-invalid: iteration history failed coordinated commit validation")
+    fi
+    if [[ "$state_postconditions" -ne 0 ]]; then
+        defects+=("state-postcondition-invalid: current feature state failed validation")
     fi
 
     if status_output=$(git -C "$repo_root" status --short --untracked-files=all 2>&1); then
@@ -1091,11 +1057,11 @@ fi
 # Check initial task count
 INITIAL_TASKS=$(get_incomplete_task_count "$TASKS_PATH")
 if [[ "$INITIAL_TASKS" -eq 0 ]]; then
-    initial_commit_postconditions=0
-    if ! validate_initial_commit_postconditions "$REPO_ROOT" "$TASKS_PATH" "$PROGRESS_PATH" "$MEMORY_PATH"; then
-        initial_commit_postconditions=1
+    initial_state_postconditions=0
+    if ! validate_initial_state_postconditions "$PROGRESS_PATH"; then
+        initial_state_postconditions=1
     fi
-    if validate_completion_gate "absent" "$initial_commit_postconditions" "$REPO_ROOT" "$TASKS_PATH" "$MEMORY_TEMPLATE_PATH" "$MEMORY_PATH" "$FEATURE_NAME"; then
+    if validate_completion_gate "absent" 0 "$REPO_ROOT" "$TASKS_PATH" "$MEMORY_TEMPLATE_PATH" "$MEMORY_PATH" "$FEATURE_NAME" "$initial_state_postconditions"; then
         echo -e "\033[32mAll tasks are already complete!\033[0m"
         echo "<promise>COMPLETE</promise>"
         exit 0
