@@ -109,8 +109,52 @@ fi
 #region Resolve Paths
 
 REPO_ROOT="$(pwd -P)"
-TASKS_PATH="$(realpath "$TASKS_PATH")"
-SPEC_DIR="$(realpath "$SPEC_DIR")"
+
+resolve_path_allow_missing_leaf() {
+    local path=$1
+    local dir
+    local base
+
+    case "$path" in
+        /*)
+            printf '%s\n' "$path"
+            return
+            ;;
+    esac
+
+    if [[ -e "$path" ]]; then
+        realpath "$path"
+        return
+    fi
+
+    dir=$(dirname "$path")
+    base=$(basename "$path")
+    if [[ -d "$dir" ]]; then
+        printf '%s/%s\n' "$(cd "$dir" && pwd -P)" "$base"
+    else
+        printf '%s/%s\n' "$REPO_ROOT" "${path#./}"
+    fi
+}
+
+resolve_existing_path_preserve_absolute() {
+    local path=$1
+
+    case "$path" in
+        /*)
+            if [[ -e "$path" ]]; then
+                printf '%s\n' "$path"
+            else
+                realpath "$path"
+            fi
+            ;;
+        *)
+            realpath "$path"
+            ;;
+    esac
+}
+
+TASKS_PATH="$(resolve_path_allow_missing_leaf "$TASKS_PATH")"
+SPEC_DIR="$(resolve_existing_path_preserve_absolute "$SPEC_DIR")"
 PROGRESS_PATH="$SPEC_DIR/progress.md"
 MEMORY_PATH="$SPEC_DIR/ralph-memory.md"
 MEMORY_TEMPLATE_PATH="$EXTENSION_ROOT/templates/ralph-memory.md"
@@ -591,6 +635,31 @@ get_task_state_snapshot() {
     cksum < "$tasks_path" | awk '{ printf "%s:%s\n", $1, $2 }'
 }
 
+get_repo_relative_path() {
+    local repo_root=$1
+    local path=$2
+    local tracked_path
+    local resolved_repo
+    local resolved_path
+
+    tracked_path=$(git -C "$repo_root" ls-files --full-name -- "$path" 2>/dev/null | sed -n '1p')
+    if [[ -n "$tracked_path" ]]; then
+        printf '%s\n' "$tracked_path"
+        return
+    fi
+
+    resolved_repo=$(realpath "$repo_root" 2>/dev/null || printf '%s\n' "$repo_root")
+    resolved_path=$(realpath "$path" 2>/dev/null || printf '%s\n' "$path")
+    case "$resolved_path" in
+        "$resolved_repo"/*)
+            printf '%s\n' "${resolved_path#"$resolved_repo"/}"
+            ;;
+        *)
+            printf '%s\n' "${path#"$repo_root"/}"
+            ;;
+    esac
+}
+
 validate_iteration_commit_history() {
     local repo_root=$1
     local before_head=$2
@@ -626,9 +695,9 @@ validate_iteration_commit_history() {
         return 0
     fi
 
-    tasks_relative=${tasks_path#"$repo_root"/}
-    progress_relative=${progress_path#"$repo_root"/}
-    memory_relative=${memory_path#"$repo_root"/}
+    tasks_relative=$(get_repo_relative_path "$repo_root" "$tasks_path")
+    progress_relative=$(get_repo_relative_path "$repo_root" "$progress_path")
+    memory_relative=$(get_repo_relative_path "$repo_root" "$memory_path")
 
     if [[ "$before_head" == "$after_head" ]]; then
         if [[ "$after_incomplete" -lt "$before_incomplete" ]]; then
@@ -707,7 +776,7 @@ validate_initial_state_postconditions() {
     fi
     for path in "$tasks_path" "$progress_path" "$memory_path"; do
         [[ ! -f "$path" ]] && continue
-        relative_path=${path#"$repo_root"/}
+        relative_path=$(get_repo_relative_path "$repo_root" "$path")
         if ! git -C "$repo_root" ls-files --error-unmatch -- "$relative_path" >/dev/null 2>&1; then
             defects+=("state-artifact-untracked: required feature state file is not Git-tracked: $relative_path")
         fi

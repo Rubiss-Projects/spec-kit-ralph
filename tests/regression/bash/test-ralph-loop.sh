@@ -105,6 +105,7 @@ extract_functions() {
     # Extract coordinated commit helpers
     sed -n '/^get_git_head_snapshot()/,/^}/p' "$SOURCE_SCRIPT"
     sed -n '/^get_task_state_snapshot()/,/^}/p' "$SOURCE_SCRIPT"
+    sed -n '/^get_repo_relative_path()/,/^}/p' "$SOURCE_SCRIPT"
     sed -n '/^validate_iteration_commit_history()/,/^}/p' "$SOURCE_SCRIPT"
     sed -n '/^validate_initial_state_postconditions()/,/^}/p' "$SOURCE_SCRIPT"
     sed -n '/^validate_completion_gate()/,/^}/p' "$SOURCE_SCRIPT"
