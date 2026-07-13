@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.1] - 2026-07-13
+
 ### Changed
 - Reduced fresh-install payloads by excluding repository-only tests, community and security documents, and root Git metadata files; package-local attributes retain required LF checkouts for shell scripts and the canonical memory template. Removed the redundant `ralph-config.template.yml` while retaining `ralph-config.yml` as the manifest's canonical configuration source.
 - Expanded the contributing guide with the `main` pull request target, changelog requirements, cross-platform test commands, release ownership, and repository-specific review guidance; CI no longer retains obsolete `master` branch triggers.
