@@ -1,6 +1,13 @@
 .agents/
+.git/
 .github/
 .specify/
 .vscode/
 specs/
+tests/
+/.gitattributes
+.gitignore
+CHANGELOG.md
+CONTRIBUTING.md
+SECURITY.md
 AGENTS.md

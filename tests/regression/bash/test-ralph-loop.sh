@@ -467,14 +467,14 @@ prepare_ralph_memory "$MEMORY_TEMPLATE" "$MEMORY_FILE" "test-feature" >/dev/null
 assert_true "preserves an existing valid memory byte-for-byte" cmp -s "$TMP_MEMORY_ROOT/valid.before" "$MEMORY_FILE"
 
 CRLF_ACTIVE_MEMORY="$TMP_MEMORY_ROOT/valid-active-crlf.md"
-awk '{ printf "%s\r\n", $0 }' "$FIXTURE_DIR/ralph-memory-valid-active.md" > "$CRLF_ACTIVE_MEMORY"
+awk '{ sub(/\r$/, ""); printf "%s\r\n", $0 }' "$FIXTURE_DIR/ralph-memory-valid-active.md" > "$CRLF_ACTIVE_MEMORY"
 cp "$CRLF_ACTIVE_MEMORY" "$TMP_MEMORY_ROOT/valid-active-crlf.before"
 assert_true "accepts CRLF feature memory by semantic structure" validate_ralph_memory_file "$MEMORY_TEMPLATE" "$CRLF_ACTIVE_MEMORY" "test-feature"
 assert_true "preserves valid CRLF feature memory byte-for-byte" prepare_ralph_memory "$MEMORY_TEMPLATE" "$CRLF_ACTIVE_MEMORY" "test-feature"
 assert_true "CRLF preparation performs no normalization" cmp -s "$TMP_MEMORY_ROOT/valid-active-crlf.before" "$CRLF_ACTIVE_MEMORY"
 
 CRLF_COMPLETE_MEMORY="$TMP_MEMORY_ROOT/valid-complete-crlf.md"
-awk '{ printf "%s\r\n", $0 }' "$FIXTURE_DIR/ralph-memory-valid-complete.md" > "$CRLF_COMPLETE_MEMORY"
+awk '{ sub(/\r$/, ""); printf "%s\r\n", $0 }' "$FIXTURE_DIR/ralph-memory-valid-complete.md" > "$CRLF_COMPLETE_MEMORY"
 assert_true "accepts terminal handoff in CRLF feature memory" validate_ralph_memory_file "$MEMORY_TEMPLATE" "$CRLF_COMPLETE_MEMORY" "test-feature" true
 
 cp "$FIXTURE_DIR/ralph-memory-malformed.md" "$MEMORY_FILE"

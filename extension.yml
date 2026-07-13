@@ -33,7 +33,7 @@ provides:
 
   config:
     - name: "ralph-config.yml"
-      template: "ralph-config.template.yml"
+      template: "ralph-config.yml"
       description: "Ralph loop configuration (model, iterations, agent CLI)"
       required: false
 

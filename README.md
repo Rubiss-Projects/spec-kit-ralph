@@ -97,7 +97,7 @@ max_iterations: 10
 agent_cli: "copilot"
 ```
 
-Ralph also ships `.specify/extensions/ralph/ralph-config.template.yml` as a reference copy of the defaults. Use it to compare or reset configuration; the active project config is `ralph-config.yml`.
+The installed extension contains only the active `ralph-config.yml`, which is also the manifest's canonical configuration source.
 
 ### Agent CLI Support
 
@@ -237,8 +237,7 @@ spec-kit-ralph/
 │       └── ralph-loop.sh          # Bash orchestrator
 ├── templates/
 │   └── ralph-memory.md             # Canonical durable-memory template
-├── ralph-config.yml               # Installed project config
-├── ralph-config.template.yml      # Config template
+├── ralph-config.yml               # Installed project defaults
 ├── README.md
 ├── CHANGELOG.md
 └── LICENSE                        # MIT
