@@ -685,6 +685,40 @@ Assert-True "blocked missing-progress completion invokes no agent" (-not (Test-P
 Remove-Item $missingProgressRoot -Recurse -Force
 Remove-Item $missingProgressCliDir -Recurse -Force
 
+$ignoredStateRepo = New-TransactionTestRepository -Name "ralph-ignored-state"
+Set-Content -Path $ignoredStateRepo.TasksPath -Value "- [x] T001 Complete transaction" -Encoding UTF8
+Copy-Item (Join-Path $FixtureDir "ralph-memory-valid-complete.md") $ignoredStateRepo.MemoryPath -Force
+Add-Content -Path $ignoredStateRepo.ProgressPath -Value "`nCompleted prior run." -Encoding UTF8
+Add-Content -Path $ignoredStateRepo.SubstantivePath -Value "`ncompleted prior implementation" -Encoding UTF8
+Invoke-TestGit -Repository $ignoredStateRepo.Root -Arguments @("add", ".") | Out-Null
+Invoke-TestGit -Repository $ignoredStateRepo.Root -Arguments @("commit", "-q", "-m", "test: complete prior run") | Out-Null
+Set-Content -Path (Join-Path $ignoredStateRepo.Root ".gitignore") -Value "specs/" -Encoding UTF8
+Invoke-TestGit -Repository $ignoredStateRepo.Root -Arguments @("rm", "--cached", "specs/test-feature/tasks.md", "specs/test-feature/progress.md", "specs/test-feature/ralph-memory.md") | Out-Null
+Invoke-TestGit -Repository $ignoredStateRepo.Root -Arguments @("add", ".gitignore") | Out-Null
+Invoke-TestGit -Repository $ignoredStateRepo.Root -Arguments @("commit", "-q", "-m", "test: ignore feature state") | Out-Null
+$ignoredStateCliDir = Join-Path ([System.IO.Path]::GetTempPath()) "ralph-ignored-state-cli-$PID"
+New-Item -ItemType Directory -Path $ignoredStateCliDir -Force | Out-Null
+$ignoredStateLog = Join-Path $ignoredStateCliDir "invocations.log"
+$ignoredStateCli = New-FakeCopilot -Directory $ignoredStateCliDir -OutputLines @("AGENT_INVOKED") -InvocationLog $ignoredStateLog
+$ignoredStateOutput = & pwsh -NoLogo -NoProfile -File $SourceScript `
+    -FeatureName "test-feature" `
+    -TasksPath $ignoredStateRepo.TasksPath `
+    -SpecDir $ignoredStateRepo.SpecDir `
+    -MaxIterations 3 `
+    -Model "fake-model" `
+    -AgentCli $ignoredStateCli `
+    -WorkingDirectory $ignoredStateRepo.Root 2>&1
+$ignoredStateExit = $LASTEXITCODE
+$ignoredStateText = $ignoredStateOutput -join "`n"
+Assert-Equal "ignored untracked state blocks initial completion" 1 $ignoredStateExit
+Assert-Equal "ignored state reports all three untracked artifacts" 3 ([regex]::Matches($ignoredStateText, '(?m)^state-artifact-untracked:').Count)
+Assert-True "ignored state reports tasks artifact" ($ignoredStateText -match 'state-artifact-untracked:.*tasks.md')
+Assert-True "ignored state reports progress artifact" ($ignoredStateText -match 'state-artifact-untracked:.*progress.md')
+Assert-True "ignored state reports memory artifact" ($ignoredStateText -match 'state-artifact-untracked:.*ralph-memory.md')
+Assert-True "ignored untracked state invokes no agent" (-not (Test-Path $ignoredStateLog))
+Remove-Item $ignoredStateRepo.Root -Recurse -Force
+Remove-Item $ignoredStateCliDir -Recurse -Force
+
 # All tasks with a stale handoff is inconsistent even when Git is clean.
 $staleRepo = New-TransactionTestRepository -Name "ralph-stale-handoff"
 Set-Content -Path $staleRepo.TasksPath -Value "- [x] T001 Complete transaction" -Encoding UTF8
@@ -815,7 +849,7 @@ Remove-Item $postCliDir -Recurse -Force
 
 # A completion token cannot override failure, remaining tasks, or active
 # handoff. Both invalid candidates terminate immediately with no next iteration.
-$completionParityTexts = @($dirtyText, $missingProgressText, $staleText, $dirtyPostText)
+$completionParityTexts = @($dirtyText, $missingProgressText, $ignoredStateText, $staleText, $dirtyPostText)
 foreach ($tokenCase in @(
     [pscustomobject]@{ Name = "failed-agent-token"; ExitCode = 7; Expected = "agent-result-invalid:" },
     [pscustomobject]@{ Name = "remaining-task-token"; ExitCode = 0; Expected = "tasks-incomplete:" }
@@ -860,10 +894,11 @@ $expectedCompletionCategories = @(
     "dirty-path",
     "handoff-invalid",
     "state-artifact-missing",
+    "state-artifact-untracked",
     "state-postcondition-invalid",
     "tasks-incomplete"
 )
-$completionCategoryPattern = '(?m)^(agent-result-invalid|dirty-path|handoff-invalid|state-artifact-missing|state-postcondition-invalid|tasks-incomplete):'
+$completionCategoryPattern = '(?m)^(agent-result-invalid|dirty-path|handoff-invalid|state-artifact-missing|state-artifact-untracked|state-postcondition-invalid|tasks-incomplete):'
 $actualCompletionCategories = @(
     [regex]::Matches(($completionParityTexts -join "`n"), $completionCategoryPattern) |
         ForEach-Object { $_.Groups[1].Value } |

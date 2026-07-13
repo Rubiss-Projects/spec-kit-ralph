@@ -214,6 +214,30 @@ assert_true "missing progress reports current-state postcondition defect" grep -
 assert_false "missing progress does not report iteration history defect" grep -q 'commit-postcondition-invalid:' <<< "$missing_progress_output"
 assert_false "missing progress completion invokes no agent" test -e "$INITIAL_CALLS"
 
+TMP_IGNORED_STATE_REPO="$TMP_GATE_ROOT/ignored-state"
+TMP_IGNORED_STATE_SPEC="$TMP_IGNORED_STATE_REPO/specs/test-feature"
+mkdir -p "$TMP_IGNORED_STATE_SPEC"
+git -C "$TMP_IGNORED_STATE_REPO" init -q
+git -C "$TMP_IGNORED_STATE_REPO" config user.name "Ralph Test"
+git -C "$TMP_IGNORED_STATE_REPO" config user.email "ralph@example.test"
+cp "$FIXTURE_DIR/tasks-all-done.md" "$TMP_IGNORED_STATE_SPEC/tasks.md"
+cp "$FIXTURE_DIR/ralph-memory-valid-complete.md" "$TMP_IGNORED_STATE_SPEC/ralph-memory.md"
+printf '%s\n' '# Ralph Progress Log' > "$TMP_IGNORED_STATE_SPEC/progress.md"
+printf '%s\n' 'specs/' > "$TMP_IGNORED_STATE_REPO/.gitignore"
+printf '%s\n' 'tracked source' > "$TMP_IGNORED_STATE_REPO/source.txt"
+git -C "$TMP_IGNORED_STATE_REPO" add .gitignore source.txt
+git -C "$TMP_IGNORED_STATE_REPO" commit -qm "ignore untracked feature state"
+set +e
+ignored_state_output=$(cd "$TMP_IGNORED_STATE_REPO" && RALPH_TEST_CALLS="$INITIAL_CALLS" bash "$SOURCE_SCRIPT" --feature-name "test-feature" --tasks-path "$TMP_IGNORED_STATE_SPEC/tasks.md" --spec-dir "$TMP_IGNORED_STATE_SPEC" --max-iterations 3 --model "fake-model" --agent-cli "$NEVER_AGENT" 2>&1)
+ignored_state_exit=$?
+set -e
+assert_eq "ignored untracked state blocks initial completion" "1" "$ignored_state_exit"
+assert_eq "ignored state reports all three untracked artifacts" "3" "$(grep -c '^state-artifact-untracked:' <<< "$ignored_state_output")"
+assert_true "ignored state reports tasks artifact" grep -q 'state-artifact-untracked:.*tasks.md' <<< "$ignored_state_output"
+assert_true "ignored state reports progress artifact" grep -q 'state-artifact-untracked:.*progress.md' <<< "$ignored_state_output"
+assert_true "ignored state reports memory artifact" grep -q 'state-artifact-untracked:.*ralph-memory.md' <<< "$ignored_state_output"
+assert_false "ignored untracked state invokes no agent" test -e "$INITIAL_CALLS"
+
 printf '%s\n' 'dirty tracked' >> "$TMP_INITIAL_REPO/source.txt"
 printf '%s\n' 'dirty untracked' > "$TMP_INITIAL_REPO/dirty-two.txt"
 dirty_head=$(git -C "$TMP_INITIAL_REPO" rev-parse HEAD)
@@ -378,16 +402,18 @@ expected_completion_categories="agent-result-invalid
 dirty-path
 handoff-invalid
 state-artifact-missing
+state-artifact-untracked
 state-postcondition-invalid
 tasks-incomplete"
 completion_parity_output="$dirty_output
 $shape_output
 $missing_progress_output
+$ignored_state_output
 $failed_token_output
 $remaining_token_output
 $post_dirty_output
 $stale_output"
-actual_completion_categories=$(sed -n -E 's/^(agent-result-invalid|dirty-path|handoff-invalid|state-artifact-missing|state-postcondition-invalid|tasks-incomplete):.*/\1/p' <<< "$completion_parity_output" | LC_ALL=C sort -u)
+actual_completion_categories=$(sed -n -E 's/^(agent-result-invalid|dirty-path|handoff-invalid|state-artifact-missing|state-artifact-untracked|state-postcondition-invalid|tasks-incomplete):.*/\1/p' <<< "$completion_parity_output" | LC_ALL=C sort -u)
 assert_eq "completion parity exposes the canonical diagnostic categories" "$expected_completion_categories" "$actual_completion_categories"
 
 rm -rf "$TMP_GATE_ROOT"
