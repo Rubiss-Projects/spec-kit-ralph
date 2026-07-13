@@ -200,6 +200,7 @@ TMP_MISSING_PROGRESS_REPO="$TMP_GATE_ROOT/missing-progress"
 cp -R "$TMP_INITIAL_REPO" "$TMP_MISSING_PROGRESS_REPO"
 TMP_MISSING_PROGRESS_SPEC="$TMP_MISSING_PROGRESS_REPO/specs/test-feature"
 git -C "$TMP_MISSING_PROGRESS_REPO" rm -q "$TMP_MISSING_PROGRESS_SPEC/progress.md"
+git -C "$TMP_MISSING_PROGRESS_REPO" rm -q "$TMP_MISSING_PROGRESS_SPEC/tasks.md"
 git -C "$TMP_MISSING_PROGRESS_REPO" commit -qm "remove progress after completion"
 set +e
 missing_progress_output=$(cd "$TMP_MISSING_PROGRESS_REPO" && RALPH_TEST_CALLS="$INITIAL_CALLS" bash "$SOURCE_SCRIPT" --feature-name "test-feature" --tasks-path "$TMP_MISSING_PROGRESS_SPEC/tasks.md" --spec-dir "$TMP_MISSING_PROGRESS_SPEC" --max-iterations 3 --model "fake-model" --agent-cli "$NEVER_AGENT" 2>&1)
@@ -207,6 +208,8 @@ missing_progress_exit=$?
 set -e
 assert_eq "missing progress blocks initial completion" "1" "$missing_progress_exit"
 assert_true "missing progress reports current-state artifact defect" grep -q '^state-artifact-missing:' <<< "$missing_progress_output"
+assert_true "missing tasks reports authoritative task artifact defect" grep -q "required tasks file not found: $TMP_MISSING_PROGRESS_SPEC/tasks.md" <<< "$missing_progress_output"
+assert_true "missing progress reports authoritative audit artifact defect" grep -q "required progress file not found: $TMP_MISSING_PROGRESS_SPEC/progress.md" <<< "$missing_progress_output"
 assert_true "missing progress reports current-state postcondition defect" grep -q '^state-postcondition-invalid:' <<< "$missing_progress_output"
 assert_false "missing progress does not report iteration history defect" grep -q 'commit-postcondition-invalid:' <<< "$missing_progress_output"
 assert_false "missing progress completion invokes no agent" test -e "$INITIAL_CALLS"

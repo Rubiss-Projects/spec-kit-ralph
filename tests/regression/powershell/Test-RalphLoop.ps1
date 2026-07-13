@@ -654,6 +654,9 @@ Copy-Item (Join-Path $FixtureDir "ralph-memory-valid-complete.md") $missingProgr
 Set-Content -Path (Join-Path $missingProgressRoot "src/work.txt") -Value "completed without audit" -Encoding UTF8
 Invoke-TestGit -Repository $missingProgressRoot -Arguments @("add", ".") | Out-Null
 Invoke-TestGit -Repository $missingProgressRoot -Arguments @("commit", "-q", "-m", "test: missing progress") | Out-Null
+Remove-Item $missingProgressTasks -Force
+Invoke-TestGit -Repository $missingProgressRoot -Arguments @("add", "specs/test-feature/tasks.md") | Out-Null
+Invoke-TestGit -Repository $missingProgressRoot -Arguments @("commit", "-q", "-m", "test: missing tasks") | Out-Null
 $missingProgressCliDir = Join-Path ([System.IO.Path]::GetTempPath()) "ralph-missing-progress-cli-$PID"
 New-Item -ItemType Directory -Path $missingProgressCliDir -Force | Out-Null
 $missingProgressLog = Join-Path $missingProgressCliDir "invocations.log"
@@ -672,6 +675,8 @@ $missingProgressText = $missingProgressOutput -join "`n"
 
 Assert-Equal "missing progress blocks initial completion" 1 $missingProgressExit
 Assert-True "missing progress reports current-state artifact defect" ($missingProgressText -match 'state-artifact-missing:')
+Assert-True "missing tasks reports authoritative task artifact defect" ($missingProgressText -match 'required tasks file not found:')
+Assert-True "missing progress reports authoritative audit artifact defect" ($missingProgressText -match 'required progress file not found:')
 Assert-True "missing progress reports current-state postcondition defect" ($missingProgressText -match 'state-postcondition-invalid:')
 Assert-True "missing progress does not report iteration history defect" ($missingProgressText -notmatch 'commit-postcondition-invalid:')
 Assert-True "blocked initial completion does not create progress" (-not (Test-Path $missingProgressPath))
