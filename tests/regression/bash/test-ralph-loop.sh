@@ -106,7 +106,7 @@ extract_functions() {
     sed -n '/^get_git_head_snapshot()/,/^}/p' "$SOURCE_SCRIPT"
     sed -n '/^get_task_state_snapshot()/,/^}/p' "$SOURCE_SCRIPT"
     sed -n '/^validate_iteration_commit_history()/,/^}/p' "$SOURCE_SCRIPT"
-    sed -n '/^validate_initial_commit_postconditions()/,/^}/p' "$SOURCE_SCRIPT"
+    sed -n '/^validate_initial_state_postconditions()/,/^}/p' "$SOURCE_SCRIPT"
     sed -n '/^validate_completion_gate()/,/^}/p' "$SOURCE_SCRIPT"
     # Extract get_agent_cli_kind
     sed -n '/^get_agent_cli_kind()/,/^}/p' "$SOURCE_SCRIPT"
@@ -179,6 +179,38 @@ assert_true "clean initial task-zero reports completion" grep -q '<promise>COMPL
 assert_false "clean initial task-zero invokes no agent" test -e "$INITIAL_CALLS"
 assert_eq "clean initial gate leaves history unchanged" "$initial_head" "$(git -C "$TMP_INITIAL_REPO" rev-parse HEAD)"
 
+# Commits made before this Ralph process are outside its transaction boundary.
+# A clean human-authored tasks refinement after completion must not be judged as
+# a malformed Ralph work-unit commit.
+printf '%s\n' '- [x] T002 Refined requirement after review' >> "$TMP_INITIAL_SPEC/tasks.md"
+git -C "$TMP_INITIAL_REPO" add "$TMP_INITIAL_SPEC/tasks.md"
+git -C "$TMP_INITIAL_REPO" commit -qm "refine tasks after completed run"
+rerun_head=$(git -C "$TMP_INITIAL_REPO" rev-parse HEAD)
+set +e
+rerun_output=$(cd "$TMP_INITIAL_REPO" && RALPH_TEST_CALLS="$INITIAL_CALLS" bash "$SOURCE_SCRIPT" --feature-name "test-feature" --tasks-path "$TMP_INITIAL_SPEC/tasks.md" --spec-dir "$TMP_INITIAL_SPEC" --max-iterations 3 --model "fake-model" --agent-cli "$NEVER_AGENT" 2>&1)
+rerun_exit=$?
+set -e
+assert_eq "post-completion tasks-only commit permits rerun" "0" "$rerun_exit"
+assert_true "post-completion tasks-only rerun reports completion" grep -q '<promise>COMPLETE</promise>' <<< "$rerun_output"
+assert_false "post-completion tasks-only rerun reports no historical commit defect" grep -q 'commit-postcondition-invalid:' <<< "$rerun_output"
+assert_false "post-completion tasks-only rerun invokes no agent" test -e "$INITIAL_CALLS"
+assert_eq "post-completion tasks-only rerun preserves HEAD" "$rerun_head" "$(git -C "$TMP_INITIAL_REPO" rev-parse HEAD)"
+
+TMP_MISSING_PROGRESS_REPO="$TMP_GATE_ROOT/missing-progress"
+cp -R "$TMP_INITIAL_REPO" "$TMP_MISSING_PROGRESS_REPO"
+TMP_MISSING_PROGRESS_SPEC="$TMP_MISSING_PROGRESS_REPO/specs/test-feature"
+git -C "$TMP_MISSING_PROGRESS_REPO" rm -q "$TMP_MISSING_PROGRESS_SPEC/progress.md"
+git -C "$TMP_MISSING_PROGRESS_REPO" commit -qm "remove progress after completion"
+set +e
+missing_progress_output=$(cd "$TMP_MISSING_PROGRESS_REPO" && RALPH_TEST_CALLS="$INITIAL_CALLS" bash "$SOURCE_SCRIPT" --feature-name "test-feature" --tasks-path "$TMP_MISSING_PROGRESS_SPEC/tasks.md" --spec-dir "$TMP_MISSING_PROGRESS_SPEC" --max-iterations 3 --model "fake-model" --agent-cli "$NEVER_AGENT" 2>&1)
+missing_progress_exit=$?
+set -e
+assert_eq "missing progress blocks initial completion" "1" "$missing_progress_exit"
+assert_true "missing progress reports current-state artifact defect" grep -q '^state-artifact-missing:' <<< "$missing_progress_output"
+assert_true "missing progress reports current-state postcondition defect" grep -q '^state-postcondition-invalid:' <<< "$missing_progress_output"
+assert_false "missing progress does not report iteration history defect" grep -q 'commit-postcondition-invalid:' <<< "$missing_progress_output"
+assert_false "missing progress completion invokes no agent" test -e "$INITIAL_CALLS"
+
 printf '%s\n' 'dirty tracked' >> "$TMP_INITIAL_REPO/source.txt"
 printf '%s\n' 'dirty untracked' > "$TMP_INITIAL_REPO/dirty-two.txt"
 dirty_head=$(git -C "$TMP_INITIAL_REPO" rev-parse HEAD)
@@ -217,7 +249,6 @@ shape_exit=$?
 set -e
 assert_eq "extra handoff content blocks completion" "1" "$shape_exit"
 assert_true "extra handoff content reports handoff-invalid" grep -q '^handoff-invalid:' <<< "$shape_output"
-assert_true "initial completion rejects incomplete coordinated state commit" grep -q '^commit-postcondition-invalid:' <<< "$shape_output"
 
 TMP_ACTIVE_REPO="$TMP_GATE_ROOT/active"
 TMP_ACTIVE_SPEC="$TMP_ACTIVE_REPO/specs/test-feature"
@@ -231,6 +262,18 @@ printf '%s\n' '# Ralph Progress Log' > "$TMP_ACTIVE_SPEC/progress.md"
 printf '%s\n' 'initial' > "$TMP_ACTIVE_REPO/source.txt"
 git -C "$TMP_ACTIVE_REPO" add .
 git -C "$TMP_ACTIVE_REPO" commit -qm "active state"
+
+# Model a completed run followed by a human-authored tasks-only commit that
+# introduces revised work. That commit is the next run's trusted boundary.
+printf '%s\n' '- [x] T001 Complete work' > "$TMP_ACTIVE_SPEC/tasks.md"
+cp "$FIXTURE_DIR/ralph-memory-valid-complete.md" "$TMP_ACTIVE_SPEC/ralph-memory.md"
+printf '%s\n' 'completed prior run' >> "$TMP_ACTIVE_SPEC/progress.md"
+printf '%s\n' 'completed prior implementation' >> "$TMP_ACTIVE_REPO/source.txt"
+git -C "$TMP_ACTIVE_REPO" add .
+git -C "$TMP_ACTIVE_REPO" commit -qm "complete prior Ralph run"
+printf '%s\n' '- [ ] T001 Complete work' > "$TMP_ACTIVE_SPEC/tasks.md"
+git -C "$TMP_ACTIVE_REPO" add "$TMP_ACTIVE_SPEC/tasks.md"
+git -C "$TMP_ACTIVE_REPO" commit -qm "refine tasks after completed run"
 
 mkdir -p "$TMP_GATE_ROOT/active-agent"
 ACTIVE_AGENT="$TMP_GATE_ROOT/active-agent/copilot"
@@ -250,6 +293,8 @@ case "$RALPH_TEST_MODE" in
         sed -i.bak 's/- \[ \] T001/- [x] T001/' "$RALPH_TEST_SPEC/tasks.md"
         rm -f "$RALPH_TEST_SPEC/tasks.md.bak"
         cp "$RALPH_TEST_COMPLETE_MEMORY" "$RALPH_TEST_SPEC/ralph-memory.md"
+        sed -i.bak 's/- Keep Bash and PowerShell behavior equivalent\./- Completed revised work with cross-platform parity./' "$RALPH_TEST_SPEC/ralph-memory.md"
+        rm -f "$RALPH_TEST_SPEC/ralph-memory.md.bak"
         printf '%s\n' 'completed iteration' >> "$RALPH_TEST_SPEC/progress.md"
         printf '%s\n' 'substantive completion' >> source.txt
         git add source.txt "$RALPH_TEST_SPEC/tasks.md" "$RALPH_TEST_SPEC/ralph-memory.md" "$RALPH_TEST_SPEC/progress.md"
@@ -291,6 +336,7 @@ set -e
 assert_eq "clean post-agent completion exits success" "0" "$post_exit"
 assert_true "clean post-agent completion reports promise" grep -q '<promise>COMPLETE</promise>' <<< "$post_output"
 assert_eq "clean post-agent completion invokes once" "1" "$(wc -l < "$ACTIVE_CALLS" | tr -d ' ')"
+assert_false "resumed work ignores pre-run tasks-only commit shape" grep -q 'coordinated-commit-invalid:' <<< "$post_output"
 
 TMP_POST_DIRTY_REPO="$TMP_GATE_ROOT/post-dirty"
 cp -R "$TMP_ACTIVE_REPO" "$TMP_POST_DIRTY_REPO"
@@ -326,19 +372,19 @@ assert_true "completion memory aggregate includes structural defect" grep -q '^t
 assert_true "completion memory aggregate includes handoff-invalid" grep -q '^handoff-invalid:' <<< "$aggregate_handoff_output"
 
 expected_completion_categories="agent-result-invalid
-bookkeeping-only
-commit-postcondition-invalid
-coordinated-commit-invalid
 dirty-path
 handoff-invalid
+state-artifact-missing
+state-postcondition-invalid
 tasks-incomplete"
 completion_parity_output="$dirty_output
 $shape_output
+$missing_progress_output
 $failed_token_output
 $remaining_token_output
 $post_dirty_output
 $stale_output"
-actual_completion_categories=$(sed -n -E 's/^(agent-result-invalid|bookkeeping-only|commit-postcondition-invalid|coordinated-commit-invalid|dirty-path|handoff-invalid|tasks-incomplete):.*/\1/p' <<< "$completion_parity_output" | LC_ALL=C sort -u)
+actual_completion_categories=$(sed -n -E 's/^(agent-result-invalid|dirty-path|handoff-invalid|state-artifact-missing|state-postcondition-invalid|tasks-incomplete):.*/\1/p' <<< "$completion_parity_output" | LC_ALL=C sort -u)
 assert_eq "completion parity exposes the canonical diagnostic categories" "$expected_completion_categories" "$actual_completion_categories"
 
 rm -rf "$TMP_GATE_ROOT"

@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Allowed Ralph to rerun after clean human-authored spec or task refinements by limiting coordinated commit-shape validation to commits created within the current iteration ([#39](https://github.com/Rubiss-Projects/spec-kit-ralph/issues/39)).
+
 ## [1.3.1] - 2026-07-13
 
 ### Changed

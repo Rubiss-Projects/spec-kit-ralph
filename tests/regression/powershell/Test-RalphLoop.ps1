@@ -581,6 +581,29 @@ Assert-Equal "initial clean completion preserves HEAD" $initialHead ((Invoke-Tes
 Assert-Equal "initial clean completion preserves history" $initialHistory ((Invoke-TestGit -Repository $initialRepo.Root -Arguments @("rev-list", "--count", "HEAD") | Select-Object -First 1).Trim())
 Assert-Equal "initial clean completion preserves clean status" "" ((Invoke-TestGit -Repository $initialRepo.Root -Arguments @("status", "--short", "--untracked-files=all")) -join "`n")
 
+# Existing history is outside the current Ralph transaction boundary. A clean
+# tasks-only refinement after completion must not be validated as a Ralph-owned
+# coordinated work-unit commit.
+Add-Content -Path $initialRepo.TasksPath -Value "- [x] T002 Refined requirement after review" -Encoding UTF8
+Invoke-TestGit -Repository $initialRepo.Root -Arguments @("add", "specs/test-feature/tasks.md") | Out-Null
+Invoke-TestGit -Repository $initialRepo.Root -Arguments @("commit", "-q", "-m", "test: refine tasks after completed run") | Out-Null
+$rerunHead = (Invoke-TestGit -Repository $initialRepo.Root -Arguments @("rev-parse", "HEAD") | Select-Object -First 1).Trim()
+$rerunOutput = & pwsh -NoLogo -NoProfile -File $SourceScript `
+    -FeatureName "test-feature" `
+    -TasksPath $initialRepo.TasksPath `
+    -SpecDir $initialRepo.SpecDir `
+    -MaxIterations 3 `
+    -Model "fake-model" `
+    -AgentCli $initialCli `
+    -WorkingDirectory $initialRepo.Root 2>&1
+$rerunExit = $LASTEXITCODE
+$rerunText = $rerunOutput -join "`n"
+Assert-Equal "post-completion tasks-only commit permits rerun" 0 $rerunExit
+Assert-True "post-completion tasks-only rerun reports completion" ($rerunText -match '<promise>COMPLETE</promise>')
+Assert-True "post-completion tasks-only rerun reports no historical commit defect" ($rerunText -notmatch 'commit-postcondition-invalid:')
+Assert-True "post-completion tasks-only rerun invokes no agent" (-not (Test-Path $initialLog))
+Assert-Equal "post-completion tasks-only rerun preserves HEAD" $rerunHead ((Invoke-TestGit -Repository $initialRepo.Root -Arguments @("rev-parse", "HEAD") | Select-Object -First 1).Trim())
+
 # Every dirty porcelain line blocks all-complete state immediately. The gate
 # reports all paths, invokes no agent, and performs no cleanup or history edit.
 Add-Content -Path $initialRepo.SubstantivePath -Value "`ndirty tracked path" -Encoding UTF8
@@ -648,45 +671,14 @@ $missingProgressExit = $LASTEXITCODE
 $missingProgressText = $missingProgressOutput -join "`n"
 
 Assert-Equal "missing progress blocks initial completion" 1 $missingProgressExit
-Assert-True "missing progress reports coordinated commit defect" ($missingProgressText -match 'coordinated-commit-invalid:')
+Assert-True "missing progress reports current-state artifact defect" ($missingProgressText -match 'state-artifact-missing:')
+Assert-True "missing progress reports current-state postcondition defect" ($missingProgressText -match 'state-postcondition-invalid:')
+Assert-True "missing progress does not report iteration history defect" ($missingProgressText -notmatch 'commit-postcondition-invalid:')
 Assert-True "blocked initial completion does not create progress" (-not (Test-Path $missingProgressPath))
 Assert-True "blocked missing-progress completion invokes no agent" (-not (Test-Path $missingProgressLog))
 
 Remove-Item $missingProgressRoot -Recurse -Force
 Remove-Item $missingProgressCliDir -Recurse -Force
-
-# The latest active-state commit must itself be coordinated and substantive;
-# an older valid baseline cannot mask a bookkeeping-only final state commit.
-$initialCommitRepo = New-TransactionTestRepository -Name "ralph-initial-incomplete-commit"
-Set-Content -Path $initialCommitRepo.TasksPath -Value "- [x] T001 Complete transaction" -Encoding UTF8
-Copy-Item (Join-Path $FixtureDir "ralph-memory-valid-complete.md") $initialCommitRepo.MemoryPath -Force
-Invoke-TestGit -Repository $initialCommitRepo.Root -Arguments @("add", "specs/test-feature/tasks.md", "specs/test-feature/ralph-memory.md") | Out-Null
-Invoke-TestGit -Repository $initialCommitRepo.Root -Arguments @("commit", "-q", "-m", "test: incomplete active state") | Out-Null
-$initialCommitCliDir = Join-Path ([System.IO.Path]::GetTempPath()) "ralph-initial-incomplete-cli-$PID"
-New-Item -ItemType Directory -Path $initialCommitCliDir -Force | Out-Null
-$initialCommitLog = Join-Path $initialCommitCliDir "invocations.log"
-$initialCommitCli = New-FakeCopilot -Directory $initialCommitCliDir -OutputLines @("AGENT_INVOKED") -InvocationLog $initialCommitLog
-$initialCommitHead = (Invoke-TestGit -Repository $initialCommitRepo.Root -Arguments @("rev-parse", "HEAD") | Select-Object -First 1).Trim()
-
-$initialCommitOutput = & pwsh -NoLogo -NoProfile -File $SourceScript `
-    -FeatureName "test-feature" `
-    -TasksPath $initialCommitRepo.TasksPath `
-    -SpecDir $initialCommitRepo.SpecDir `
-    -MaxIterations 3 `
-    -Model "fake-model" `
-    -AgentCli $initialCommitCli `
-    -WorkingDirectory $initialCommitRepo.Root 2>&1
-$initialCommitExit = $LASTEXITCODE
-$initialCommitText = $initialCommitOutput -join "`n"
-
-Assert-Equal "incomplete initial active-state commit exits one" 1 $initialCommitExit
-Assert-True "incomplete initial active-state commit reports bookkeeping-only" ($initialCommitText -match 'bookkeeping-only:')
-Assert-True "incomplete initial active-state commit reports coordinated artifact defect" ($initialCommitText -match 'coordinated-commit-invalid:')
-Assert-True "incomplete initial active-state commit invokes no agent" (-not (Test-Path $initialCommitLog))
-Assert-Equal "incomplete initial commit validation preserves HEAD" $initialCommitHead ((Invoke-TestGit -Repository $initialCommitRepo.Root -Arguments @("rev-parse", "HEAD") | Select-Object -First 1).Trim())
-
-Remove-Item $initialCommitRepo.Root -Recurse -Force
-Remove-Item $initialCommitCliDir -Recurse -Force
 
 # All tasks with a stale handoff is inconsistent even when Git is clean.
 $staleRepo = New-TransactionTestRepository -Name "ralph-stale-handoff"
@@ -721,6 +713,17 @@ Remove-Item $staleCliDir -Recurse -Force
 # A successful post-agent candidate performs one coordinated commit, passes the
 # same gate, and receives no reconciliation iteration.
 $postRepo = New-TransactionTestRepository -Name "ralph-post-complete"
+# Establish a completed coordinated run, then introduce revised incomplete work
+# in a human-authored tasks-only commit before Ralph captures its new boundary.
+Set-Content -Path $postRepo.TasksPath -Value "- [x] T001 Complete transaction" -Encoding UTF8
+Copy-Item (Join-Path $FixtureDir "ralph-memory-valid-complete.md") $postRepo.MemoryPath -Force
+Add-Content -Path $postRepo.ProgressPath -Value "`nCompleted prior run." -Encoding UTF8
+Add-Content -Path $postRepo.SubstantivePath -Value "`ncompleted prior implementation" -Encoding UTF8
+Invoke-TestGit -Repository $postRepo.Root -Arguments @("add", ".") | Out-Null
+Invoke-TestGit -Repository $postRepo.Root -Arguments @("commit", "-q", "-m", "test: complete prior Ralph run") | Out-Null
+Set-Content -Path $postRepo.TasksPath -Value "- [ ] T001 Complete transaction" -Encoding UTF8
+Invoke-TestGit -Repository $postRepo.Root -Arguments @("add", "specs/test-feature/tasks.md") | Out-Null
+Invoke-TestGit -Repository $postRepo.Root -Arguments @("commit", "-q", "-m", "test: refine tasks after completed run") | Out-Null
 $postCliDir = Join-Path ([System.IO.Path]::GetTempPath()) "ralph-post-cli-$PID"
 New-Item -ItemType Directory -Path $postCliDir -Force | Out-Null
 $postAction = Join-Path $postCliDir "complete.ps1"
@@ -735,6 +738,8 @@ $postSourceLiteral = $postRepo.SubstantivePath.Replace("'", "''")
 `$ErrorActionPreference = 'Stop'
 Set-Content -Path '$postTasksLiteral' -Value '- [x] T001 Complete transaction' -Encoding UTF8
 Copy-Item '$postCompleteFixtureLiteral' '$postMemoryLiteral' -Force
+`$updatedMemory = [System.IO.File]::ReadAllText('$postMemoryLiteral').Replace('- Keep Bash and PowerShell behavior equivalent.', '- Completed revised work with cross-platform parity.')
+[System.IO.File]::WriteAllText('$postMemoryLiteral', `$updatedMemory, (New-Object System.Text.UTF8Encoding(`$false)))
 Add-Content -Path '$postProgressLiteral' -Value "`nCompleted iteration." -Encoding UTF8
 Add-Content -Path '$postSourceLiteral' -Value "`nsubstantive completion" -Encoding UTF8
 & git -C '$postRepoLiteral' add .
@@ -760,6 +765,7 @@ Assert-Equal "post-agent clean completion exits zero" 0 $postExit
 Assert-Equal "post-agent clean completion invokes one iteration" 1 (@(Get-Content $postLog).Count)
 Assert-Equal "post-agent clean completion adds exactly one commit" ($postHistoryBefore + 1) ([int]((Invoke-TestGit -Repository $postRepo.Root -Arguments @("rev-list", "--count", "HEAD") | Select-Object -First 1).Trim()))
 Assert-Equal "post-agent clean completion leaves repository clean" "" ((Invoke-TestGit -Repository $postRepo.Root -Arguments @("status", "--short", "--untracked-files=all")) -join "`n")
+Assert-True "resumed work ignores pre-run tasks-only commit shape" (($postOutput -join "`n") -notmatch 'coordinated-commit-invalid:')
 
 # Restore an active coordinated baseline, then let one final work unit commit
 # successfully while leaving multiple new dirty paths. The gate must report all
@@ -804,7 +810,7 @@ Remove-Item $postCliDir -Recurse -Force
 
 # A completion token cannot override failure, remaining tasks, or active
 # handoff. Both invalid candidates terminate immediately with no next iteration.
-$completionParityTexts = @($dirtyText, $initialCommitText, $staleText, $dirtyPostText)
+$completionParityTexts = @($dirtyText, $missingProgressText, $staleText, $dirtyPostText)
 foreach ($tokenCase in @(
     [pscustomobject]@{ Name = "failed-agent-token"; ExitCode = 7; Expected = "agent-result-invalid:" },
     [pscustomobject]@{ Name = "remaining-task-token"; ExitCode = 0; Expected = "tasks-incomplete:" }
@@ -846,14 +852,13 @@ foreach ($tokenCase in @(
 
 $expectedCompletionCategories = @(
     "agent-result-invalid",
-    "bookkeeping-only",
-    "commit-postcondition-invalid",
-    "coordinated-commit-invalid",
     "dirty-path",
     "handoff-invalid",
+    "state-artifact-missing",
+    "state-postcondition-invalid",
     "tasks-incomplete"
 )
-$completionCategoryPattern = '(?m)^(agent-result-invalid|bookkeeping-only|commit-postcondition-invalid|coordinated-commit-invalid|dirty-path|handoff-invalid|tasks-incomplete):'
+$completionCategoryPattern = '(?m)^(agent-result-invalid|dirty-path|handoff-invalid|state-artifact-missing|state-postcondition-invalid|tasks-incomplete):'
 $actualCompletionCategories = @(
     [regex]::Matches(($completionParityTexts -join "`n"), $completionCategoryPattern) |
         ForEach-Object { $_.Groups[1].Value } |
