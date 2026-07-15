@@ -1,6 +1,0 @@
-# Test fixture: explicit legacy commit style
-model: "gpt-4o"
-max_iterations: 5
-agent_cli: "copilot"
-commit:
-  style: legacy
