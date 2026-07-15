@@ -126,7 +126,7 @@ commit:
   scope: myteam
 ```
 
-Result: `feat(myteam): <work-unit title>`
+Result: `feat(myteam): <commit summary>`
 
 Omit `scope` to use the default scope `ralph`:
 
@@ -135,7 +135,7 @@ commit:
   style: conventional
 ```
 
-Result: `feat(ralph): <work-unit title>`
+Result: `feat(ralph): <commit summary>`
 
 **Issue auto-linking** — appends `#<issue>` when the branch name starts with a numeric prefix (e.g. `069-some-feature` → `#69`). Works with both `legacy` and `conventional` styles. If no numeric prefix is found, the commit is created without a suffix.
 
@@ -145,7 +145,7 @@ commit:
   issue: auto
 ```
 
-Result (on branch `069-some-feature`): `feat(ralph): <work-unit title> #69`
+Result (on branch `069-some-feature`): `feat(ralph): <commit summary> #69`
 
 Setting an unsupported `commit.style` value causes Ralph to stop with a clear configuration error before creating any commit.
 
