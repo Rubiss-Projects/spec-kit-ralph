@@ -63,7 +63,6 @@ grep -n 'issue: auto' README.md specs/003-ralph-commit-style/contracts/*.md
 Confirm:
 
 - the configuration example shows the new `commit` block (commented out as an example);
-- the configuration example shows the new `commit` block (commented out as an example);
 - README explains the exact legacy default behavior (`feat(<feature-name>): <work-unit title>`), conventional scope configuration including the default scope `ralph`, the cleaner conventional commit-summary behavior, and issue auto-linking;
 - the examples use a nested `commit:` block rather than flattened keys;
 - the documented examples match the public contract artifacts.
