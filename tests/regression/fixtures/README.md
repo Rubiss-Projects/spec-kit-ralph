@@ -35,6 +35,12 @@ of under a nested `commit:` block. Used by Phase 7 regression scenarios to
 verify that Ralph rejects this invalid config shape with a clear error and
 creates no commit.
 
+## ralph-config-invalid-bare.yml
+A config fixture with bare commit-policy keys (`style`, `scope`, `issue`)
+written as top-level keys instead of under a nested `commit:` block. Used by
+Phase 7 regression scenarios to verify that Ralph rejects this invalid config
+shape with a clear error and creates no commit.
+
 ## ralph-memory-valid-active.md
 A canonical active memory file with a nonterminal handoff.
 

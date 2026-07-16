@@ -1280,11 +1280,11 @@ rm -rf "$TMP_INVALID_LOOP"
 
 #endregion
 
-#region Tests: commit policy — Phase 7 flattened config rejection scenarios (T030)
+#region Tests: commit policy — Phase 7 invalid top-level config rejection scenarios (T030)
 
-section "commit policy — Phase 7 flattened config rejection scenarios"
+section "commit policy — Phase 7 invalid top-level config rejection scenarios"
 
-# T030-1: load_ralph_config sets CONFIG_COMMIT_FLATTENED when flat commit.style key is present
+# T030-1: load_ralph_config sets CONFIG_COMMIT_FLATTENED when top-level commit-policy keys are present
 TMP_FLAT_REPO=$(mktemp -d)
 mkdir -p "$TMP_FLAT_REPO/.specify/extensions/ralph"
 cp "$FIXTURE_DIR/ralph-config-invalid-flat.yml" "$TMP_FLAT_REPO/.specify/extensions/ralph/ralph-config.yml"
@@ -1293,6 +1293,16 @@ load_ralph_config "$TMP_FLAT_REPO"
 assert_true "flattened config fixture sets CONFIG_COMMIT_FLATTENED=true" \
     test "$CONFIG_COMMIT_FLATTENED" = "true"
 rm -rf "$TMP_FLAT_REPO"
+CONFIG_COMMIT_STYLE="" ; CONFIG_COMMIT_SCOPE="" ; CONFIG_COMMIT_ISSUE="" ; CONFIG_COMMIT_FLATTENED=false
+
+TMP_BARE_REPO=$(mktemp -d)
+mkdir -p "$TMP_BARE_REPO/.specify/extensions/ralph"
+cp "$FIXTURE_DIR/ralph-config-invalid-bare.yml" "$TMP_BARE_REPO/.specify/extensions/ralph/ralph-config.yml"
+CONFIG_COMMIT_STYLE="" ; CONFIG_COMMIT_SCOPE="" ; CONFIG_COMMIT_ISSUE="" ; CONFIG_COMMIT_FLATTENED=false
+load_ralph_config "$TMP_BARE_REPO"
+assert_true "bare top-level config fixture sets CONFIG_COMMIT_FLATTENED=true" \
+    test "$CONFIG_COMMIT_FLATTENED" = "true"
+rm -rf "$TMP_BARE_REPO"
 CONFIG_COMMIT_STYLE="" ; CONFIG_COMMIT_SCOPE="" ; CONFIG_COMMIT_ISSUE="" ; CONFIG_COMMIT_FLATTENED=false
 
 # T030-2: resolve_commit_policy fails when CONFIG_COMMIT_FLATTENED is true
@@ -1332,7 +1342,29 @@ assert_true "flattened config reports commit-policy-invalid" \
     grep -q "commit-policy-invalid" <<< "$flat_loop_output"
 rm -rf "$TMP_FLAT_LOOP"
 
-# T030-5: valid nested commit: block still works correctly after flattened detection logic
+TMP_BARE_LOOP=$(mktemp -d)
+TMP_BARE_SPEC="$TMP_BARE_LOOP/specs/test-feature"
+mkdir -p "$TMP_BARE_SPEC" "$TMP_BARE_LOOP/.specify/extensions/ralph"
+cp "$FIXTURE_DIR/ralph-config-invalid-bare.yml" "$TMP_BARE_LOOP/.specify/extensions/ralph/ralph-config.yml"
+printf '%s\n' '- [ ] T001 Work to do' > "$TMP_BARE_SPEC/tasks.md"
+git -C "$TMP_BARE_LOOP" init -q
+git -C "$TMP_BARE_LOOP" config user.name "Ralph Test"
+git -C "$TMP_BARE_LOOP" config user.email "ralph@example.test"
+set +e
+bare_loop_output=$(cd "$TMP_BARE_LOOP" && bash "$SOURCE_SCRIPT" \
+    --feature-name "test-feature" \
+    --tasks-path "$TMP_BARE_SPEC/tasks.md" \
+    --spec-dir "$TMP_BARE_SPEC" \
+    --max-iterations 1 \
+    --model "fake-model" 2>&1)
+bare_loop_exit=$?
+set -e
+assert_eq "bare top-level config causes non-zero exit" "1" "$bare_loop_exit"
+assert_true "bare top-level config reports commit-policy-invalid" \
+    grep -q "commit-policy-invalid" <<< "$bare_loop_output"
+rm -rf "$TMP_BARE_LOOP"
+
+# T030-5: valid nested commit: block still works correctly after invalid top-level detection logic
 CONFIG_COMMIT_STYLE="conventional" ; CONFIG_COMMIT_SCOPE="myapp" ; CONFIG_COMMIT_ISSUE="" ; CONFIG_COMMIT_FLATTENED=false
 resolve_commit_policy
 result=$(build_commit_subject "my-feature" "US valid nested config" "main")

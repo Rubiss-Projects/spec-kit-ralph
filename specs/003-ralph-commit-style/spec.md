@@ -73,7 +73,7 @@ As a maintainer reviewing Ralph-generated history, I want commit messages to inc
 - A branch starts with digits that are not followed by the expected separator pattern.
 - A branch has no numeric prefix at all.
 - A project has an invalid or unrecognized commit-style value; commit creation must stop with a clear configuration error.
-- A project provides flattened config keys outside the `commit:` block, such as `commit.style`; the config shape is invalid.
+- A project provides commit-policy keys outside the `commit:` block, such as `commit.style` or bare `style`; the config shape is invalid.
 - A project enables issue auto-linking while using the legacy commit style; linking behavior remains the same as in conventional style.
 - A work unit title already contains digits or punctuation that could make the final commit subject harder to parse.
 - A conventional commit is generated from a work unit whose title is broad or audit-oriented rather than commit-friendly.

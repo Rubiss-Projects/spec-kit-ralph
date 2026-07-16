@@ -1,0 +1,8 @@
+# Test fixture: bare top-level commit-policy keys (triggers preflight configuration error)
+# These keys must be nested under a `commit:` block, not written as top-level keys.
+model: "gpt-4o"
+max_iterations: 5
+agent_cli: "copilot"
+style: conventional
+scope: myapp
+issue: auto
