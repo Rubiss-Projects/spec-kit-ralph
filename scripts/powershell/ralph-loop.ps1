@@ -201,6 +201,7 @@ function Resolve-RalphCommitPolicy {
         Style = $resolvedStyle
         Scope = if ($rawScope) { $rawScope } else { 'ralph' }
         Issue = $rawIssue
+        Configured = ($rawStyle -ne '' -or $rawScope -ne '' -or $rawIssue -ne '')
     }
 }
 
@@ -237,6 +238,72 @@ function Build-RalphCommitSubject {
     } else {
         return "feat($FeatureName): $WorkUnitTitle$issueSuffix"
     }
+}
+
+function Test-RalphCommitSubject {
+    param(
+        [string]$Subject,
+        [string]$FeatureName,
+        [string]$Branch,
+        [hashtable]$Policy,
+        [string]$CommitId = "unknown"
+    )
+
+    $defects = New-Object System.Collections.Generic.List[string]
+    if ($null -eq $Policy -or -not $FeatureName -or -not $Policy.Configured) {
+        return [pscustomobject]@{
+            IsValid = $true
+            Defects = @()
+        }
+    }
+
+    $style = if ($Policy.Style) { $Policy.Style } else { 'legacy' }
+    $scope = if ($Policy.Scope) { $Policy.Scope } else { 'ralph' }
+    $expectedPrefix = if ($style -eq 'conventional') {
+        "feat($scope): "
+    } else {
+        "feat($FeatureName): "
+    }
+
+    if (-not $Subject.StartsWith($expectedPrefix, [System.StringComparison]::Ordinal)) {
+        $defects.Add("commit-subject-invalid: commit $CommitId subject must start with `"$expectedPrefix`"")
+    }
+
+    $issueSuffix = ''
+    if ($Policy.Issue -eq 'auto') {
+        $issueNum = Get-RalphInferredIssueNumber -Branch $Branch
+        if ($null -ne $issueNum) {
+            $issueSuffix = " #$issueNum"
+            if (-not $Subject.EndsWith($issueSuffix, [System.StringComparison]::Ordinal)) {
+                $defects.Add("commit-subject-invalid: commit $CommitId subject must end with `"$issueSuffix`"")
+            }
+        }
+    }
+
+    if ($style -eq 'conventional' -and $Subject.StartsWith($expectedPrefix, [System.StringComparison]::Ordinal)) {
+        $payload = $Subject.Substring($expectedPrefix.Length)
+        if ($issueSuffix -and $payload.EndsWith($issueSuffix, [System.StringComparison]::Ordinal)) {
+            $payload = $payload.Substring(0, $payload.Length - $issueSuffix.Length)
+        }
+        if ($payload -match '(^|\s)(US-\d+|Phase\s+\d+|T\d{3,})(?=$|\s|\p{P})') {
+            $defects.Add("commit-subject-invalid: commit $CommitId conventional payload must not contain planning labels")
+        }
+    }
+
+    return [pscustomobject]@{
+        IsValid = ($defects.Count -eq 0)
+        Defects = @($defects.ToArray())
+    }
+}
+
+function Test-RecoverableCommitSubjectPostcondition {
+    param([string[]]$Defects)
+
+    $meaningfulDefects = @($Defects | Where-Object { $_ })
+    if ($meaningfulDefects.Count -eq 0) {
+        return $false
+    }
+    return (@($meaningfulDefects | Where-Object { $_ -notlike 'commit-subject-invalid:*' }).Count -eq 0)
 }
 
 # Apply config defaults (only when script parameter was not explicitly provided)
@@ -703,7 +770,10 @@ function Test-RalphIterationPostconditions {
         [string]$RepoRoot,
         [string]$TasksPath,
         [string]$SpecDir,
-        [int]$AgentExitCode
+        [int]$AgentExitCode,
+        [hashtable]$CommitPolicy = $null,
+        [string]$FeatureName = "",
+        [string]$Branch = ""
     )
 
     $defects = New-Object System.Collections.Generic.List[string]
@@ -784,6 +854,13 @@ function Test-RalphIterationPostconditions {
         ConvertTo-RalphGitPath -RepoRoot $RepoRoot -Path (Join-Path $SpecDir "progress.md")
     )
 
+    if (-not $Branch) {
+        $branchOutput = @(& git -C $RepoRoot branch --show-current 2>$null)
+        if ($LASTEXITCODE -eq 0 -and $branchOutput.Count -gt 0) {
+            $Branch = ([string]($branchOutput | Select-Object -First 1)).Trim()
+        }
+    }
+
     foreach ($commit in $newCommits) {
         $commitId = ([string]$commit).Trim()
         if (-not $commitId) {
@@ -805,6 +882,24 @@ function Test-RalphIterationPostconditions {
         foreach ($stateArtifact in $stateArtifacts) {
             if ($changedPaths -notcontains $stateArtifact) {
                 $defects.Add("coordinated-commit-invalid: commit $commitId is missing coordinated state artifact $stateArtifact")
+            }
+        }
+
+        if ($null -ne $CommitPolicy -and $FeatureName) {
+            $subjectOutput = @(& git -C $RepoRoot log -1 --format=%s $commitId 2>$null)
+            if ($LASTEXITCODE -ne 0 -or $subjectOutput.Count -eq 0) {
+                $defects.Add("coordinated-commit-invalid: unable to inspect subject for commit $commitId")
+            } else {
+                $subject = [string]($subjectOutput | Select-Object -First 1)
+                $subjectValidation = Test-RalphCommitSubject `
+                    -Subject $subject `
+                    -FeatureName $FeatureName `
+                    -Branch $Branch `
+                    -Policy $CommitPolicy `
+                    -CommitId $commitId
+                foreach ($subjectDefect in $subjectValidation.Defects) {
+                    $defects.Add($subjectDefect)
+                }
             }
         }
     }
@@ -990,6 +1085,17 @@ Follow the speckit.ralph.iterate command below exactly for this single iteration
 $commandText
 "@
 
+    if ($script:LastPostconditionDefects -and $script:LastPostconditionDefects.Count -gt 0) {
+        $defectText = $script:LastPostconditionDefects -join "`n"
+        $prompt += @"
+
+## Previous Postcondition Defects
+
+Repair these defects before continuing:
+$defectText
+"@
+    }
+
     if ($null -ne $CommitPolicy -and $CommitPolicy.Count -gt 0) {
         $issueValue = if ($CommitPolicy.Issue) { $CommitPolicy.Issue } else { 'disabled' }
         $prompt += @"
@@ -1016,6 +1122,9 @@ function Invoke-CopilotIteration {
     
     # Simple prompt - the speckit.ralph agent already knows to complete one work unit
     $basePrompt = "Iteration $Iteration - Complete one work unit from tasks.md"
+    if ($script:LastPostconditionDefects -and $script:LastPostconditionDefects.Count -gt 0) {
+        $basePrompt += ". Repair previous postcondition defects before continuing: $($script:LastPostconditionDefects -join '; ')"
+    }
     $integrationConfig = Read-SpecKitIntegrationConfig -RepoRoot $WorkDir
     $agentName = Join-IntegrationCommandName -CommandName "speckit.ralph.iterate" -Separator $integrationConfig.invoke_separator
     $prompt = New-CopilotIterationPrompt -AgentName $agentName -InvokeSeparator $integrationConfig.invoke_separator -Prompt $basePrompt
@@ -1427,6 +1536,8 @@ $maxConsecutiveFailures = 3
 $completed = $false
 $circuitBreaker = $false
 $fatalFailure = $false
+$script:LastPostconditionDefects = @()
+$repairSnapshot = $null
 
 # Register Ctrl+C handler
 $interrupted = $false
@@ -1456,16 +1567,36 @@ try {
             Write-Host $result.Output
         }
 
+        $validationSnapshot = if ($null -ne $repairSnapshot) { $repairSnapshot } else { $iterationSnapshot }
+        $currentBranch = ((& git -C $RepoRoot branch --show-current 2>$null) | Select-Object -First 1)
+        if ($null -eq $currentBranch) { $currentBranch = "" }
+
         $postconditions = Test-RalphIterationPostconditions `
-            -BeforeSnapshot $iterationSnapshot `
+            -BeforeSnapshot $validationSnapshot `
             -RepoRoot $RepoRoot `
             -TasksPath $TasksPath `
             -SpecDir $SpecDir `
-            -AgentExitCode $result.ExitCode
+            -AgentExitCode $result.ExitCode `
+            -CommitPolicy $commitPolicy `
+            -FeatureName $FeatureName `
+            -Branch ([string]$currentBranch).Trim()
 
         $completionSignal = Test-CompletionSignal -Output $result.Output
         $remainingTasks = Get-IncompleteTaskCount -Path $TasksPath
         if ($completionSignal -or $remainingTasks -eq 0) {
+            if (-not $postconditions.IsValid -and (Test-RecoverableCommitSubjectPostcondition -Defects $postconditions.Defects)) {
+                Write-IterationStatus -Iteration $iteration -Status "failure" -Message "Commit subject postcondition violation"
+                foreach ($defect in $postconditions.Defects) {
+                    Write-Host $defect -ForegroundColor Red
+                }
+                $script:LastPostconditionDefects = @($postconditions.Defects)
+                if ($null -eq $repairSnapshot) {
+                    $repairSnapshot = $iterationSnapshot
+                }
+                $iteration++
+                continue
+            }
+
             $completion = Test-RalphCompletionGate `
                 -RepoRoot $RepoRoot `
                 -TasksPath $TasksPath `
@@ -1492,6 +1623,18 @@ try {
         }
 
         if (-not $postconditions.IsValid) {
+            if (Test-RecoverableCommitSubjectPostcondition -Defects $postconditions.Defects) {
+                Write-IterationStatus -Iteration $iteration -Status "failure" -Message "Commit subject postcondition violation"
+                foreach ($defect in $postconditions.Defects) {
+                    Write-Host $defect -ForegroundColor Red
+                }
+                $script:LastPostconditionDefects = @($postconditions.Defects)
+                if ($null -eq $repairSnapshot) {
+                    $repairSnapshot = $iterationSnapshot
+                }
+                $iteration++
+                continue
+            }
             Write-IterationStatus -Iteration $iteration -Status "failure" -Message "Commit postcondition violation"
             foreach ($defect in $postconditions.Defects) {
                 Write-Host $defect -ForegroundColor Red
@@ -1521,6 +1664,9 @@ try {
             $consecutiveFailures = 0
             Write-IterationStatus -Iteration $iteration -Status "success" -Message "Iteration completed"
         }
+
+        $script:LastPostconditionDefects = @()
+        $repairSnapshot = $null
         
         Write-Host "$remainingTasks task(s) remaining" -ForegroundColor DarkGray
         

@@ -14,10 +14,10 @@ Project configuration lives at:
 .specify/extensions/ralph/ralph-config.yml
 ```
 
-The repository source continues to ship the reference template at:
+The repository source and extension manifest use the canonical config source at:
 
 ```text
-ralph-config.template.yml
+ralph-config.yml
 ```
 
 ## Contract Shape
@@ -60,6 +60,7 @@ issue: auto
 4. If `commit.issue` is `auto`, Ralph attempts issue inference from the current branch prefix.
 5. If issue inference fails, Ralph omits the issue suffix and still creates the commit successfully.
 6. If `style`, `scope`, or `issue` appear outside the nested `commit:` block, Ralph treats the config shape as invalid.
+7. When any nested commit policy is configured, Ralph validates new agent-created work-unit commit subjects against the resolved policy before accepting completion.
 
 ## Compatibility Rules
 
@@ -67,3 +68,4 @@ issue: auto
 - The configuration is optional across all supported orchestration paths.
 - The same effective policy must be observed by Bash and PowerShell launch paths.
 - The nested `commit:` block shape is authoritative; equivalent top-level commit-policy keys are not supported.
+- Runtime subject validation is a guardrail for configured policy; it does not force an exact deterministic conventional summary.

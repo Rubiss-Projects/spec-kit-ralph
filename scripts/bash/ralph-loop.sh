@@ -264,10 +264,15 @@ load_ralph_config() {
 
 resolve_commit_policy() {
     local raw_style="${CONFIG_COMMIT_STYLE:-}"
+    COMMIT_POLICY_CONFIGURED=false
 
     if [[ "${CONFIG_COMMIT_FLATTENED:-false}" == "true" ]]; then
         printf 'commit-policy-invalid: commit policy keys must be nested under a commit: block, not as top-level keys\n' >&2
         return 1
+    fi
+
+    if [[ -n "$raw_style" || -n "${CONFIG_COMMIT_SCOPE:-}" || -n "${CONFIG_COMMIT_ISSUE:-}" ]]; then
+        COMMIT_POLICY_CONFIGURED=true
     fi
 
     if [[ -z "$raw_style" ]]; then
@@ -315,6 +320,68 @@ build_commit_subject() {
     fi
 }
 
+validate_commit_subject() {
+    local subject="$1"
+    local feature_name="$2"
+    local branch="$3"
+    local commit="${4:-unknown}"
+    local expected_prefix
+    local issue_num
+    local issue_suffix=""
+    local payload
+
+    if [[ "${COMMIT_POLICY_STYLE:-legacy}" == "conventional" ]]; then
+        expected_prefix="feat(${COMMIT_POLICY_SCOPE:-ralph}): "
+    else
+        expected_prefix="feat($feature_name): "
+    fi
+
+    if [[ "$subject" != "$expected_prefix"* ]]; then
+        printf 'commit-subject-invalid: commit %s subject must start with "%s"\n' "$commit" "$expected_prefix"
+        return 1
+    fi
+
+    if [[ "${COMMIT_POLICY_ISSUE:-}" == "auto" ]]; then
+        issue_num=$(infer_issue_number "$branch")
+        if [[ -n "$issue_num" ]]; then
+            issue_suffix=" #$issue_num"
+            if [[ "$subject" != *"$issue_suffix" ]]; then
+                printf 'commit-subject-invalid: commit %s subject must end with "%s"\n' "$commit" "$issue_suffix"
+                return 1
+            fi
+        fi
+    fi
+
+    if [[ "${COMMIT_POLICY_STYLE:-legacy}" == "conventional" ]]; then
+        payload="${subject#"$expected_prefix"}"
+        if [[ -n "$issue_suffix" && "$payload" == *"$issue_suffix" ]]; then
+            payload="${payload%"$issue_suffix"}"
+        fi
+        if [[ "$payload" =~ (^|[[:space:]])(US-[0-9]+|Phase[[:space:]]+[0-9]+|T[0-9]{3,})($|[[:space:][:punct:]]) ]]; then
+            printf 'commit-subject-invalid: commit %s conventional payload must not contain planning labels\n' "$commit"
+            return 1
+        fi
+    fi
+
+    return 0
+}
+
+is_recoverable_commit_subject_postcondition() {
+    local defects="$1"
+    local line
+    local found=false
+
+    while IFS= read -r line; do
+        [[ -z "$line" ]] && continue
+        case "$line" in
+            commit-subject-invalid:*) found=true ;;
+            *) return 1 ;;
+        esac
+    done <<< "$defects"
+
+    [[ "$found" == "true" ]]
+}
+
 # Commit policy config variables (populated by load_ralph_config)
 CONFIG_COMMIT_STYLE=""
 CONFIG_COMMIT_SCOPE=""
@@ -325,6 +392,7 @@ CONFIG_COMMIT_FLATTENED=false
 COMMIT_POLICY_STYLE=""
 COMMIT_POLICY_SCOPE=""
 COMMIT_POLICY_ISSUE=""
+COMMIT_POLICY_CONFIGURED=false
 
 # Load config from YAML files
 load_ralph_config "$REPO_ROOT"
@@ -717,6 +785,8 @@ validate_iteration_commit_history() {
     local tasks_path=$7
     local progress_path=$8
     local memory_path=$9
+    local feature_name=${10:-}
+    local branch=${11:-}
     local after_head
     local after_task_state
     local tasks_relative
@@ -730,6 +800,8 @@ validate_iteration_commit_history() {
     local has_progress
     local has_memory
     local has_substantive
+    local subject
+    local subject_output
     local violations=()
 
     after_head=$(get_git_head_snapshot "$repo_root")
@@ -788,6 +860,15 @@ validate_iteration_commit_history() {
             fi
             if [[ "$has_tasks" == "false" || "$has_progress" == "false" || "$has_memory" == "false" ]]; then
                 violations+=("coordinated-commit-invalid: commit $commit must include tasks.md, progress.md, and ralph-memory.md")
+            fi
+            if [[ -n "$feature_name" && "${COMMIT_POLICY_CONFIGURED:-false}" == "true" ]]; then
+                subject=$(git -C "$repo_root" log -1 --format=%s "$commit" 2>/dev/null) || {
+                    violations+=("coordinated-commit-invalid: cannot inspect subject for commit $commit")
+                    continue
+                }
+                if ! subject_output=$(validate_commit_subject "$subject" "$feature_name" "$branch" "$commit" 2>&1); then
+                    violations+=("$subject_output")
+                fi
             fi
         done <<< "$commits"
     fi
@@ -1002,6 +1083,16 @@ Follow the speckit.ralph.iterate command below exactly for this single iteration
 $command_text
 EOF
 
+    if [[ -n "${LAST_POSTCONDITION_DEFECTS:-}" ]]; then
+        cat << EOF
+
+## Previous Postcondition Defects
+
+Repair these defects before continuing:
+$LAST_POSTCONDITION_DEFECTS
+EOF
+    fi
+
     if [[ -n "${COMMIT_POLICY_STYLE:-}" ]]; then
         cat << EOF
 ## Resolved Commit Policy
@@ -1021,6 +1112,9 @@ invoke_copilot_iteration() {
 
     # Simple prompt - the speckit.ralph agent already knows to complete one work unit
     local base_prompt="Iteration $iteration - Complete one work unit from tasks.md"
+    if [[ -n "${LAST_POSTCONDITION_DEFECTS:-}" ]]; then
+        base_prompt="${base_prompt}. Repair previous postcondition defects before continuing: ${LAST_POSTCONDITION_DEFECTS//$'\n'/; }"
+    fi
     local prompt
     local invoke_separator
     local agent_name
@@ -1322,6 +1416,10 @@ max_consecutive_failures=3
 completed=false
 circuit_breaker=false
 fatal_failure=false
+LAST_POSTCONDITION_DEFECTS=""
+repair_head_before=""
+repair_task_state_before=""
+repair_tasks_before=""
 
 while [[ $iteration -le $MAX_ITERATIONS && "$completed" == "false" && "$INTERRUPTED" == "false" && "$circuit_breaker" == "false" && "$fatal_failure" == "false" ]]; do
     print_header "$iteration" "$MAX_ITERATIONS"
@@ -1338,6 +1436,9 @@ while [[ $iteration -le $MAX_ITERATIONS && "$completed" == "false" && "$INTERRUP
     iteration_head_before=$(get_git_head_snapshot "$REPO_ROOT")
     iteration_task_state_before=$(get_task_state_snapshot "$TASKS_PATH")
     iteration_tasks_before=$(get_incomplete_task_count "$TASKS_PATH")
+    validation_head_before="${repair_head_before:-$iteration_head_before}"
+    validation_task_state_before="${repair_task_state_before:-$iteration_task_state_before}"
+    validation_tasks_before="${repair_tasks_before:-$iteration_tasks_before}"
 
     # Invoke configured agent CLI with speckit.ralph.iterate behavior
     set +e
@@ -1350,17 +1451,22 @@ while [[ $iteration -le $MAX_ITERATIONS && "$completed" == "false" && "$INTERRUP
 
     iteration_tasks_after=$(get_incomplete_task_count "$TASKS_PATH")
     commit_postconditions=0
-    if ! validate_iteration_commit_history \
+    commit_postcondition_output=""
+    iteration_branch=$(git -C "$REPO_ROOT" branch --show-current 2>/dev/null || true)
+    if ! commit_postcondition_output=$(validate_iteration_commit_history \
         "$REPO_ROOT" \
-        "$iteration_head_before" \
-        "$iteration_task_state_before" \
-        "$iteration_tasks_before" \
+        "$validation_head_before" \
+        "$validation_task_state_before" \
+        "$validation_tasks_before" \
         "$iteration_tasks_after" \
         "$exit_code" \
         "$TASKS_PATH" \
         "$PROGRESS_PATH" \
-        "$MEMORY_PATH"; then
+        "$MEMORY_PATH" \
+        "$FEATURE_NAME" \
+        "$iteration_branch" 2>&1); then
         commit_postconditions=1
+        [[ -n "$commit_postcondition_output" ]] && printf '%s\n' "$commit_postcondition_output" >&2
     fi
 
     completion_signaled=false
@@ -1372,6 +1478,16 @@ while [[ $iteration -le $MAX_ITERATIONS && "$completed" == "false" && "$INTERRUP
     # signal or inconsistent task-zero state fails immediately without a
     # reconciliation iteration or repository mutation.
     if [[ "$completion_signaled" == "true" || "$iteration_tasks_after" -eq 0 ]]; then
+        if [[ "$commit_postconditions" -ne 0 ]] && is_recoverable_commit_subject_postcondition "$commit_postcondition_output"; then
+            print_status "$iteration" "failure" "Commit subject postcondition violation"
+            LAST_POSTCONDITION_DEFECTS="$commit_postcondition_output"
+            repair_head_before="${repair_head_before:-$iteration_head_before}"
+            repair_task_state_before="${repair_task_state_before:-$iteration_task_state_before}"
+            repair_tasks_before="${repair_tasks_before:-$iteration_tasks_before}"
+            ((iteration++))
+            continue
+        fi
+
         if validate_completion_gate "$exit_code" "$commit_postconditions" "$REPO_ROOT" "$TASKS_PATH" "$MEMORY_TEMPLATE_PATH" "$MEMORY_PATH" "$FEATURE_NAME"; then
             print_status "$iteration" "success" "Completion gate passed"
             completed=true
@@ -1383,10 +1499,24 @@ while [[ $iteration -le $MAX_ITERATIONS && "$completed" == "false" && "$INTERRUP
     fi
 
     if [[ "$commit_postconditions" -ne 0 ]]; then
+        if is_recoverable_commit_subject_postcondition "$commit_postcondition_output"; then
+            print_status "$iteration" "failure" "Commit subject postcondition violation"
+            LAST_POSTCONDITION_DEFECTS="$commit_postcondition_output"
+            repair_head_before="${repair_head_before:-$iteration_head_before}"
+            repair_task_state_before="${repair_task_state_before:-$iteration_task_state_before}"
+            repair_tasks_before="${repair_tasks_before:-$iteration_tasks_before}"
+            ((iteration++))
+            continue
+        fi
         print_status "$iteration" "failure" "Invalid work-unit commit history"
         fatal_failure=true
         break
     fi
+
+    LAST_POSTCONDITION_DEFECTS=""
+    repair_head_before=""
+    repair_task_state_before=""
+    repair_tasks_before=""
 
     if [[ $exit_code -ne 0 ]] && is_agent_resolution_failure "$output"; then
         print_status "$iteration" "failure" "Agent command unavailable"

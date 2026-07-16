@@ -136,6 +136,8 @@ extract_functions() {
     sed -n '/^resolve_commit_policy()/,/^}/p' "$SOURCE_SCRIPT"
     sed -n '/^infer_issue_number()/,/^}/p' "$SOURCE_SCRIPT"
     sed -n '/^build_commit_subject()/,/^}/p' "$SOURCE_SCRIPT"
+    sed -n '/^validate_commit_subject()/,/^}/p' "$SOURCE_SCRIPT"
+    sed -n '/^is_recoverable_commit_subject_postcondition()/,/^}/p' "$SOURCE_SCRIPT"
 }
 
 eval "$(extract_functions)"
@@ -339,6 +341,22 @@ case "$RALPH_TEST_MODE" in
         printf '%s\n' '<promise>COMPLETE</promise>'
         exit 0
         ;;
+    subject-bad-then-repair)
+        call_count=$(wc -l < "$RALPH_TEST_CALLS" | tr -d ' ')
+        if [[ "$call_count" -eq 1 ]]; then
+            sed -i.bak 's/- \[ \] T001/- [x] T001/' "$RALPH_TEST_SPEC/tasks.md"
+            rm -f "$RALPH_TEST_SPEC/tasks.md.bak"
+            cp "$RALPH_TEST_COMPLETE_MEMORY" "$RALPH_TEST_SPEC/ralph-memory.md"
+            printf '%s\n' 'completed iteration with bad subject' >> "$RALPH_TEST_SPEC/progress.md"
+            printf '%s\n' 'substantive subject validation work' >> source.txt
+            git add source.txt "$RALPH_TEST_SPEC/tasks.md" "$RALPH_TEST_SPEC/ralph-memory.md" "$RALPH_TEST_SPEC/progress.md"
+            git commit -qm "fix(other): US-001 Phase 6 Complete work"
+        else
+            git commit --amend -qm "feat(myteam): complete reviewed work #69"
+        fi
+        printf '%s\n' '<promise>COMPLETE</promise>'
+        exit 0
+        ;;
 esac
 ACTIVEAGENT
 chmod +x "$ACTIVE_AGENT"
@@ -370,6 +388,38 @@ assert_eq "clean post-agent completion exits success" "0" "$post_exit"
 assert_true "clean post-agent completion reports promise" grep -q '<promise>COMPLETE</promise>' <<< "$post_output"
 assert_eq "clean post-agent completion invokes once" "1" "$(wc -l < "$ACTIVE_CALLS" | tr -d ' ')"
 assert_false "resumed work ignores pre-run tasks-only commit shape" grep -q 'coordinated-commit-invalid:' <<< "$post_output"
+
+TMP_SUBJECT_REPO="$TMP_GATE_ROOT/subject-repair"
+cp -R "$TMP_ACTIVE_REPO" "$TMP_SUBJECT_REPO"
+TMP_SUBJECT_SPEC="$TMP_SUBJECT_REPO/specs/test-feature"
+mkdir -p "$TMP_SUBJECT_REPO/.specify/extensions/ralph"
+cat > "$TMP_SUBJECT_REPO/.specify/extensions/ralph/ralph-config.yml" << 'SUBJECTCONFIG'
+model: "gpt-4o"
+max_iterations: 5
+agent_cli: "copilot"
+commit:
+  style: "conventional"
+  scope: "myteam"
+  issue: "auto"
+SUBJECTCONFIG
+printf '%s\n' '- [ ] T001 Complete work' > "$TMP_SUBJECT_SPEC/tasks.md"
+cp "$FIXTURE_DIR/ralph-memory-valid-active.md" "$TMP_SUBJECT_SPEC/ralph-memory.md"
+printf '%s\n' 'active subject validation run' >> "$TMP_SUBJECT_SPEC/progress.md"
+git -C "$TMP_SUBJECT_REPO" add .
+git -C "$TMP_SUBJECT_REPO" commit -qm "test: active subject validation baseline"
+git -C "$TMP_SUBJECT_REPO" checkout -qb 069-feature
+
+SUBJECT_CALLS="$TMP_GATE_ROOT/subject.calls"
+set +e
+subject_output=$(cd "$TMP_SUBJECT_REPO" && RALPH_TEST_CALLS="$SUBJECT_CALLS" RALPH_TEST_MODE=subject-bad-then-repair RALPH_TEST_SPEC="$TMP_SUBJECT_SPEC" RALPH_TEST_COMPLETE_MEMORY="$FIXTURE_DIR/ralph-memory-valid-complete.md" bash "$SOURCE_SCRIPT" --feature-name "test-feature" --tasks-path "$TMP_SUBJECT_SPEC/tasks.md" --spec-dir "$TMP_SUBJECT_SPEC" --max-iterations 2 --model "fake-model" --agent-cli "$ACTIVE_AGENT" 2>&1)
+subject_exit=$?
+set -e
+assert_eq "bad commit subject is repairable by next iteration" "0" "$subject_exit"
+assert_true "bad commit subject reports commit-subject-invalid" grep -q '^commit-subject-invalid:' <<< "$subject_output"
+assert_eq "bad commit subject invokes repair iteration" "2" "$(wc -l < "$SUBJECT_CALLS" | tr -d ' ')"
+assert_eq "bad commit subject is amended to policy-compliant subject" "feat(myteam): complete reviewed work #69" "$(git -C "$TMP_SUBJECT_REPO" log -1 --format=%s)"
+assert_false "subject repair does not report history rewrite defect" grep -q 'coordinated-commit-invalid: new history cannot be inspected' <<< "$subject_output"
+rm -rf "$TMP_SUBJECT_REPO"
 
 TMP_POST_DIRTY_REPO="$TMP_GATE_ROOT/post-dirty"
 cp -R "$TMP_ACTIVE_REPO" "$TMP_POST_DIRTY_REPO"
