@@ -130,6 +130,7 @@ extract_functions() {
     # Extract test_completion_signal
     sed -n '/^test_completion_signal()/,/^}/p' "$SOURCE_SCRIPT"
     # Extract load_ralph_config
+    sed -n '/^normalize_config_value()/,/^}/p' "$SOURCE_SCRIPT"
     sed -n '/^load_ralph_config()/,/^}/p' "$SOURCE_SCRIPT"
     # Extract commit policy helpers
     sed -n '/^resolve_commit_policy()/,/^}/p' "$SOURCE_SCRIPT"
@@ -764,6 +765,54 @@ load_ralph_config "$TMP_REPO"
 assert_eq "local config overrides model" "local-model" "$CONFIG_MODEL"
 assert_eq "local config overrides max_iterations" "20" "$CONFIG_MAX_ITERATIONS"
 assert_eq "local config inherits agent_cli from project" "my-custom-cli" "$CONFIG_AGENT_CLI"
+
+rm -f "$CONFIG_DIR/ralph-config.local.yml"
+
+cat > "$CONFIG_DIR/ralph-config.yml" << 'INLINECFG'
+model: "commented-model" # copied sample keeps inline comments
+max_iterations: 7 # copied sample keeps inline comments
+agent_cli: "codex" # copied sample keeps inline comments
+commit:
+  style: "legacy"      # legacy | conventional
+  scope: "ralph"       # optional; used only for conventional style; default: ralph
+  issue: "auto"        # optional; infers #<issue> from branch numeric prefix
+INLINECFG
+
+CONFIG_MODEL=""
+CONFIG_MAX_ITERATIONS=""
+CONFIG_AGENT_CLI=""
+CONFIG_COMMIT_STYLE=""
+CONFIG_COMMIT_SCOPE=""
+CONFIG_COMMIT_ISSUE=""
+
+load_ralph_config "$TMP_REPO"
+
+assert_eq "inline comments preserve quoted model value" "commented-model" "$CONFIG_MODEL"
+assert_eq "inline comments preserve numeric max iterations value" "7" "$CONFIG_MAX_ITERATIONS"
+assert_eq "inline comments preserve quoted agent cli value" "codex" "$CONFIG_AGENT_CLI"
+assert_eq "inline comments preserve quoted commit style" "legacy" "$CONFIG_COMMIT_STYLE"
+assert_eq "inline comments preserve quoted commit scope" "ralph" "$CONFIG_COMMIT_SCOPE"
+assert_eq "inline comments preserve quoted commit issue" "auto" "$CONFIG_COMMIT_ISSUE"
+
+cat > "$CONFIG_DIR/ralph-config.yml" << 'UNQUOTEDINLINECFG'
+commit:
+  style: conventional # legacy | conventional
+  scope: myapp # optional; used only for conventional style
+  issue: auto # optional; infers #<issue> from branch numeric prefix
+UNQUOTEDINLINECFG
+
+CONFIG_MODEL=""
+CONFIG_MAX_ITERATIONS=""
+CONFIG_AGENT_CLI=""
+CONFIG_COMMIT_STYLE=""
+CONFIG_COMMIT_SCOPE=""
+CONFIG_COMMIT_ISSUE=""
+
+load_ralph_config "$TMP_REPO"
+
+assert_eq "inline comments preserve unquoted commit style" "conventional" "$CONFIG_COMMIT_STYLE"
+assert_eq "inline comments preserve unquoted commit scope" "myapp" "$CONFIG_COMMIT_SCOPE"
+assert_eq "inline comments preserve unquoted commit issue" "auto" "$CONFIG_COMMIT_ISSUE"
 
 rm -rf "$TMP_REPO"
 
