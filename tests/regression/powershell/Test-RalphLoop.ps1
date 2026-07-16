@@ -1476,11 +1476,11 @@ Remove-Item $tmpInvalidRepo -Recurse -Force
 
 #endregion
 
-#region Tests: commit policy — Phase 7 flattened config rejection scenarios (T030)
+#region Tests: commit policy — Phase 7 invalid top-level config rejection scenarios (T030)
 
-Write-Section "commit policy — Phase 7 flattened config rejection scenarios"
+Write-Section "commit policy — Phase 7 invalid top-level config rejection scenarios"
 
-# T030-1: Read-RalphConfig sets _commit_flattened when flat commit.style key is present
+# T030-1: Read-RalphConfig sets _commit_flattened when top-level commit-policy keys are present
 $tmpFlatRepo = Join-Path ([System.IO.Path]::GetTempPath()) "ralph-flat-$PID"
 $tmpFlatConfigDir = Join-Path $tmpFlatRepo ".specify\extensions\ralph"
 New-Item -ItemType Directory -Path $tmpFlatConfigDir -Force | Out-Null
@@ -1488,6 +1488,14 @@ Copy-Item (Join-Path $FixtureDir "ralph-config-invalid-flat.yml") (Join-Path $tm
 $flatRepoConfig = Read-RalphConfig -RepoRoot $tmpFlatRepo
 Assert-True "flattened config fixture sets _commit_flattened flag" ($flatRepoConfig.ContainsKey('_commit_flattened') -and $flatRepoConfig['_commit_flattened'] -eq 'true')
 Remove-Item $tmpFlatRepo -Recurse -Force
+
+$tmpBareRepo = Join-Path ([System.IO.Path]::GetTempPath()) "ralph-bare-$PID"
+$tmpBareConfigDir = Join-Path $tmpBareRepo ".specify\extensions\ralph"
+New-Item -ItemType Directory -Path $tmpBareConfigDir -Force | Out-Null
+Copy-Item (Join-Path $FixtureDir "ralph-config-invalid-bare.yml") (Join-Path $tmpBareConfigDir "ralph-config.yml")
+$bareRepoConfig = Read-RalphConfig -RepoRoot $tmpBareRepo
+Assert-True "bare top-level config fixture sets _commit_flattened flag" ($bareRepoConfig.ContainsKey('_commit_flattened') -and $bareRepoConfig['_commit_flattened'] -eq 'true')
+Remove-Item $tmpBareRepo -Recurse -Force
 
 # T030-2: Resolve-RalphCommitPolicy returns null for flattened config
 $flatConfig = @{ '_commit_flattened' = 'true' }
@@ -1506,7 +1514,28 @@ try {
 }
 Assert-True "flattened config reports commit-policy-invalid" ($null -ne $flatErrorMsg -and $flatErrorMsg -match "commit-policy-invalid")
 
-# T030-4: valid nested commit: block still resolves correctly after flattened detection logic
+$bareLoopRoot = Join-Path ([System.IO.Path]::GetTempPath()) "ralph-bare-loop-$PID"
+$bareLoopSpec = Join-Path $bareLoopRoot "specs/test-feature"
+$bareLoopConfigDir = Join-Path $bareLoopRoot ".specify/extensions/ralph"
+New-Item -ItemType Directory -Path $bareLoopSpec -Force | Out-Null
+New-Item -ItemType Directory -Path $bareLoopConfigDir -Force | Out-Null
+Copy-Item (Join-Path $FixtureDir "ralph-config-invalid-bare.yml") (Join-Path $bareLoopConfigDir "ralph-config.yml")
+Set-Content -Path (Join-Path $bareLoopSpec "tasks.md") -Value "- [ ] T001 Work to do" -Encoding UTF8
+
+$bareLoopOutput = & pwsh -NoLogo -NoProfile -File $SourceScript `
+    -FeatureName "test-feature" `
+    -TasksPath (Join-Path $bareLoopSpec "tasks.md") `
+    -SpecDir $bareLoopSpec `
+    -MaxIterations 1 `
+    -Model "fake-model" `
+    -WorkingDirectory $bareLoopRoot 2>&1
+$bareLoopExit = $LASTEXITCODE
+$bareLoopText = $bareLoopOutput -join "`n"
+Assert-Equal "bare top-level config causes non-zero exit" 1 $bareLoopExit
+Assert-True "bare top-level config reports commit-policy-invalid" ($bareLoopText -match "commit-policy-invalid")
+Remove-Item $bareLoopRoot -Recurse -Force
+
+# T030-4: valid nested commit: block still resolves correctly after invalid-shape detection logic
 $nestedValidPolicy = Resolve-RalphCommitPolicy -Config @{ "commit.style" = "conventional"; "commit.scope" = "myapp" }
 $result = Build-RalphCommitSubject -FeatureName "my-feature" -WorkUnitTitle "US valid nested config" -Branch "main" -Policy $nestedValidPolicy
 Assert-Equal "valid nested config still builds correct subject" "feat(myapp): US valid nested config" $result

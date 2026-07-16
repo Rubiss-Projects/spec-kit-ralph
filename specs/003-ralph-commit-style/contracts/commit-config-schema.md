@@ -33,12 +33,15 @@ Ralph reads `style`, `scope`, and `issue` only from inside this nested `commit:`
 
 ## Invalid Shapes
 
-The following flattened forms are unsupported and invalid:
+The following top-level commit-policy forms are unsupported and invalid:
 
 ```yaml
 commit.style: conventional
 commit.scope: ralph
 commit.issue: auto
+style: conventional
+scope: ralph
+issue: auto
 ```
 
 ## Field Semantics
@@ -63,4 +66,4 @@ commit.issue: auto
 - Existing projects without `commit` configuration must behave exactly as they do today.
 - The configuration is optional across all supported orchestration paths.
 - The same effective policy must be observed by Bash and PowerShell launch paths.
-- The nested `commit:` block shape is authoritative; flattened equivalents are not supported.
+- The nested `commit:` block shape is authoritative; equivalent top-level commit-policy keys are not supported.
