@@ -1028,6 +1028,40 @@ Assert-Equal "local config overrides model" "local-model" $config["model"]
 Assert-Equal "local config overrides max_iterations" "20" $config["max_iterations"]
 Assert-Equal "local config inherits agent_cli" "my-custom-cli" $config["agent_cli"]
 
+Remove-Item (Join-Path $configDir "ralph-config.local.yml") -Force
+
+@"
+model: "commented-model" # copied sample keeps inline comments
+max_iterations: 7 # copied sample keeps inline comments
+agent_cli: "codex" # copied sample keeps inline comments
+commit:
+  style: "legacy"      # legacy | conventional
+  scope: "ralph"       # optional; used only for conventional style; default: ralph
+  issue: "auto"        # optional; infers #<issue> from branch numeric prefix
+"@ | Set-Content (Join-Path $configDir "ralph-config.yml") -Encoding UTF8
+
+$config = Read-RalphConfig -RepoRoot $tmpRepo
+
+Assert-Equal "inline comments preserve quoted model value" "commented-model" $config["model"]
+Assert-Equal "inline comments preserve numeric max iterations value" "7" $config["max_iterations"]
+Assert-Equal "inline comments preserve quoted agent cli value" "codex" $config["agent_cli"]
+Assert-Equal "inline comments preserve quoted commit style" "legacy" $config["commit.style"]
+Assert-Equal "inline comments preserve quoted commit scope" "ralph" $config["commit.scope"]
+Assert-Equal "inline comments preserve quoted commit issue" "auto" $config["commit.issue"]
+
+@"
+commit:
+  style: conventional # legacy | conventional
+  scope: myapp # optional; used only for conventional style
+  issue: auto # optional; infers #<issue> from branch numeric prefix
+"@ | Set-Content (Join-Path $configDir "ralph-config.yml") -Encoding UTF8
+
+$config = Read-RalphConfig -RepoRoot $tmpRepo
+
+Assert-Equal "inline comments preserve unquoted commit style" "conventional" $config["commit.style"]
+Assert-Equal "inline comments preserve unquoted commit scope" "myapp" $config["commit.scope"]
+Assert-Equal "inline comments preserve unquoted commit issue" "auto" $config["commit.issue"]
+
 Remove-Item $tmpRepo -Recurse -Force
 
 #endregion

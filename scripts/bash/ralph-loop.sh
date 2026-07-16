@@ -172,6 +172,52 @@ fi
 
 #region Config Loading
 
+normalize_config_value() {
+    local value=$1
+    local output=""
+    local char
+    local previous=""
+    local i
+    local length=${#value}
+    local in_single=false
+    local in_double=false
+    local first
+    local last
+
+    for ((i = 0; i < length; i++)); do
+        char=${value:i:1}
+        if [[ "$char" == '"' && "$in_single" == "false" ]]; then
+            if [[ "$in_double" == "true" ]]; then
+                in_double=false
+            else
+                in_double=true
+            fi
+        elif [[ "$char" == "'" && "$in_double" == "false" ]]; then
+            if [[ "$in_single" == "true" ]]; then
+                in_single=false
+            else
+                in_single=true
+            fi
+        elif [[ "$char" == "#" && "$in_single" == "false" && "$in_double" == "false" ]]; then
+            if [[ -z "$output" || "$previous" == [[:space:]] ]]; then
+                break
+            fi
+        fi
+        output+="$char"
+        previous="$char"
+    done
+
+    output=$(printf '%s\n' "$output" | sed 's/^[[:space:]]*//' | sed 's/[[:space:]]*$//')
+    if [[ ${#output} -ge 2 ]]; then
+        first=${output:0:1}
+        last=${output:${#output}-1:1}
+        if [[ "$first" == "$last" && ( "$first" == '"' || "$first" == "'" ) ]]; then
+            output=${output:1:${#output}-2}
+        fi
+    fi
+    printf '%s\n' "$output"
+}
+
 load_ralph_config() {
     local repo_root=$1
     local config_path="$repo_root/.specify/extensions/ralph/ralph-config.yml"
@@ -190,7 +236,7 @@ load_ralph_config() {
                     if [[ "$in_commit_block" == "true" ]]; then
                         trimmed=$(printf '%s\n' "$line" | sed 's/^[[:space:]]*//')
                         key=$(printf '%s\n' "$trimmed" | sed 's/:.*//' | tr -d ' ')
-                        value=$(printf '%s\n' "$trimmed" | sed 's/^[^:]*:[[:space:]]*//' | sed 's/^"//' | sed 's/"$//')
+                        value=$(normalize_config_value "$(printf '%s\n' "$trimmed" | sed 's/^[^:]*:[[:space:]]*//')")
                         case "$key" in
                             style) CONFIG_COMMIT_STYLE="$value" ;;
                             scope) CONFIG_COMMIT_SCOPE="$value" ;;
@@ -201,7 +247,7 @@ load_ralph_config() {
                     # Top-level key — exit any active nested block first
                     in_commit_block=false
                     key=$(printf '%s\n' "$line" | sed 's/:.*//' | tr -d ' ')
-                    value=$(printf '%s\n' "$line" | sed 's/^[^:]*:[[:space:]]*//' | sed 's/^"//' | sed 's/"$//')
+                    value=$(normalize_config_value "$(printf '%s\n' "$line" | sed 's/^[^:]*:[[:space:]]*//')")
                     case "$key" in
                         model) CONFIG_MODEL="$value" ;;
                         max_iterations) CONFIG_MAX_ITERATIONS="$value" ;;

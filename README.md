@@ -98,9 +98,9 @@ agent_cli: "copilot"
 
 # Commit subject policy (optional — omit this block to preserve today's behavior)
 commit:
-  style: legacy        # legacy | conventional
-  scope: ralph         # optional; used only for conventional style; default: ralph
-  issue: auto          # optional; auto-links commits to inferred GitHub issue number
+  style: "legacy"      # legacy | conventional
+  scope: "ralph"       # optional; used only for conventional style; default: ralph
+  issue: "auto"        # optional; auto-links commits to inferred GitHub issue number
 ```
 
 The installed extension contains only the active `ralph-config.yml`, which is also the manifest's canonical configuration source.

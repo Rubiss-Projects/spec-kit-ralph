@@ -24,9 +24,9 @@ ralph-config.template.yml
 
 ```yaml
 commit:
-  style: legacy        # legacy | conventional
-  scope: ralph         # optional; used for conventional style
-  issue: auto          # optional; infers #<issue> from branch prefix
+  style: "legacy"      # legacy | conventional
+  scope: "ralph"       # optional; used for conventional style
+  issue: "auto"        # optional; infers #<issue> from branch prefix
 ```
 
 Ralph reads `style`, `scope`, and `issue` only from inside this nested `commit:` block.

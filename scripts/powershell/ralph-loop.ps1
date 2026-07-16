@@ -98,6 +98,37 @@ $ExtensionRoot = Resolve-Path (Join-Path $ScriptDir "..\..") | Select-Object -Ex
 $IterateCommandPath = Join-Path $ExtensionRoot "commands\iterate.md"
 $MemoryTemplatePath = Join-Path $ExtensionRoot "templates\ralph-memory.md"
 
+function ConvertFrom-RalphConfigValue {
+    param([string]$Value)
+
+    $output = ""
+    $inSingle = $false
+    $inDouble = $false
+
+    foreach ($char in $Value.ToCharArray()) {
+        if ($char -eq '"' -and -not $inSingle) {
+            $inDouble = -not $inDouble
+        } elseif ($char -eq "'" -and -not $inDouble) {
+            $inSingle = -not $inSingle
+        } elseif ($char -eq "#" -and -not $inSingle -and -not $inDouble) {
+            if ($output.Length -eq 0 -or [char]::IsWhiteSpace($output[$output.Length - 1])) {
+                break
+            }
+        }
+        $output += $char
+    }
+
+    $output = $output.Trim()
+    if ($output.Length -ge 2) {
+        $first = $output[0]
+        $last = $output[$output.Length - 1]
+        if (($first -eq $last) -and ($first -eq '"' -or $first -eq "'")) {
+            $output = $output.Substring(1, $output.Length - 2)
+        }
+    }
+    return $output
+}
+
 # Load config from extension config file
 function Read-RalphConfig {
     param([string]$RepoRoot)
@@ -118,8 +149,8 @@ function Read-RalphConfig {
                     # Indented line — process only when inside the commit: block
                     if ($inCommitBlock) {
                         $trimmed = $rawLine.Trim()
-                        if ($trimmed -match '^(\w+)\s*:\s*"?(.+?)"?\s*$') {
-                            $config["commit.$($Matches[1])"] = $Matches[2]
+                        if ($trimmed -match '^(\w+)\s*:\s*(.*)$') {
+                            $config["commit.$($Matches[1])"] = ConvertFrom-RalphConfigValue $Matches[2]
                         }
                     }
                 } else {
@@ -129,13 +160,10 @@ function Read-RalphConfig {
                     if ($line -match '^commit\.\w+\s*:') {
                         # Flattened commit-policy key — mark as invalid
                         $config['_commit_flattened'] = 'true'
-                    } elseif ($line -match '^(\w+)\s*:\s*"?(.+?)"?\s*$') {
-                        $config[$Matches[1]] = $Matches[2]
-                    } elseif ($line -match '^commit\s*:\s*$') {
-                        $inCommitBlock = $true
-                    } elseif ($line -match '^(\w+)\s*:') {
-                        # Top-level key with no value (e.g., block opener)
-                        if ($Matches[1] -eq 'commit') { $inCommitBlock = $true }
+                    } elseif ($line -match '^commit\s*:\s*(.*)$') {
+                        if (-not (ConvertFrom-RalphConfigValue $Matches[1])) { $inCommitBlock = $true }
+                    } elseif ($line -match '^(\w+)\s*:\s*(.*)$') {
+                        $config[$Matches[1]] = ConvertFrom-RalphConfigValue $Matches[2]
                     }
                 }
             }
