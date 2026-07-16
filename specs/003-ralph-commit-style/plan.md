@@ -97,12 +97,12 @@ spec-kit-ralph/
 │       ├── bash/test-ralph-loop.sh     # Bash regression scenarios
 │       ├── powershell/Test-RalphLoop.ps1
 │       └── fixtures/                   # Config and branch/commit fixtures
-├── ralph-config.template.yml           # Public config template
+├── ralph-config.yml                    # Canonical installed config source
 ├── README.md                           # User-facing config and commit examples
 └── extension.yml                       # Compatibility review only; no schema change expected
 ```
 
-**Structure Decision**: Extend the existing flat extension layout. Commit policy resolution and validation live in the mirrored orchestrator scripts; agent-facing commit instructions stay in `commands/iterate.md`; the project-visible configuration surface remains `ralph-config.template.yml`; regression coverage and fixtures stay in the existing cross-platform suites.
+**Structure Decision**: Extend the existing flat extension layout. Commit policy resolution and validation live in the mirrored orchestrator scripts; agent-facing commit instructions stay in `commands/iterate.md`; the project-visible configuration surface remains the canonical `ralph-config.yml`; regression coverage and fixtures stay in the existing cross-platform suites.
 
 ## Complexity Tracking
 

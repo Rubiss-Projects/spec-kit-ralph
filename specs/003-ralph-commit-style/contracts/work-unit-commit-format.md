@@ -47,6 +47,13 @@ When commit style resolves to `conventional`, Ralph generates a conventional wor
 |---|---|
 | Unsupported explicit `commit.style` | Stop before commit creation with a clear configuration error |
 | Missing numeric branch prefix with `issue: auto` | Create the commit successfully with no issue suffix |
+| Agent-created commit subject violates the configured commit policy | Report `commit-subject-invalid` and feed the defect back to the next iteration for repair |
+
+## Postcondition Validation
+
+When a `commit` block is configured, Ralph validates each new work-unit commit subject created during the current iteration before accepting completion. The validation is intentionally a guardrail: it enforces the configured `feat(...)` prefix, required inferred issue suffix, and absence of obvious planning labels in conventional payloads, but it does not require an exact deterministic commit summary.
+
+If the only postcondition defects are `commit-subject-invalid` diagnostics, Ralph treats them as repairable feedback for the next agent iteration. Broader commit-history, dirty-worktree, or completion-gate defects keep their existing failure behavior.
 
 ## Parity Rules
 

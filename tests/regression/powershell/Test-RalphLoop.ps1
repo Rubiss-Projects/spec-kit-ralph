@@ -806,6 +806,69 @@ Assert-Equal "post-agent clean completion adds exactly one commit" ($postHistory
 Assert-Equal "post-agent clean completion leaves repository clean" "" ((Invoke-TestGit -Repository $postRepo.Root -Arguments @("status", "--short", "--untracked-files=all")) -join "`n")
 Assert-True "resumed work ignores pre-run tasks-only commit shape" (($postOutput -join "`n") -notmatch 'coordinated-commit-invalid:')
 
+$subjectRepo = New-TransactionTestRepository -Name "ralph-subject-repair"
+$subjectConfigDir = Join-Path $subjectRepo.Root ".specify/extensions/ralph"
+New-Item -ItemType Directory -Path $subjectConfigDir -Force | Out-Null
+Set-Content -Path (Join-Path $subjectConfigDir "ralph-config.yml") -Value @"
+model: "gpt-4o"
+max_iterations: 5
+agent_cli: "copilot"
+commit:
+  style: "conventional"
+  scope: "myteam"
+  issue: "auto"
+"@ -Encoding UTF8
+Invoke-TestGit -Repository $subjectRepo.Root -Arguments @("add", ".") | Out-Null
+Invoke-TestGit -Repository $subjectRepo.Root -Arguments @("commit", "-q", "-m", "test: active subject validation baseline") | Out-Null
+Invoke-TestGit -Repository $subjectRepo.Root -Arguments @("checkout", "-q", "-b", "069-feature") | Out-Null
+
+$subjectAgentDir = Join-Path ([System.IO.Path]::GetTempPath()) "ralph-subject-agent-$PID"
+New-Item -ItemType Directory -Path $subjectAgentDir -Force | Out-Null
+$subjectLog = Join-Path $subjectAgentDir "subject.calls"
+$subjectScript = Join-Path $subjectAgentDir "subject-agent.ps1"
+$subjectScriptText = @"
+`$repo = '$($subjectRepo.Root.Replace("'", "''"))'
+`$tasks = '$($subjectRepo.TasksPath.Replace("'", "''"))'
+`$memory = '$($subjectRepo.MemoryPath.Replace("'", "''"))'
+`$progress = '$($subjectRepo.ProgressPath.Replace("'", "''"))'
+`$source = '$($subjectRepo.SubstantivePath.Replace("'", "''"))'
+`$completeMemory = '$((Join-Path $FixtureDir "ralph-memory-valid-complete.md").Replace("'", "''"))'
+`$log = '$($subjectLog.Replace("'", "''"))'
+`$callCount = if (Test-Path `$log) { @((Get-Content `$log)).Count } else { 0 }
+Add-Content -Path `$log -Value "invoked" -Encoding UTF8
+if (`$callCount -eq 0) {
+    Set-Content -Path `$tasks -Value "- [x] T001 Complete transaction" -Encoding UTF8
+    Copy-Item `$completeMemory `$memory -Force
+    Add-Content -Path `$progress -Value "`ncompleted iteration with bad subject" -Encoding UTF8
+    Add-Content -Path `$source -Value "`nsubstantive subject validation work" -Encoding UTF8
+    & git -C `$repo add "src/work.txt" "specs/test-feature/tasks.md" "specs/test-feature/ralph-memory.md" "specs/test-feature/progress.md"
+    & git -C `$repo commit -q -m "fix(other): US-001 Phase 6 Complete work"
+} else {
+    & git -C `$repo commit --amend -q -m "feat(myteam): complete reviewed work #69"
+}
+Write-Host "<promise>COMPLETE</promise>"
+exit 0
+"@
+Set-Content -Path $subjectScript -Value $subjectScriptText -Encoding UTF8
+$subjectAgent = New-FakeCopilot -Directory $subjectAgentDir -PowerShellScript $subjectScript
+$subjectOutput = & pwsh -NoLogo -NoProfile -File $SourceScript `
+    -FeatureName "test-feature" `
+    -TasksPath $subjectRepo.TasksPath `
+    -SpecDir $subjectRepo.SpecDir `
+    -MaxIterations 2 `
+    -Model "fake-model" `
+    -AgentCli $subjectAgent `
+    -WorkingDirectory $subjectRepo.Root 2>&1
+$subjectExit = $LASTEXITCODE
+$subjectText = $subjectOutput -join "`n"
+Assert-Equal "bad commit subject is repairable by next iteration" 0 $subjectExit
+Assert-True "bad commit subject reports commit-subject-invalid" ($subjectText -match '(?m)^commit-subject-invalid:')
+Assert-Equal "bad commit subject invokes repair iteration" 2 (@(Get-Content $subjectLog).Count)
+Assert-Equal "bad commit subject is amended to policy-compliant subject" "feat(myteam): complete reviewed work #69" ((Invoke-TestGit -Repository $subjectRepo.Root -Arguments @("log", "-1", "--format=%s")) | Select-Object -First 1)
+Assert-True "subject repair does not report history rewrite defect" ($subjectText -notmatch 'coordinated-commit-invalid: new history cannot be inspected')
+Remove-Item $subjectRepo.Root -Recurse -Force
+Remove-Item $subjectAgentDir -Recurse -Force
+
 # Restore an active coordinated baseline, then let one final work unit commit
 # successfully while leaving multiple new dirty paths. The gate must report all
 # paths, fail immediately, and add no repair/reconciliation commit.

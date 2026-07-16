@@ -149,6 +149,8 @@ Result (on branch `069-some-feature`): `feat(ralph): <commit summary> #69`
 
 Setting an unsupported `commit.style` value causes Ralph to stop with a clear configuration error before creating any commit.
 
+When a `commit` block is configured, Ralph also validates the subject of each new agent-created work-unit commit before accepting completion. The validator checks the configured prefix, required issue suffix, and obvious planning labels in conventional payloads, but it does not require an exact deterministic summary. A subject-only defect is reported back to the next iteration so the agent can repair it, for example by amending the latest commit.
+
 ### Agent CLI Support
 
 Ralph supports CLI-specific invocation codepaths selected by `agent_cli`.

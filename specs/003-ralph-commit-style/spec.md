@@ -74,6 +74,7 @@ As a maintainer reviewing Ralph-generated history, I want commit messages to inc
 - A branch has no numeric prefix at all.
 - A project has an invalid or unrecognized commit-style value; commit creation must stop with a clear configuration error.
 - A project provides commit-policy keys outside the `commit:` block, such as `commit.style` or bare `style`; the config shape is invalid.
+- An agent creates a commit whose subject does not match the configured commit policy; Ralph must report the subject defect before accepting completion.
 - A project enables issue auto-linking while using the legacy commit style; linking behavior remains the same as in conventional style.
 - A work unit title already contains digits or punctuation that could make the final commit subject harder to parse.
 - A conventional commit is generated from a work unit whose title is broad or audit-oriented rather than commit-friendly.
@@ -102,6 +103,8 @@ As a maintainer reviewing Ralph-generated history, I want commit messages to inc
 - **FR-017**: Ralph MUST document the available commit-style options, scope behavior, commit-summary behavior, and automatic issue-linking behavior in user-facing configuration guidance.
 - **FR-018**: Ralph MUST apply the same commit-style, commit-summary, and issue-linking rules across the Bash and PowerShell orchestration paths.
 - **FR-019**: When `commit.style` is present but unsupported, or when `style`, `scope`, or `issue` are provided outside the nested `commit:` block, Ralph MUST treat the configuration as invalid and MUST NOT create a commit until the configuration is corrected.
+- **FR-020**: When commit policy is explicitly configured, Ralph MUST validate each new agent-created work-unit commit subject against the resolved style, scope, inferred issue suffix, and conventional planning-label rules before accepting completion.
+- **FR-021**: Ralph MUST treat subject-only validation failures as repairable postcondition feedback for the next iteration rather than requiring an exact deterministic conventional summary.
 
 ### Key Entities
 
@@ -135,6 +138,7 @@ As a maintainer reviewing Ralph-generated history, I want commit messages to inc
 - **SC-007**: User-facing configuration documentation explains the available commit styles, scope behavior, commit-summary behavior, and issue auto-linking behavior well enough that 4 of 5 representative users can choose the intended option without additional clarification.
 - **SC-008**: Equivalent commit-style scenarios produce the same observable results across the Bash and PowerShell orchestration paths.
 - **SC-009**: In 100% of tested Bash and PowerShell scenarios, the nested `commit:` block is parsed consistently, and malformed or flattened commit-policy config shapes fail with the documented validation behavior.
+- **SC-010**: In 100% of tested Bash and PowerShell scenarios with configured commit policy, an agent-created commit subject that violates the resolved policy is reported as `commit-subject-invalid` and completion is accepted only after a follow-up iteration repairs the subject.
 
 ## Assumptions
 
