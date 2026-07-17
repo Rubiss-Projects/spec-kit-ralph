@@ -842,7 +842,7 @@ if (`$callCount -eq 0) {
     Add-Content -Path `$progress -Value "`ncompleted iteration with bad subject" -Encoding UTF8
     Add-Content -Path `$source -Value "`nsubstantive subject validation work" -Encoding UTF8
     & git -C `$repo add "src/work.txt" "specs/test-feature/tasks.md" "specs/test-feature/ralph-memory.md" "specs/test-feature/progress.md"
-    & git -C `$repo commit -q -m "fix(other): US-001 Phase 6 Complete work"
+    & git -C `$repo commit -q -m "fix(other): US1 Phase 6 Complete work"
 } else {
     & git -C `$repo commit --amend -q -m "feat(myteam): complete reviewed work #69"
 }
@@ -868,6 +868,67 @@ Assert-Equal "bad commit subject is amended to policy-compliant subject" "feat(m
 Assert-True "subject repair does not report history rewrite defect" ($subjectText -notmatch 'coordinated-commit-invalid: new history cannot be inspected')
 Remove-Item $subjectRepo.Root -Recurse -Force
 Remove-Item $subjectAgentDir -Recurse -Force
+
+$noPrefixRepo = New-TransactionTestRepository -Name "ralph-no-prefix-issue-repair"
+$noPrefixConfigDir = Join-Path $noPrefixRepo.Root ".specify/extensions/ralph"
+New-Item -ItemType Directory -Path $noPrefixConfigDir -Force | Out-Null
+Set-Content -Path (Join-Path $noPrefixConfigDir "ralph-config.yml") -Value @"
+model: "gpt-4o"
+max_iterations: 5
+agent_cli: "copilot"
+commit:
+  style: "conventional"
+  scope: "myteam"
+  issue: "auto"
+"@ -Encoding UTF8
+Invoke-TestGit -Repository $noPrefixRepo.Root -Arguments @("add", ".") | Out-Null
+Invoke-TestGit -Repository $noPrefixRepo.Root -Arguments @("commit", "-q", "-m", "test: active no-prefix issue baseline") | Out-Null
+
+$noPrefixAgentDir = Join-Path ([System.IO.Path]::GetTempPath()) "ralph-no-prefix-agent-$PID"
+New-Item -ItemType Directory -Path $noPrefixAgentDir -Force | Out-Null
+$noPrefixLog = Join-Path $noPrefixAgentDir "no-prefix.calls"
+$noPrefixScript = Join-Path $noPrefixAgentDir "no-prefix-agent.ps1"
+$noPrefixScriptText = @"
+`$repo = '$($noPrefixRepo.Root.Replace("'", "''"))'
+`$tasks = '$($noPrefixRepo.TasksPath.Replace("'", "''"))'
+`$memory = '$($noPrefixRepo.MemoryPath.Replace("'", "''"))'
+`$progress = '$($noPrefixRepo.ProgressPath.Replace("'", "''"))'
+`$source = '$($noPrefixRepo.SubstantivePath.Replace("'", "''"))'
+`$completeMemory = '$((Join-Path $FixtureDir "ralph-memory-valid-complete.md").Replace("'", "''"))'
+`$log = '$($noPrefixLog.Replace("'", "''"))'
+`$callCount = if (Test-Path `$log) { @((Get-Content `$log)).Count } else { 0 }
+Add-Content -Path `$log -Value "invoked" -Encoding UTF8
+if (`$callCount -eq 0) {
+    Set-Content -Path `$tasks -Value "- [x] T001 Complete transaction" -Encoding UTF8
+    Copy-Item `$completeMemory `$memory -Force
+    Add-Content -Path `$progress -Value "`ncompleted iteration with incorrect issue suffix" -Encoding UTF8
+    Add-Content -Path `$source -Value "`nsubstantive issue suffix validation work" -Encoding UTF8
+    & git -C `$repo add "src/work.txt" "specs/test-feature/tasks.md" "specs/test-feature/ralph-memory.md" "specs/test-feature/progress.md"
+    & git -C `$repo commit -q -m "feat(myteam): complete work #999"
+} else {
+    & git -C `$repo commit --amend -q -m "feat(myteam): complete work"
+}
+Write-Host "<promise>COMPLETE</promise>"
+exit 0
+"@
+Set-Content -Path $noPrefixScript -Value $noPrefixScriptText -Encoding UTF8
+$noPrefixAgent = New-FakeCopilot -Directory $noPrefixAgentDir -PowerShellScript $noPrefixScript
+$noPrefixOutput = & pwsh -NoLogo -NoProfile -File $SourceScript `
+    -FeatureName "test-feature" `
+    -TasksPath $noPrefixRepo.TasksPath `
+    -SpecDir $noPrefixRepo.SpecDir `
+    -MaxIterations 2 `
+    -Model "fake-model" `
+    -AgentCli $noPrefixAgent `
+    -WorkingDirectory $noPrefixRepo.Root 2>&1
+$noPrefixExit = $LASTEXITCODE
+$noPrefixText = $noPrefixOutput -join "`n"
+Assert-Equal "no-prefix issue suffix is repairable by next iteration" 0 $noPrefixExit
+Assert-True "no-prefix issue suffix reports commit-subject-invalid" ($noPrefixText -match '(?m)^commit-subject-invalid:')
+Assert-Equal "no-prefix issue suffix invokes repair iteration" 2 (@(Get-Content $noPrefixLog).Count)
+Assert-Equal "no-prefix issue suffix is amended away" "feat(myteam): complete work" ((Invoke-TestGit -Repository $noPrefixRepo.Root -Arguments @("log", "-1", "--format=%s")) | Select-Object -First 1)
+Remove-Item $noPrefixRepo.Root -Recurse -Force
+Remove-Item $noPrefixAgentDir -Recurse -Force
 
 # Restore an active coordinated baseline, then let one final work unit commit
 # successfully while leaving multiple new dirty paths. The gate must report all
@@ -1671,6 +1732,11 @@ Assert-True "conventional+summary: US- label absent from subject" (-not ($result
 # T035-3: conventional commit with CommitSummary does not contain Phase label
 $result = Build-RalphCommitSubject -FeatureName "my-feature" -WorkUnitTitle "Phase 6 Polish & Validation" -Branch "main" -Policy $convPolicy -CommitSummary "update readme and template for polish phase"
 Assert-True "conventional+summary: Phase label absent from subject" (-not ($result -match 'Phase '))
+
+Assert-True "subject validator rejects bare US planning label" (-not (Test-RalphCommitSubject -Subject "feat(ralph): US1 Complete work" -FeatureName "my-feature" -Branch "main" -Policy $convPolicy -CommitId "test-commit").IsValid)
+Assert-True "subject validator rejects hyphenated US planning label" (-not (Test-RalphCommitSubject -Subject "feat(ralph): US-001 Complete work" -FeatureName "my-feature" -Branch "main" -Policy $convPolicy -CommitId "test-commit").IsValid)
+$convIssueNoPrefixPolicy = Resolve-RalphCommitPolicy -Config @{ "commit.style" = "conventional"; "commit.issue" = "auto" }
+Assert-True "subject validator rejects issue suffix when no issue is inferred" (-not (Test-RalphCommitSubject -Subject "feat(ralph): complete work #999" -FeatureName "my-feature" -Branch "main" -Policy $convIssueNoPrefixPolicy -CommitId "test-commit").IsValid)
 
 # T035-4: legacy commit with planning labels is preserved exactly (US- must appear)
 $legacyPolicy = Resolve-RalphCommitPolicy -Config @{}

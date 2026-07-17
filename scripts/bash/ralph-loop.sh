@@ -349,6 +349,9 @@ validate_commit_subject() {
                 printf 'commit-subject-invalid: commit %s subject must end with "%s"\n' "$commit" "$issue_suffix"
                 return 1
             fi
+        elif [[ "$subject" =~ [[:space:]]#[0-9]+$ ]]; then
+            printf 'commit-subject-invalid: commit %s subject must not include an issue suffix when none can be inferred\n' "$commit"
+            return 1
         fi
     fi
 
@@ -357,7 +360,7 @@ validate_commit_subject() {
         if [[ -n "$issue_suffix" && "$payload" == *"$issue_suffix" ]]; then
             payload="${payload%"$issue_suffix"}"
         fi
-        if [[ "$payload" =~ (^|[[:space:]])(US-[0-9]+|Phase[[:space:]]+[0-9]+|T[0-9]{3,})($|[[:space:][:punct:]]) ]]; then
+        if [[ "$payload" =~ (^|[[:space:]])(US-?[0-9]+|Phase[[:space:]]+[0-9]+|T[0-9]{3,})($|[[:space:][:punct:]]) ]]; then
             printf 'commit-subject-invalid: commit %s conventional payload must not contain planning labels\n' "$commit"
             return 1
         fi
