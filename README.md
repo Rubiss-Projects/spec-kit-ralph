@@ -260,7 +260,7 @@ export SPECKIT_RALPH_AGENT_CLI="codex"
 | 3 consecutive failures | `1` | Circuit breaker — agent is stuck |
 | Ctrl+C | `130` | User interrupted the loop |
 
-The terminal `Current Handoff` must contain only `- Feature complete; no handoff required.`. Completion also requires `git status --short --untracked-files=all` to succeed with no output. Ralph reports dirty paths and stops; it does not stage, amend, reset, stash, or launch a cleanup iteration.
+The terminal `Current Handoff` must contain only `- Feature complete; no handoff required.`. Completion also requires `git status --short --untracked-files=all` to succeed with no output. Ralph reports dirty paths and stops; it does not stage, amend, reset, stash, or launch a cleanup iteration. The only retry exception is a subject-only `commit-subject-invalid` defect from explicitly configured commit policy, before completion is accepted; in that case Ralph may run the next normal iteration so the agent can repair its own just-created work-unit commit subject.
 
 ## Resuming After Interruption
 

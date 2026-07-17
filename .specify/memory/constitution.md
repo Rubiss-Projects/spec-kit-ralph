@@ -2,29 +2,27 @@
   ============================================================================
   SYNC IMPACT REPORT
   ============================================================================
-  Version change: 1.0.0 → 2.0.0
+  Version change: 2.0.0 → 2.1.0
 
   Modified principles:
-    - II. Context Isolation — ralph-memory.md is now the primary durable
-      handoff; progress.md is audit-only optional context
-    - IV. Progress Persistence — coordinated task/memory/audit persistence,
-      failed-attempt retention, and no bookkeeping-only commits
-    - VI. Graceful Termination — clean working tree, canonical terminal
-      handoff, and read-only failure validation are required for success
+    - VI. Graceful Termination — adds a narrow pre-acceptance retry allowance
+      for subject-only commit-policy defects; general cleanup/recovery remains
+      forbidden
 
   Added sections: None
 
-  Removed sections: None (initial version)
+  Removed sections: None
 
   Propagation review:
     ✅ .specify/templates/plan-template.md - Constitution Check remains compatible
     ✅ .specify/templates/spec-template.md - no durable-state guidance to change
     ✅ .specify/templates/tasks-template.md - phase/task structure remains compatible
-    ✅ commands/iterate.md - memory-first context, coordinated persistence, and strict signal contract propagated
-    ✅ commands/run.md - memory preflight and strict orchestrator exits propagated
-    ✅ scripts/bash/ralph-loop.sh - initialization, transaction validation, and clean completion propagated
-    ✅ scripts/powershell/ralph-loop.ps1 - parity lifecycle and diagnostics propagated
-    ✅ README.md - user-facing memory/audit/completion guidance propagated
+    ⚠ .specify/templates/commands/ - directory not present in this extension
+    ✅ commands/iterate.md - commit-subject retry scope clarified
+    ✅ commands/run.md - orchestrator exit behavior clarified
+    ✅ README.md - user-facing completion guidance clarified
+    ✅ CHANGELOG.md - unreleased governance amendment noted
+    ✅ specs/003-ralph-commit-style/plan.md - constitution check updated
 
   Follow-up TODOs: None. Historical specs/001 artifacts remain unchanged.
   ============================================================================
@@ -169,7 +167,14 @@ progress and providing actionable status information.
 - **Inconsistent or dirty completion**: The loop MUST exit non-zero
   immediately, report every applicable validation defect and dirty path,
   and MUST NOT launch a cleanup iteration, amend a commit, rewrite
-  history, or create a hidden recovery commit.
+  history, or create a hidden recovery commit. Narrow exception:
+  before completion is accepted, if the only commit postcondition defects
+  are `commit-subject-invalid` diagnostics from an explicitly configured
+  commit policy, the loop MAY run the next normal iteration so the agent can
+  repair its own just-created work-unit commit subject. This exception MUST
+  NOT apply to dirty worktrees, missing coordinated state artifacts,
+  bookkeeping-only commits, failed agent results, malformed memory, or any
+  other completion-gate defect.
 - **Iteration limit**: When `MaxIterations` is reached with tasks
   remaining, the loop MUST exit with a non-zero code and a summary
   of completed vs. remaining tasks.
@@ -240,4 +245,4 @@ This constitution is the authoritative source for project standards:
 - **Review Cadence**: Constitution is reviewed when the spec-kit
   extension API changes or when a new major version is released.
 
-**Version**: 2.0.0 | **Ratified**: 2026-03-06 | **Last Amended**: 2026-07-10
+**Version**: 2.1.0 | **Ratified**: 2026-03-06 | **Last Amended**: 2026-07-17
