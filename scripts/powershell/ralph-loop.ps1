@@ -277,6 +277,8 @@ function Test-RalphCommitSubject {
             if (-not $Subject.EndsWith($issueSuffix, [System.StringComparison]::Ordinal)) {
                 $defects.Add("commit-subject-invalid: commit $CommitId subject must end with `"$issueSuffix`"")
             }
+        } elseif ($Subject -match '\s#\d+$') {
+            $defects.Add("commit-subject-invalid: commit $CommitId subject must not include an issue suffix when none can be inferred")
         }
     }
 
@@ -285,7 +287,7 @@ function Test-RalphCommitSubject {
         if ($issueSuffix -and $payload.EndsWith($issueSuffix, [System.StringComparison]::Ordinal)) {
             $payload = $payload.Substring(0, $payload.Length - $issueSuffix.Length)
         }
-        if ($payload -match '(^|\s)(US-\d+|Phase\s+\d+|T\d{3,})(?=$|\s|\p{P})') {
+        if ($payload -match '(^|\s)(US-?\d+|Phase\s+\d+|T\d{3,})(?=$|\s|\p{P})') {
             $defects.Add("commit-subject-invalid: commit $CommitId conventional payload must not contain planning labels")
         }
     }
