@@ -85,6 +85,7 @@ You **MUST** consider the user input before proceeding (if not empty).
    - Conventional with issue: `git commit -m "feat(myapp): add context list filter flag #42"`
    - Never create a commit containing only `tasks.md`, `ralph-memory.md`, and/or `progress.md`
    - Never amend or create a follow-up bookkeeping commit to insert a commit hash into the audit log
+   - If the orchestrator feeds back only `commit-subject-invalid` defects for the just-created work-unit commit, repair the subject in the current normal iteration; do not treat this as permission for broader cleanup, reset, rebase, hidden recovery commits, or unrelated history edits
    - After committing, leave no bookkeeping change outside the commit
 
 ## Progress Report Format

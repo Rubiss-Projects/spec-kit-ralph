@@ -48,7 +48,7 @@ Add an optional Ralph commit policy that preserves the legacy work-unit commit s
 | Documentation Gate | PENDING | README and config template must document the new commit options and examples. |
 | Compatibility Gate | PENDING | Regression validation must show existing projects without commit config remain unchanged. |
 
-**Gate Result**: PASS for planning. No constitution amendment or exception is required.
+**Gate Result**: PASS for planning after Constitution v2.1.0 amendment. Principle VI now allows only the narrow pre-acceptance retry for subject-only `commit-subject-invalid` defects from explicitly configured commit policy; all broader cleanup/recovery remains forbidden.
 
 ### Post-Design Re-evaluation
 
@@ -63,7 +63,7 @@ Add an optional Ralph commit policy that preserves the legacy work-unit commit s
 | Script Gate | PASS BY DESIGN | The same config-resolution, issue-inference, and validation scenarios are planned for both scripts and both regression suites. |
 | Integration / Documentation / Compatibility Gates | PENDING IMPLEMENTATION | [quickstart.md](quickstart.md) defines the validation evidence required to close them. |
 
-No constitution violation or exception remains after design.
+No constitution violation remains after the v2.1.0 narrow retry amendment.
 
 ## Project Structure
 
@@ -106,4 +106,4 @@ spec-kit-ralph/
 
 ## Complexity Tracking
 
-No constitution exception or extra subsystem is required.
+No extra subsystem is required. The narrow subject-only retry is authorized by Constitution v2.1.0.
