@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.4.0] - 2026-07-18
 
+### Added
+- Added configurable nested Ralph commit policy with legacy and conventional styles, optional scope selection, inferred issue suffixes, runtime subject enforcement, and matching Bash and PowerShell coverage.
+
 ### Changed
 - Amended the constitution to v2.1.0 to allow a narrow pre-acceptance retry for subject-only `commit-subject-invalid` defects from explicitly configured commit policy, while keeping broader cleanup, recovery, and history-rewrite behavior forbidden.
 
