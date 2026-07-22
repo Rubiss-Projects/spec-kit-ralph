@@ -17,6 +17,10 @@ $RepoRoot = Resolve-Path (Join-Path $ScriptDir "..\..\..") | Select-Object -Expa
 $FixtureDir = Join-Path $ScriptDir "..\fixtures"
 $SourceScript = Join-Path $RepoRoot "scripts\powershell\ralph-loop.ps1"
 $RunCommand = Join-Path $RepoRoot "commands\run.md"
+$IterateGuidance = Join-Path $RepoRoot "commands\iterate.md"
+$TaskTemplate = Join-Path $RepoRoot ".specify\templates\tasks-template.md"
+$TaskSkill = Join-Path $RepoRoot ".agents\skills\speckit-tasks\SKILL.md"
+$ReadmeDoc = Join-Path $RepoRoot "README.md"
 $MemoryTemplate = Join-Path $RepoRoot "templates\ralph-memory.md"
 
 # Test bookkeeping
@@ -348,6 +352,11 @@ Remove-Item $tmpMemoryDir -Recurse -Force
 #region Tests: coordinated commit postconditions
 
 Write-Section "coordinated commit postconditions"
+
+Assert-True "iterate guidance preserves commit-worthy hardening" ([System.IO.File]::ReadAllText($IterateGuidance).Contains("commit-worthy work"))
+Assert-True "task template preserves commit-worthy hardening" ([System.IO.File]::ReadAllText($TaskTemplate).Contains("commit-worthy work"))
+Assert-True "task skill preserves commit-worthy hardening" ([System.IO.File]::ReadAllText($TaskSkill).Contains("commit-worthy work"))
+Assert-True "README documents commit-worthy hardening" ([System.IO.File]::ReadAllText($ReadmeDoc).Contains("commit-worthy work"))
 
 $transactionRepo = New-TransactionTestRepository -Name "ralph-transaction"
 

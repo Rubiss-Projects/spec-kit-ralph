@@ -249,6 +249,8 @@ export SPECKIT_RALPH_AGENT_CLI="codex"
 5. Failed or no-work attempts leave tasks and `HEAD` unchanged. Useful memory and audit updates remain uncommitted and join the next substantive commit.
 6. The orchestrator validates only commits created after it snapshots `HEAD` for the current iteration. Earlier human-authored spec or task refinements form the trusted starting boundary, so a clean branch can be rerun without rewriting history.
 
+Checkbox tasks should describe commit-worthy work. Review-only context such as "review existing behavior" or "inspect current helpers" belongs in prerequisites, notes, or the first substantive task description; otherwise Ralph can see completed checkboxes without a valid work-unit commit.
+
 ### Termination Conditions
 
 | Condition | Exit Code | Meaning |

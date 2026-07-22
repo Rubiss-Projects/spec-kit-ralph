@@ -50,6 +50,7 @@ You **MUST** consider the user input before proceeding (if not empty).
    - Follow TDD when appropriate: write tests first, then implementation
    - Run quality checks after each task (typecheck, lint, test as appropriate)
    - Do not change task state until the corresponding substantive result passes its quality checks
+   - Do not mark review-only tasks complete when they produced no substantive project change; record useful findings in `ralph-memory.md` and leave the checkbox unchanged for user correction or for the next commit-worthy work unit
 
 5. **Persist the iteration outcome before any commit**:
    - When ALL tasks in the selected user story are substantively complete and validated:

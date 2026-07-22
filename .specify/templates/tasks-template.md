@@ -39,6 +39,11 @@ description: "Task list template for feature implementation"
   - Implemented independently
   - Tested independently
   - Delivered as an MVP increment
+
+  Checkbox tasks MUST represent commit-worthy work. Do not create review-only
+  tasks whose sole action is to review, inspect, read, analyze, understand,
+  investigate, survey, or summarize existing code or documents. Put that
+  context in prerequisites, notes, or the relevant substantive task.
   
   DO NOT keep these sample tasks in the generated tasks.md file.
   ============================================================================
@@ -245,6 +250,7 @@ With multiple developers:
 - [P] tasks = different files, no dependencies
 - [Story] label maps task to specific user story for traceability
 - Each user story should be independently completable and testable
+- Checkbox tasks should describe commit-worthy work; put review-only context in prerequisites or notes instead
 - Verify tests fail before implementing
 - Commit after each task or logical group
 - Stop at any checkpoint to validate story independently

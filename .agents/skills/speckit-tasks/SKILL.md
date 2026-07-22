@@ -130,6 +130,12 @@ The tasks.md should be immediately executable - each task must be specific enoug
 
 **Tests are OPTIONAL**: Only generate test tasks if explicitly requested in the feature specification or if user requests TDD approach.
 
+### Commit-Worthy Task Rule (REQUIRED)
+
+Every checkbox task MUST represent commit-worthy work: completing it should produce a substantive source, test, documentation, configuration, or generated-artifact change that can be committed together with `tasks.md`, `ralph-memory.md`, and `progress.md` when Ralph is driving implementation.
+
+Do NOT create checkbox tasks whose only action is to review, inspect, read, analyze, understand, investigate, survey, or summarize existing code or documents. Put those items in prerequisites, context notes, a "Context to read first" section, or task descriptions as guidance for the first substantive implementation task.
+
 ### Checklist Format (REQUIRED)
 
 Every task MUST strictly follow this format:
@@ -157,6 +163,7 @@ Every task MUST strictly follow this format:
 - ✅ CORRECT: `- [ ] T005 [P] Implement authentication middleware in src/middleware/auth.py`
 - ✅ CORRECT: `- [ ] T012 [P] [US1] Create User model in src/models/user.py`
 - ✅ CORRECT: `- [ ] T014 [US1] Implement UserService in src/services/user_service.py`
+- ❌ WRONG: `- [ ] T001 Review existing authentication flow in src/auth.py` (review-only, not commit-worthy work)
 - ❌ WRONG: `- [ ] Create User model` (missing ID and Story label)
 - ❌ WRONG: `T001 [US1] Create model` (missing checkbox)
 - ❌ WRONG: `- [ ] [US1] Create User model` (missing Task ID)

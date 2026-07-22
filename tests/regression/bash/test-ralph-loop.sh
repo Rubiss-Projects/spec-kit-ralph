@@ -18,6 +18,9 @@ FIXTURE_DIR="$SCRIPT_DIR/../fixtures"
 SOURCE_SCRIPT="$REPO_ROOT/scripts/bash/ralph-loop.sh"
 RUN_COMMAND="$REPO_ROOT/commands/run.md"
 ITERATE_GUIDANCE="$REPO_ROOT/commands/iterate.md"
+TASK_TEMPLATE="$REPO_ROOT/.specify/templates/tasks-template.md"
+TASK_SKILL="$REPO_ROOT/.agents/skills/speckit-tasks/SKILL.md"
+README_DOC="$REPO_ROOT/README.md"
 
 # Test bookkeeping
 TESTS_RUN=0
@@ -531,6 +534,10 @@ stage_line=$(grep -n 'Stage substantive files together' "$ITERATE_GUIDANCE" | he
 commit_line=$(grep -n 'Create one substantive commit only after coordinated persistence' "$ITERATE_GUIDANCE" | head -n 1 | cut -d: -f1)
 assert_true "guidance persists state before staging" test -n "$persist_line" -a "$persist_line" -lt "$stage_line"
 assert_true "guidance stages coordinated state before commit" test -n "$stage_line" -a "$stage_line" -lt "$commit_line"
+assert_true "iterate guidance preserves commit-worthy hardening" grep -q 'commit-worthy work' "$ITERATE_GUIDANCE"
+assert_true "task template preserves commit-worthy hardening" grep -q 'commit-worthy work' "$TASK_TEMPLATE"
+assert_true "task skill preserves commit-worthy hardening" grep -q 'commit-worthy work' "$TASK_SKILL"
+assert_true "README documents commit-worthy hardening" grep -q 'commit-worthy work' "$README_DOC"
 
 snapshot_line=$(grep -n 'iteration_head_before=$(get_git_head_snapshot' "$SOURCE_SCRIPT" | head -n 1 | cut -d: -f1)
 invoke_line=$(grep -n 'output=$(invoke_agent_iteration' "$SOURCE_SCRIPT" | head -n 1 | cut -d: -f1)
