@@ -425,15 +425,81 @@ $failedAdvanceDefects = @($failedAdvanceValidation.Defects | Where-Object { $_ -
 Assert-Equal "failed agent HEAD advance emits one diagnostic" 1 $failedAdvanceDefects.Count
 Remove-Item $failedAdvanceRepo.Root -Recurse -Force
 
-# A bookkeeping-only commit is reported but never repaired, rewritten, reset,
-# amended, reverted, or hidden by the validator.
+# A completed review-only task may intentionally produce only coordinated
+# task, memory, and audit state.
+$reviewOnlyRepo = New-TransactionTestRepository -Name "ralph-review-only"
+$reviewOnlyBefore = New-RalphIterationSnapshot -RepoRoot $reviewOnlyRepo.Root -TasksPath $reviewOnlyRepo.TasksPath
+Set-Content -Path $reviewOnlyRepo.TasksPath -Value "- [x] T001 Complete review" -Encoding UTF8
+Copy-Item (Join-Path $FixtureDir "ralph-memory-valid-complete.md") $reviewOnlyRepo.MemoryPath -Force
+Add-Content -Path $reviewOnlyRepo.ProgressPath -Value "`nReview-only work completed." -Encoding UTF8
+Invoke-TestGit -Repository $reviewOnlyRepo.Root -Arguments @("add", "specs/test-feature/tasks.md", "specs/test-feature/ralph-memory.md", "specs/test-feature/progress.md") | Out-Null
+Invoke-TestGit -Repository $reviewOnlyRepo.Root -Arguments @("commit", "-q", "-m", "docs: complete review-only work") | Out-Null
+
+$reviewOnlyValidation = Test-RalphIterationPostconditions `
+    -BeforeSnapshot $reviewOnlyBefore `
+    -RepoRoot $reviewOnlyRepo.Root `
+    -TasksPath $reviewOnlyRepo.TasksPath `
+    -SpecDir $reviewOnlyRepo.SpecDir `
+    -AgentExitCode 0
+
+Assert-True "coordinated state-only commit passes when task state advances" $reviewOnlyValidation.IsValid
+Remove-Item $reviewOnlyRepo.Root -Recurse -Force
+
+# Replacing one incomplete task with another does not reduce remaining work and
+# must not make a state-only commit appear to complete a work unit.
+$taskSwapRepo = New-TransactionTestRepository -Name "ralph-task-swap"
+$taskSwapBefore = New-RalphIterationSnapshot -RepoRoot $taskSwapRepo.Root -TasksPath $taskSwapRepo.TasksPath
+Set-Content -Path $taskSwapRepo.TasksPath -Value "- [ ] T002 Replacement task" -Encoding UTF8
+Add-Content -Path $taskSwapRepo.ProgressPath -Value "`nTask identity changed without reducing remaining work." -Encoding UTF8
+Add-Content -Path $taskSwapRepo.MemoryPath -Value "`n- Replacement task retained." -Encoding UTF8
+Invoke-TestGit -Repository $taskSwapRepo.Root -Arguments @("add", "specs/test-feature/tasks.md", "specs/test-feature/ralph-memory.md", "specs/test-feature/progress.md") | Out-Null
+Invoke-TestGit -Repository $taskSwapRepo.Root -Arguments @("commit", "-q", "-m", "chore: replace incomplete task") | Out-Null
+
+$taskSwapValidation = Test-RalphIterationPostconditions `
+    -BeforeSnapshot $taskSwapBefore `
+    -RepoRoot $taskSwapRepo.Root `
+    -TasksPath $taskSwapRepo.TasksPath `
+    -SpecDir $taskSwapRepo.SpecDir `
+    -AgentExitCode 0
+
+Assert-True "state-only task replacement without count reduction is rejected" (-not $taskSwapValidation.IsValid)
+Assert-True "task replacement reports bookkeeping-only diagnostic" (($taskSwapValidation.Defects | Where-Object { $_ -like 'bookkeeping-only:*' }).Count -gt 0)
+Remove-Item $taskSwapRepo.Root -Recurse -Force
+
+# An earlier state-only checkpoint cannot borrow task advancement from a later
+# commit in the same iteration range.
+$multiCommitRepo = New-TransactionTestRepository -Name "ralph-multi-commit-review"
+$multiCommitBefore = New-RalphIterationSnapshot -RepoRoot $multiCommitRepo.Root -TasksPath $multiCommitRepo.TasksPath
+Add-Content -Path $multiCommitRepo.TasksPath -Value "" -Encoding UTF8
+Add-Content -Path $multiCommitRepo.MemoryPath -Value "`n- Premature checkpoint." -Encoding UTF8
+Add-Content -Path $multiCommitRepo.ProgressPath -Value "`nPremature checkpoint." -Encoding UTF8
+Invoke-TestGit -Repository $multiCommitRepo.Root -Arguments @("add", "specs/test-feature/tasks.md", "specs/test-feature/ralph-memory.md", "specs/test-feature/progress.md") | Out-Null
+Invoke-TestGit -Repository $multiCommitRepo.Root -Arguments @("commit", "-q", "-m", "chore: state-only checkpoint") | Out-Null
+$checkpointCommit = (Invoke-TestGit -Repository $multiCommitRepo.Root -Arguments @("rev-parse", "HEAD") | Select-Object -First 1).Trim()
+Set-Content -Path $multiCommitRepo.TasksPath -Value "- [x] T001 Complete review" -Encoding UTF8
+Copy-Item (Join-Path $FixtureDir "ralph-memory-valid-complete.md") $multiCommitRepo.MemoryPath -Force
+Add-Content -Path $multiCommitRepo.ProgressPath -Value "`nReview completed." -Encoding UTF8
+Invoke-TestGit -Repository $multiCommitRepo.Root -Arguments @("add", "specs/test-feature/tasks.md", "specs/test-feature/ralph-memory.md", "specs/test-feature/progress.md") | Out-Null
+Invoke-TestGit -Repository $multiCommitRepo.Root -Arguments @("commit", "-q", "-m", "docs: complete review") | Out-Null
+
+$multiCommitValidation = Test-RalphIterationPostconditions `
+    -BeforeSnapshot $multiCommitBefore `
+    -RepoRoot $multiCommitRepo.Root `
+    -TasksPath $multiCommitRepo.TasksPath `
+    -SpecDir $multiCommitRepo.SpecDir `
+    -AgentExitCode 0
+
+Assert-True "multi-commit state-only checkpoint is rejected" (-not $multiCommitValidation.IsValid)
+Assert-True "earlier checkpoint cannot borrow later task completion" (($multiCommitValidation.Defects | Where-Object { $_ -like "bookkeeping-only: commit $checkpointCommit *" }).Count -gt 0)
+Remove-Item $multiCommitRepo.Root -Recurse -Force
+
+# Without task advancement, a state-only commit is stale bookkeeping. It is
+# reported but never repaired, rewritten, reset, amended, reverted, or hidden.
 $bookkeepingRepo = New-TransactionTestRepository -Name "ralph-bookkeeping"
 $bookkeepingBefore = New-RalphIterationSnapshot -RepoRoot $bookkeepingRepo.Root -TasksPath $bookkeepingRepo.TasksPath
-Set-Content -Path $bookkeepingRepo.TasksPath -Value "- [x] T001 Complete transaction" -Encoding UTF8
-Copy-Item (Join-Path $FixtureDir "ralph-memory-valid-complete.md") $bookkeepingRepo.MemoryPath -Force
-Add-Content -Path $bookkeepingRepo.ProgressPath -Value "`nBookkeeping only." -Encoding UTF8
-Invoke-TestGit -Repository $bookkeepingRepo.Root -Arguments @("add", "specs/test-feature/tasks.md", "specs/test-feature/ralph-memory.md", "specs/test-feature/progress.md") | Out-Null
-Invoke-TestGit -Repository $bookkeepingRepo.Root -Arguments @("commit", "-q", "-m", "chore: bookkeeping only") | Out-Null
+Add-Content -Path $bookkeepingRepo.ProgressPath -Value "`nStale bookkeeping only." -Encoding UTF8
+Invoke-TestGit -Repository $bookkeepingRepo.Root -Arguments @("add", "specs/test-feature/progress.md") | Out-Null
+Invoke-TestGit -Repository $bookkeepingRepo.Root -Arguments @("commit", "-q", "-m", "chore: stale bookkeeping only") | Out-Null
 $bookkeepingHeadBeforeValidation = (Invoke-TestGit -Repository $bookkeepingRepo.Root -Arguments @("rev-parse", "HEAD") | Select-Object -First 1).Trim()
 $bookkeepingStatusBeforeValidation = (Invoke-TestGit -Repository $bookkeepingRepo.Root -Arguments @("status", "--short", "--untracked-files=all")) -join "`n"
 $bookkeepingHistoryBeforeValidation = (Invoke-TestGit -Repository $bookkeepingRepo.Root -Arguments @("rev-list", "--count", "HEAD") | Select-Object -First 1).Trim()

@@ -465,6 +465,20 @@ get_incomplete_task_count() {
     printf '%s\n' "${count:-0}"
 }
 
+get_incomplete_task_count_at_commit() {
+    local repo_root=$1
+    local commit=$2
+    local tasks_relative=$3
+    local task_content
+    local count
+
+    if ! task_content=$(git -C "$repo_root" show "$commit:$tasks_relative" 2>/dev/null); then
+        return 1
+    fi
+    count=$(printf '%s\n' "$task_content" | grep -c '^- \[ \]' 2>/dev/null) || true
+    printf '%s\n' "${count:-0}"
+}
+
 initialize_progress_file() {
     local path=$1
     local feature=$2
@@ -805,6 +819,8 @@ validate_iteration_commit_history() {
     local has_substantive
     local subject
     local subject_output
+    local commit_before_incomplete
+    local commit_after_incomplete
     local violations=()
 
     after_head=$(get_git_head_snapshot "$repo_root")
@@ -837,10 +853,16 @@ validate_iteration_commit_history() {
             commits=""
         }
 
+        commit_before_incomplete=$before_incomplete
         while IFS= read -r commit; do
             [[ -z "$commit" ]] && continue
+            if ! commit_after_incomplete=$(get_incomplete_task_count_at_commit "$repo_root" "$commit" "$tasks_relative"); then
+                violations+=("coordinated-commit-invalid: cannot inspect task state for commit $commit")
+                commit_after_incomplete=$commit_before_incomplete
+            fi
             paths=$(git -C "$repo_root" diff-tree --root --no-commit-id --name-only -r "$commit" 2>/dev/null) || {
                 violations+=("coordinated-commit-invalid: cannot inspect commit $commit")
+                commit_before_incomplete=$commit_after_incomplete
                 continue
             }
             has_tasks=false
@@ -858,8 +880,13 @@ validate_iteration_commit_history() {
                 esac
             done <<< "$paths"
 
-            if [[ "$has_substantive" == "false" ]]; then
-                violations+=("bookkeeping-only: commit $commit contains no substantive path")
+            # A coordinated state-only commit is valid when that commit advances
+            # task state:
+            # for review or analysis tasks, the checked task and audit record can
+            # be the intended work product. Without task completion, the same
+            # commit shape is stale bookkeeping and remains invalid.
+            if [[ "$has_substantive" == "false" && "$commit_after_incomplete" -ge "$commit_before_incomplete" ]]; then
+                violations+=("bookkeeping-only: commit $commit contains no substantive path and did not reduce incomplete task count")
             fi
             if [[ "$has_tasks" == "false" || "$has_progress" == "false" || "$has_memory" == "false" ]]; then
                 violations+=("coordinated-commit-invalid: commit $commit must include tasks.md, progress.md, and ralph-memory.md")
@@ -873,6 +900,7 @@ validate_iteration_commit_history() {
                     violations+=("$subject_output")
                 fi
             fi
+            commit_before_incomplete=$commit_after_incomplete
         done <<< "$commits"
     fi
 
