@@ -546,7 +546,7 @@ git -C "$TMP_COMMIT_REPO" config user.name "Ralph Test"
 git -C "$TMP_COMMIT_REPO" config user.email "ralph@example.test"
 TMP_COMMIT_SPEC="$TMP_COMMIT_REPO/specs/test-feature"
 mkdir -p "$TMP_COMMIT_SPEC"
-printf '%s\n' '- [ ] T001 First work' '- [ ] T002 Second work' > "$TMP_COMMIT_SPEC/tasks.md"
+printf '%s\n' '- [ ] T001 First work' '- [ ] T002 Second work' '- [ ] T003 Review-only work' > "$TMP_COMMIT_SPEC/tasks.md"
 cp "$FIXTURE_DIR/ralph-memory-valid-active.md" "$TMP_COMMIT_SPEC/ralph-memory.md"
 printf '%s\n' '# Ralph Progress Log' > "$TMP_COMMIT_SPEC/progress.md"
 printf '%s\n' 'initial' > "$TMP_COMMIT_REPO/source.txt"
@@ -592,6 +592,21 @@ followup_paths=$(git -C "$TMP_COMMIT_REPO" show --pretty=format: --name-only HEA
 assert_true "follow-up commit contains retained memory" grep -Fxq 'specs/test-feature/ralph-memory.md' <<< "$followup_paths"
 assert_true "follow-up commit contains retained audit" grep -Fxq 'specs/test-feature/progress.md' <<< "$followup_paths"
 
+# Completing a review-only task may intentionally produce only coordinated
+# state. Task advancement distinguishes that work unit from stale bookkeeping.
+review_head=$(get_git_head_snapshot "$TMP_COMMIT_REPO")
+review_state=$(get_task_state_snapshot "$TMP_COMMIT_SPEC/tasks.md")
+review_before=$(get_incomplete_task_count "$TMP_COMMIT_SPEC/tasks.md")
+sed -i.bak 's/- \[ \] T003/- [x] T003/' "$TMP_COMMIT_SPEC/tasks.md"
+rm -f "$TMP_COMMIT_SPEC/tasks.md.bak"
+printf '%s\n' '- review completed without a separate artifact' >> "$TMP_COMMIT_SPEC/ralph-memory.md"
+printf '%s\n' 'review-only work unit completed' >> "$TMP_COMMIT_SPEC/progress.md"
+git -C "$TMP_COMMIT_REPO" add "$TMP_COMMIT_SPEC/tasks.md" "$TMP_COMMIT_SPEC/ralph-memory.md" "$TMP_COMMIT_SPEC/progress.md"
+git -C "$TMP_COMMIT_REPO" commit -qm "review-only coordinated work"
+review_after=$(get_incomplete_task_count "$TMP_COMMIT_SPEC/tasks.md")
+assert_true "accepts coordinated state-only commit when task state advances" validate_iteration_commit_history "$TMP_COMMIT_REPO" "$review_head" "$review_state" "$review_before" "$review_after" 0 "$TMP_COMMIT_SPEC/tasks.md" "$TMP_COMMIT_SPEC/progress.md" "$TMP_COMMIT_SPEC/ralph-memory.md"
+
+# Without task advancement, the same state-only shape is stale bookkeeping.
 bookkeeping_head=$(get_git_head_snapshot "$TMP_COMMIT_REPO")
 bookkeeping_state=$(get_task_state_snapshot "$TMP_COMMIT_SPEC/tasks.md")
 bookkeeping_count=$(get_incomplete_task_count "$TMP_COMMIT_SPEC/tasks.md")
