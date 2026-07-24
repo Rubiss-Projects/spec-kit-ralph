@@ -858,8 +858,12 @@ validate_iteration_commit_history() {
                 esac
             done <<< "$paths"
 
-            if [[ "$has_substantive" == "false" ]]; then
-                violations+=("bookkeeping-only: commit $commit contains no substantive path")
+            # A coordinated state-only commit is valid when task state advanced:
+            # for review or analysis tasks, the checked task and audit record can
+            # be the intended work product. Without task completion, the same
+            # commit shape is stale bookkeeping and remains invalid.
+            if [[ "$has_substantive" == "false" && "$after_incomplete" -ge "$before_incomplete" ]]; then
+                violations+=("bookkeeping-only: commit $commit contains no substantive path and did not reduce incomplete task count")
             fi
             if [[ "$has_tasks" == "false" || "$has_progress" == "false" || "$has_memory" == "false" ]]; then
                 violations+=("coordinated-commit-invalid: commit $commit must include tasks.md, progress.md, and ralph-memory.md")

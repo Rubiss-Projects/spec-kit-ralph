@@ -83,7 +83,8 @@ You **MUST** consider the user input before proceeding (if not empty).
    - Legacy with issue: `git commit -m "feat(069-ctx-list-filter): US-001 Initialize Ralph Command #69"`
    - Conventional example: `git commit -m "feat(ralph): initialize ralph command"`
    - Conventional with issue: `git commit -m "feat(myapp): add context list filter flag #42"`
-   - Never create a commit containing only `tasks.md`, `ralph-memory.md`, and/or `progress.md`
+   - A completed review or analysis task may commit only `tasks.md`, `ralph-memory.md`, and `progress.md` when those coordinated records are the task's intended result
+   - Never create a state-only commit when no task was completed; retained failure or no-work records must wait for the next completed work unit
    - Never amend or create a follow-up bookkeeping commit to insert a commit hash into the audit log
    - If the orchestrator feeds back only `commit-subject-invalid` defects for the just-created work-unit commit, repair the subject in the current normal iteration; do not treat this as permission for broader cleanup, reset, rebase, hidden recovery commits, or unrelated history edits
    - After committing, leave no bookkeeping change outside the commit
@@ -117,7 +118,7 @@ passed every quality check and all of these statements are true:
 - Every task in `tasks.md` is complete (`[x]`)
 - `ralph-memory.md` is structurally valid
 - `Current Handoff` contains exactly one entry and no other content: `- Feature complete; no handoff required.`
-- The final substantive commit includes the implementation plus `tasks.md`, `ralph-memory.md`, and `progress.md`
+- The final coordinated commit includes the completed work plus `tasks.md`, `ralph-memory.md`, and `progress.md`; for review or analysis work, the coordinated records may be the complete intended result
 - `git status --short --untracked-files=all` succeeds and emits no lines
 
 Then output the following as the final line of your response, alone on its own line with
@@ -160,5 +161,5 @@ Follow the patterns established in the codebase:
 | User story unclear | Ask for clarification in progress entry, mark tasks as blocked |
 | Tests fail | Report failure, do not mark task complete, no commit |
 | Cannot complete story | Persist useful memory/audit context, leave `HEAD` unchanged, and make no commit |
-| All tasks done | Persist the terminal handoff, create the coordinated final substantive commit, verify the clean completion gate, then output the completion signal |
+| All tasks done | Persist the terminal handoff, create the coordinated final work-unit commit, verify the clean completion gate, then output the completion signal |
 | Dependencies missing | Note in progress file, skip to next available task |

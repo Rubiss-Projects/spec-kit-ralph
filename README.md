@@ -245,7 +245,7 @@ export SPECKIT_RALPH_AGENT_CLI="codex"
 1. The orchestrator creates a missing `ralph-memory.md` from the installed canonical template, or validates the existing file without rewriting it. A malformed file reports all structural defects, remains byte-for-byte unchanged, and blocks agent invocation.
 2. Each **fresh** agent reads `ralph-memory.md` first, then `tasks.md` and design artifacts. Recent `progress.md` entries are optional audit context, not durable memory.
 3. The agent implements and validates one work unit. Durable patterns, decisions, gotchas, commands, failed approaches, and the next handoff are compacted in memory.
-4. For completed work, the agent updates tasks and memory, appends progress, then creates one substantive commit containing implementation, `tasks.md`, `ralph-memory.md`, and `progress.md`. The audit uses `This work-unit commit`; it never requires a future hash or a bookkeeping amend.
+4. For completed work, the agent updates tasks and memory, appends progress, then creates one coordinated commit containing the work result, `tasks.md`, `ralph-memory.md`, and `progress.md`. Review or analysis tasks may intentionally produce only those coordinated records. The audit uses `This work-unit commit`; it never requires a future hash or a bookkeeping amend.
 5. Failed or no-work attempts leave tasks and `HEAD` unchanged. Useful memory and audit updates remain uncommitted and join the next substantive commit.
 6. The orchestrator validates only commits created after it snapshots `HEAD` for the current iteration. Earlier human-authored spec or task refinements form the trusted starting boundary, so a clean branch can be rerun without rewriting history.
 

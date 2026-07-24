@@ -796,6 +796,7 @@ function Test-RalphIterationPostconditions {
     $headAdvanced = $BeforeSnapshot.Head -ne $afterSnapshot.Head
     $taskStateChanged = $BeforeSnapshot.TaskBytes -ne $afterSnapshot.TaskBytes
     $completedTaskIds = @($BeforeSnapshot.IncompleteTaskIds | Where-Object { $afterSnapshot.IncompleteTaskIds -notcontains $_ })
+    $incompleteTaskCountDecreased = $afterSnapshot.IncompleteTaskIds.Count -lt $BeforeSnapshot.IncompleteTaskIds.Count
 
     if ($AgentExitCode -ne 0) {
         if ($headAdvanced) {
@@ -876,9 +877,11 @@ function Test-RalphIterationPostconditions {
         }
 
         $substantivePaths = @($changedPaths | Where-Object { $stateArtifacts -notcontains $_ })
-        if ($substantivePaths.Count -eq 0) {
-            $defects.Add("bookkeeping-only: commit $commitId contains no substantive path")
-            continue
+        # Review or analysis tasks may intentionally produce only coordinated
+        # task, memory, and audit state. That shape is completed work when task
+        # state advanced; without a completed task it remains stale bookkeeping.
+        if ($substantivePaths.Count -eq 0 -and -not $incompleteTaskCountDecreased) {
+            $defects.Add("bookkeeping-only: commit $commitId contains no substantive path and did not reduce incomplete task count")
         }
 
         foreach ($stateArtifact in $stateArtifacts) {
