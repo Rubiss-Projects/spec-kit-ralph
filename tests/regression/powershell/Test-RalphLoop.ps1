@@ -466,6 +466,33 @@ Assert-True "state-only task replacement without count reduction is rejected" (-
 Assert-True "task replacement reports bookkeeping-only diagnostic" (($taskSwapValidation.Defects | Where-Object { $_ -like 'bookkeeping-only:*' }).Count -gt 0)
 Remove-Item $taskSwapRepo.Root -Recurse -Force
 
+# An earlier state-only checkpoint cannot borrow task advancement from a later
+# commit in the same iteration range.
+$multiCommitRepo = New-TransactionTestRepository -Name "ralph-multi-commit-review"
+$multiCommitBefore = New-RalphIterationSnapshot -RepoRoot $multiCommitRepo.Root -TasksPath $multiCommitRepo.TasksPath
+Add-Content -Path $multiCommitRepo.TasksPath -Value "" -Encoding UTF8
+Add-Content -Path $multiCommitRepo.MemoryPath -Value "`n- Premature checkpoint." -Encoding UTF8
+Add-Content -Path $multiCommitRepo.ProgressPath -Value "`nPremature checkpoint." -Encoding UTF8
+Invoke-TestGit -Repository $multiCommitRepo.Root -Arguments @("add", "specs/test-feature/tasks.md", "specs/test-feature/ralph-memory.md", "specs/test-feature/progress.md") | Out-Null
+Invoke-TestGit -Repository $multiCommitRepo.Root -Arguments @("commit", "-q", "-m", "chore: state-only checkpoint") | Out-Null
+$checkpointCommit = (Invoke-TestGit -Repository $multiCommitRepo.Root -Arguments @("rev-parse", "HEAD") | Select-Object -First 1).Trim()
+Set-Content -Path $multiCommitRepo.TasksPath -Value "- [x] T001 Complete review" -Encoding UTF8
+Copy-Item (Join-Path $FixtureDir "ralph-memory-valid-complete.md") $multiCommitRepo.MemoryPath -Force
+Add-Content -Path $multiCommitRepo.ProgressPath -Value "`nReview completed." -Encoding UTF8
+Invoke-TestGit -Repository $multiCommitRepo.Root -Arguments @("add", "specs/test-feature/tasks.md", "specs/test-feature/ralph-memory.md", "specs/test-feature/progress.md") | Out-Null
+Invoke-TestGit -Repository $multiCommitRepo.Root -Arguments @("commit", "-q", "-m", "docs: complete review") | Out-Null
+
+$multiCommitValidation = Test-RalphIterationPostconditions `
+    -BeforeSnapshot $multiCommitBefore `
+    -RepoRoot $multiCommitRepo.Root `
+    -TasksPath $multiCommitRepo.TasksPath `
+    -SpecDir $multiCommitRepo.SpecDir `
+    -AgentExitCode 0
+
+Assert-True "multi-commit state-only checkpoint is rejected" (-not $multiCommitValidation.IsValid)
+Assert-True "earlier checkpoint cannot borrow later task completion" (($multiCommitValidation.Defects | Where-Object { $_ -like "bookkeeping-only: commit $checkpointCommit *" }).Count -gt 0)
+Remove-Item $multiCommitRepo.Root -Recurse -Force
+
 # Without task advancement, a state-only commit is stale bookkeeping. It is
 # reported but never repaired, rewritten, reset, amended, reverted, or hidden.
 $bookkeepingRepo = New-TransactionTestRepository -Name "ralph-bookkeeping"
