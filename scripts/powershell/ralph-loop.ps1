@@ -796,7 +796,6 @@ function Test-RalphIterationPostconditions {
     $headAdvanced = $BeforeSnapshot.Head -ne $afterSnapshot.Head
     $taskStateChanged = $BeforeSnapshot.TaskBytes -ne $afterSnapshot.TaskBytes
     $completedTaskIds = @($BeforeSnapshot.IncompleteTaskIds | Where-Object { $afterSnapshot.IncompleteTaskIds -notcontains $_ })
-    $incompleteTaskCountDecreased = $afterSnapshot.IncompleteTaskIds.Count -lt $BeforeSnapshot.IncompleteTaskIds.Count
 
     if ($AgentExitCode -ne 0) {
         if ($headAdvanced) {
@@ -864,23 +863,37 @@ function Test-RalphIterationPostconditions {
         }
     }
 
+    $commitBeforeIncomplete = $BeforeSnapshot.IncompleteTaskIds.Count
     foreach ($commit in $newCommits) {
         $commitId = ([string]$commit).Trim()
         if (-not $commitId) {
             continue
         }
 
+        $commitTaskOutput = @(& git -C $RepoRoot show "${commitId}:$($stateArtifacts[0])" 2>$null)
+        if ($LASTEXITCODE -ne 0) {
+            $defects.Add("coordinated-commit-invalid: unable to inspect task state for commit $commitId")
+            $commitAfterIncomplete = $commitBeforeIncomplete
+        } else {
+            $commitTaskContent = $commitTaskOutput -join "`n"
+            $commitAfterIncomplete = [regex]::Matches(
+                $commitTaskContent,
+                '- \[ \] (T\d+.*?)(?=\r?\n|$)'
+            ).Count
+        }
+
         $changedPaths = @(& git -C $RepoRoot diff-tree --no-commit-id --name-only -r --root $commitId 2>$null | Where-Object { $_ })
         if ($LASTEXITCODE -ne 0) {
             $defects.Add("coordinated-commit-invalid: unable to inspect paths for commit $commitId")
+            $commitBeforeIncomplete = $commitAfterIncomplete
             continue
         }
 
         $substantivePaths = @($changedPaths | Where-Object { $stateArtifacts -notcontains $_ })
         # Review or analysis tasks may intentionally produce only coordinated
-        # task, memory, and audit state. That shape is completed work when task
-        # state advanced; without a completed task it remains stale bookkeeping.
-        if ($substantivePaths.Count -eq 0 -and -not $incompleteTaskCountDecreased) {
+        # task, memory, and audit state. That shape is completed work when that
+        # commit reduces incomplete tasks; otherwise it is stale bookkeeping.
+        if ($substantivePaths.Count -eq 0 -and $commitAfterIncomplete -ge $commitBeforeIncomplete) {
             $defects.Add("bookkeeping-only: commit $commitId contains no substantive path and did not reduce incomplete task count")
         }
 
@@ -907,6 +920,7 @@ function Test-RalphIterationPostconditions {
                 }
             }
         }
+        $commitBeforeIncomplete = $commitAfterIncomplete
     }
 
     if ($AgentExitCode -eq 0 -and $completedTaskIds.Count -eq 0) {
