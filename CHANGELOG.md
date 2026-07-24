@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.1] - 2026-07-24
+
 ### Fixed
 - Accepted coordinated state-only commits when an iteration intentionally completes review or analysis tasks, while continuing to reject bookkeeping commits that do not advance task state.
 
