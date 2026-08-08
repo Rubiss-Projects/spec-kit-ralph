@@ -655,6 +655,104 @@ rm -rf "$TMP_COMMIT_REPO"
 
 #endregion
 
+#region Tests: partial user-story commit (issue #50)
+
+section "partial user-story commit (issue #50)"
+
+# A validated subset of a multi-task story is a complete work unit. Committing it
+# with a coordinated transaction (advanced HEAD, reduced count) is accepted even
+# though later tasks in the same story remain incomplete.
+TMP_PARTIAL_REPO=$(mktemp -d)
+git -C "$TMP_PARTIAL_REPO" init -q
+git -C "$TMP_PARTIAL_REPO" config user.name "Ralph Test"
+git -C "$TMP_PARTIAL_REPO" config user.email "ralph@example.test"
+TMP_PARTIAL_SPEC="$TMP_PARTIAL_REPO/specs/test-feature"
+mkdir -p "$TMP_PARTIAL_SPEC"
+printf '%s\n' '- [ ] T001 US1 first task' '- [ ] T002 US1 second task' '- [ ] T003 US1 third task' > "$TMP_PARTIAL_SPEC/tasks.md"
+cp "$FIXTURE_DIR/ralph-memory-valid-active.md" "$TMP_PARTIAL_SPEC/ralph-memory.md"
+printf '%s\n' '# Ralph Progress Log' > "$TMP_PARTIAL_SPEC/progress.md"
+printf '%s\n' 'initial' > "$TMP_PARTIAL_REPO/source.txt"
+git -C "$TMP_PARTIAL_REPO" add .
+git -C "$TMP_PARTIAL_REPO" commit -qm "initial"
+
+# T005: partial subset committed as a coordinated work unit is accepted.
+partial_head=$(get_git_head_snapshot "$TMP_PARTIAL_REPO")
+partial_state=$(get_task_state_snapshot "$TMP_PARTIAL_SPEC/tasks.md")
+partial_before=$(get_incomplete_task_count "$TMP_PARTIAL_SPEC/tasks.md")
+printf '%s\n' 'partial subset work' >> "$TMP_PARTIAL_REPO/source.txt"
+sed -i.bak 's/- \[ \] T001/- [x] T001/' "$TMP_PARTIAL_SPEC/tasks.md"
+rm -f "$TMP_PARTIAL_SPEC/tasks.md.bak"
+printf '%s\n' '- partial subset learning' >> "$TMP_PARTIAL_SPEC/ralph-memory.md"
+printf '%s\n' 'partial subset committed' >> "$TMP_PARTIAL_SPEC/progress.md"
+git -C "$TMP_PARTIAL_REPO" add .
+git -C "$TMP_PARTIAL_REPO" commit -qm "feat: complete first task of story"
+partial_after=$(get_incomplete_task_count "$TMP_PARTIAL_SPEC/tasks.md")
+assert_true "accepts partial-story subset committed as coordinated work unit" validate_iteration_commit_history "$TMP_PARTIAL_REPO" "$partial_head" "$partial_state" "$partial_before" "$partial_after" 0 "$TMP_PARTIAL_SPEC/tasks.md" "$TMP_PARTIAL_SPEC/progress.md" "$TMP_PARTIAL_SPEC/ralph-memory.md"
+assert_true "partial subset leaves later tasks incomplete" test "$partial_after" -eq 2
+assert_true "partial subset advances HEAD" test "$partial_head" != "$(get_git_head_snapshot "$TMP_PARTIAL_REPO")"
+
+# T006: sequential coordinated commits complete the remaining story tasks; each
+# iteration commits its own validated subset and the story finishes across commits.
+second_head=$(get_git_head_snapshot "$TMP_PARTIAL_REPO")
+second_state=$(get_task_state_snapshot "$TMP_PARTIAL_SPEC/tasks.md")
+second_before=$(get_incomplete_task_count "$TMP_PARTIAL_SPEC/tasks.md")
+printf '%s\n' 'second subset work' >> "$TMP_PARTIAL_REPO/source.txt"
+sed -i.bak 's/- \[ \] T002/- [x] T002/' "$TMP_PARTIAL_SPEC/tasks.md"
+rm -f "$TMP_PARTIAL_SPEC/tasks.md.bak"
+printf '%s\n' '- second subset learning' >> "$TMP_PARTIAL_SPEC/ralph-memory.md"
+printf '%s\n' 'second subset committed' >> "$TMP_PARTIAL_SPEC/progress.md"
+git -C "$TMP_PARTIAL_REPO" add .
+git -C "$TMP_PARTIAL_REPO" commit -qm "feat: complete second task of story"
+second_after=$(get_incomplete_task_count "$TMP_PARTIAL_SPEC/tasks.md")
+assert_true "accepts second sequential partial-story work unit" validate_iteration_commit_history "$TMP_PARTIAL_REPO" "$second_head" "$second_state" "$second_before" "$second_after" 0 "$TMP_PARTIAL_SPEC/tasks.md" "$TMP_PARTIAL_SPEC/progress.md" "$TMP_PARTIAL_SPEC/ralph-memory.md"
+
+third_head=$(get_git_head_snapshot "$TMP_PARTIAL_REPO")
+third_state=$(get_task_state_snapshot "$TMP_PARTIAL_SPEC/tasks.md")
+third_before=$(get_incomplete_task_count "$TMP_PARTIAL_SPEC/tasks.md")
+printf '%s\n' 'third subset work' >> "$TMP_PARTIAL_REPO/source.txt"
+sed -i.bak 's/- \[ \] T003/- [x] T003/' "$TMP_PARTIAL_SPEC/tasks.md"
+rm -f "$TMP_PARTIAL_SPEC/tasks.md.bak"
+printf '%s\n' '- third subset learning' >> "$TMP_PARTIAL_SPEC/ralph-memory.md"
+printf '%s\n' 'third subset committed' >> "$TMP_PARTIAL_SPEC/progress.md"
+git -C "$TMP_PARTIAL_REPO" add .
+git -C "$TMP_PARTIAL_REPO" commit -qm "feat: complete final task of story"
+third_after=$(get_incomplete_task_count "$TMP_PARTIAL_SPEC/tasks.md")
+assert_true "accepts final sequential partial-story work unit" validate_iteration_commit_history "$TMP_PARTIAL_REPO" "$third_head" "$third_state" "$third_before" "$third_after" 0 "$TMP_PARTIAL_SPEC/tasks.md" "$TMP_PARTIAL_SPEC/progress.md" "$TMP_PARTIAL_SPEC/ralph-memory.md"
+assert_true "story completed across sequential coordinated commits" test "$third_after" -eq 0
+
+# T010: a validated subset that reduces the incomplete count without committing
+# (unchanged HEAD) is the exact contradiction issue #50 forbids and is rejected.
+uncommitted_head=$(get_git_head_snapshot "$TMP_PARTIAL_REPO")
+uncommitted_state=$(get_task_state_snapshot "$TMP_PARTIAL_SPEC/tasks.md")
+printf '%s\n' '- [ ] T004 Later work' >> "$TMP_PARTIAL_SPEC/tasks.md"
+git -C "$TMP_PARTIAL_REPO" add . && git -C "$TMP_PARTIAL_REPO" commit -qm "chore: queue later task"
+reset_head=$(get_git_head_snapshot "$TMP_PARTIAL_REPO")
+reset_state=$(get_task_state_snapshot "$TMP_PARTIAL_SPEC/tasks.md")
+reset_before=$(get_incomplete_task_count "$TMP_PARTIAL_SPEC/tasks.md")
+sed -i.bak 's/- \[ \] T004/- [x] T004/' "$TMP_PARTIAL_SPEC/tasks.md"
+rm -f "$TMP_PARTIAL_SPEC/tasks.md.bak"
+reset_after=$(get_incomplete_task_count "$TMP_PARTIAL_SPEC/tasks.md")
+reject_output=$(validate_iteration_commit_history "$TMP_PARTIAL_REPO" "$reset_head" "$reset_state" "$reset_before" "$reset_after" 0 "$TMP_PARTIAL_SPEC/tasks.md" "$TMP_PARTIAL_SPEC/progress.md" "$TMP_PARTIAL_SPEC/ralph-memory.md" 2>&1) && reject_status=0 || reject_status=$?
+assert_true "rejects validated subset left uncommitted with unchanged HEAD" test "$reject_status" -ne 0
+assert_true "uncommitted subset reports coordinated-commit-invalid" grep -q 'coordinated-commit-invalid' <<< "$reject_output"
+git -C "$TMP_PARTIAL_REPO" checkout -q -- "$TMP_PARTIAL_SPEC/tasks.md"
+
+# T011: a failed/no-work iteration that edits tasks.md without reducing the count
+# marks no task complete and is rejected as failed-iteration-task-state.
+failed_state_head=$(get_git_head_snapshot "$TMP_PARTIAL_REPO")
+failed_state_snapshot=$(get_task_state_snapshot "$TMP_PARTIAL_SPEC/tasks.md")
+failed_state_before=$(get_incomplete_task_count "$TMP_PARTIAL_SPEC/tasks.md")
+sed -i.bak 's/- \[ \] T004 Later work/- [ ] T004 Later work reworded/' "$TMP_PARTIAL_SPEC/tasks.md"
+rm -f "$TMP_PARTIAL_SPEC/tasks.md.bak"
+failed_state_after=$(get_incomplete_task_count "$TMP_PARTIAL_SPEC/tasks.md")
+failed_state_output=$(validate_iteration_commit_history "$TMP_PARTIAL_REPO" "$failed_state_head" "$failed_state_snapshot" "$failed_state_before" "$failed_state_after" 7 "$TMP_PARTIAL_SPEC/tasks.md" "$TMP_PARTIAL_SPEC/progress.md" "$TMP_PARTIAL_SPEC/ralph-memory.md" 2>&1) && failed_state_status=0 || failed_state_status=$?
+assert_true "rejects failed iteration that edits tasks without reducing count" test "$failed_state_status" -ne 0
+assert_true "failed iteration reports failed-iteration-task-state" grep -q 'failed-iteration-task-state' <<< "$failed_state_output"
+
+rm -rf "$TMP_PARTIAL_REPO"
+
+#endregion
+
 #region Tests: Ralph memory preparation
 
 section "Ralph memory preparation"

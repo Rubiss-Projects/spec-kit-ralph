@@ -766,6 +766,11 @@ function New-RalphIterationSnapshot {
     }
 }
 
+# Classifies the commit history an iteration produced against the pre-iteration
+# snapshot. A "work unit" is any validated result the agent may commit in one
+# iteration: a single task, a validated task group, or a completed user story
+# (matching commands/iterate.md and Constitution Principle II). Read-only: this
+# never repairs, amends, resets, or rewrites history.
 function Test-RalphIterationPostconditions {
     param(
         $BeforeSnapshot,
@@ -807,6 +812,10 @@ function Test-RalphIterationPostconditions {
     }
 
     if (-not $headAdvanced) {
+        # Option 1: a validated work unit (task, task group, or story) must be
+        # committed in the same iteration that marks it complete. An unchanged
+        # HEAD with a completed task means completion was stranded uncommitted,
+        # which is rejected.
         if ($AgentExitCode -eq 0 -and $taskStateChanged) {
             if ($completedTaskIds.Count -gt 0) {
                 $defects.Add("coordinated-commit-invalid: completed task state was not included in a new work-unit commit")
