@@ -39,11 +39,11 @@ Spec-kit extension (single-project) layout at repository root:
 
 **Purpose**: Establish a known-good baseline before changing behavior.
 
-- [ ] T001 Run both regression harnesses to record the current baseline:
+- [x] T001 Run both regression harnesses to record the current baseline:
   `bash tests/regression/bash/test-ralph-loop.sh` and
   `pwsh tests/regression/powershell/Test-RalphLoop.ps1`; note any pre-existing
   failures so post-change results can be compared.
-- [ ] T002 [P] Confirm the edit anchors still match source: the partial/failed
+- [x] T002 [P] Confirm the edit anchors still match source: the partial/failed
   branch of step 5 and the commit trigger in step 6 of `commands/iterate.md`,
   and `validate_iteration_commit_history` in `scripts/bash/ralph-loop.sh`
   (~L795–913) plus its twin in `scripts/powershell/ralph-loop.ps1` (~L785–933).
@@ -57,7 +57,7 @@ story depends on.
 
 **⚠️ CRITICAL**: No user-story work can begin until this phase is complete.
 
-- [ ] T003 In `commands/iterate.md` step 5 ("Persist the iteration outcome
+- [x] T003 In `commands/iterate.md` step 5 ("Persist the iteration outcome
   before any commit"), rewrite the "When the selected work unit fails, produces
   no work, or remains partial" branch: remove the instruction that a validated
   partial result may mark completed tasks while leaving those changes
@@ -67,7 +67,7 @@ story depends on.
   create no commit. Keep the coordinated-commit staging (tasks.md +
   ralph-memory.md + progress.md + substantive changes). See
   `contracts/iterate-partial-progress-policy.md`.
-- [ ] T004 In `commands/iterate.md` step 6, change the commit trigger from "When
+- [x] T004 In `commands/iterate.md` step 6, change the commit trigger from "When
   ALL tasks in the selected user story are complete" to "When the validated work
   unit (a task, task group, or completed story) is complete", so a mid-story
   validated subset commits each iteration. Preserve the one-story-per-iteration
@@ -90,18 +90,18 @@ continues.
 with one coordinated commit that reduces the incomplete count → validation exits
 0; a two-commit sequence completes a two-task story without a FAILED result.
 
-- [ ] T005 [P] [US1] Add a regression case in
+- [x] T005 [P] [US1] Add a regression case in
   `tests/regression/bash/test-ralph-loop.sh` that builds a temp repo, performs a
   partial-story coordinated commit (substantive file + tasks.md + progress.md +
   ralph-memory.md) reducing the incomplete count by one, and asserts
   `validate_iteration_commit_history` exits 0 (advanced HEAD, partial story
   accepted).
-- [ ] T006 [P] [US1] Add a regression case in
+- [x] T006 [P] [US1] Add a regression case in
   `tests/regression/bash/test-ralph-loop.sh` that applies two sequential
   coordinated commits completing a two-task story across two iterations and
   asserts both pass and no `coordinated-commit-invalid`/`FAILED` diagnostic is
   emitted.
-- [ ] T007 [US1] Mirror T005 and T006 as parity cases in
+- [x] T007 [US1] Mirror T005 and T006 as parity cases in
   `tests/regression/powershell/Test-RalphLoop.ps1` (advanced-HEAD partial accept
   + two-commit story completion), asserting identical decisions/diagnostics.
 
@@ -121,23 +121,23 @@ incomplete count dropped → validation exits non-zero with
 `coordinated-commit-invalid`; a failed iteration that changed `tasks.md` →
 `failed-iteration-task-state`.
 
-- [ ] T008 [US2] In `scripts/bash/ralph-loop.sh`, tighten the comment on the
+- [x] T008 [US2] In `scripts/bash/ralph-loop.sh`, tighten the comment on the
   unchanged-HEAD + reduced-count branch (~L840–842) to state that option 1
   requires the completion to be committed in the same iteration; keep the
   existing `coordinated-commit-invalid` rejection logic unchanged.
-- [ ] T009 [US2] Apply the parity comment tightening in
+- [x] T009 [US2] Apply the parity comment tightening in
   `scripts/powershell/ralph-loop.ps1` (~L808–812); keep the rejection logic
   unchanged.
-- [ ] T010 [P] [US2] Add a regression case in
+- [x] T010 [P] [US2] Add a regression case in
   `tests/regression/bash/test-ralph-loop.sh`: unchanged HEAD + reduced incomplete
   count → exit 1 containing
   `coordinated-commit-invalid: completed task state was not included in a new
   work-unit commit`.
-- [ ] T011 [P] [US2] Add a regression case in
+- [x] T011 [P] [US2] Add a regression case in
   `tests/regression/bash/test-ralph-loop.sh`: a failed/no-work iteration that
   changed `tasks.md` without reducing the count → exit 1 containing
   `failed-iteration-task-state`.
-- [ ] T012 [US2] Mirror T010 and T011 as parity cases in
+- [x] T012 [US2] Mirror T010 and T011 as parity cases in
   `tests/regression/powershell/Test-RalphLoop.ps1`.
 
 **Checkpoint**: US2 verified — guardrails against stranded/uncommitted
@@ -154,21 +154,21 @@ describe and enforce the same work-unit definition, with no contradictions.
 `commands/iterate.md` and both orchestrator scripts, and the docs describe
 committing validated subsets each iteration.
 
-- [ ] T013 [P] [US3] Align the work-unit wording in `scripts/bash/ralph-loop.sh`
+- [x] T013 [P] [US3] Align the work-unit wording in `scripts/bash/ralph-loop.sh`
   comments/messages so "work unit" explicitly includes a validated task group
   (matching `commands/iterate.md` and Constitution Principle II); no logic
   change.
-- [ ] T014 [P] [US3] Apply the same wording alignment in
+- [x] T014 [P] [US3] Apply the same wording alignment in
   `scripts/powershell/ralph-loop.ps1`; keep it byte-for-byte equivalent in intent
   to the bash version.
-- [ ] T015 [P] [US3] Self-consistency sweep of `commands/iterate.md`: verify the
+- [x] T015 [P] [US3] Self-consistency sweep of `commands/iterate.md`: verify the
   Scope Constraint (lines ~13–21), steps 5–6, the Progress Report `**Commit**`
   values, and Stop Conditions contain no residual "entire user story"-only or
   "leave uncommitted" wording that contradicts T003/T004.
-- [ ] T016 [P] [US3] Update `README.md` iteration/commit guidance to state that a
+- [x] T016 [P] [US3] Update `README.md` iteration/commit guidance to state that a
   validated task subset is committed as a coordinated work unit each iteration
   and that a story may span multiple iterations.
-- [ ] T017 [P] [US3] Add an Unreleased entry to `CHANGELOG.md` describing the
+- [x] T017 [P] [US3] Add an Unreleased entry to `CHANGELOG.md` describing the
   reconciliation and referencing issue #50.
 
 **Checkpoint**: US3 verified — a single, consistent policy is stated and enforced
@@ -180,12 +180,12 @@ everywhere.
 
 **Purpose**: Final validation across all stories.
 
-- [ ] T018 Run both regression harnesses and confirm all cases (including the new
+- [x] T018 Run both regression harnesses and confirm all cases (including the new
   T005–T012 cases) pass on both platforms (quickstart.md §1).
-- [ ] T019 [P] Walk the quickstart.md §2 manual reproduction (three-task story,
+- [x] T019 [P] Walk the quickstart.md §2 manual reproduction (three-task story,
   complete only T001) and confirm the post-fix expected outcomes, including a
   clean `git status --short` and next-iteration selection of T002.
-- [ ] T020 Final cross-surface consistency check per SC-005: diff the policy
+- [x] T020 Final cross-surface consistency check per SC-005: diff the policy
   statements in `commands/iterate.md`, both orchestrators, and `README.md` for
   zero contradictions; confirm the generated-skill note in plan.md still holds.
 

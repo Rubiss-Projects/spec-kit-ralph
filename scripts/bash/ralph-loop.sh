@@ -792,6 +792,11 @@ get_repo_relative_path() {
     esac
 }
 
+# Classifies the commit history an iteration produced against the pre-iteration
+# snapshot. A "work unit" is any validated result the agent may commit in one
+# iteration: a single task, a validated task group, or a completed user story
+# (matching commands/iterate.md and Constitution Principle II). Read-only: this
+# never repairs, amends, resets, or rewrites history.
 validate_iteration_commit_history() {
     local repo_root=$1
     local before_head=$2
@@ -838,6 +843,10 @@ validate_iteration_commit_history() {
     memory_relative=$(get_repo_relative_path "$repo_root" "$memory_path")
 
     if [[ "$before_head" == "$after_head" ]]; then
+        # Option 1: a validated work unit (task, task group, or story) must be
+        # committed in the same iteration that marks it complete. An unchanged
+        # HEAD with a reduced incomplete count means completion was stranded
+        # uncommitted, which is rejected.
         if [[ "$after_incomplete" -lt "$before_incomplete" ]]; then
             violations+=("coordinated-commit-invalid: completed task state was not included in a new work-unit commit")
         elif [[ "$after_task_state" != "$before_task_state" ]]; then

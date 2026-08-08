@@ -548,6 +548,114 @@ Remove-Item $incompleteRepo.Root -Recurse -Force
 
 #endregion
 
+#region Tests: partial user-story commit (issue #50)
+
+Write-Section "partial user-story commit (issue #50)"
+
+function New-PartialStoryTestRepository {
+    param([string]$Name)
+
+    $repository = Join-Path ([System.IO.Path]::GetTempPath()) "$Name-$PID"
+    $specDir = Join-Path $repository "specs/test-feature"
+    New-Item -ItemType Directory -Path $specDir -Force | Out-Null
+    New-Item -ItemType Directory -Path (Join-Path $repository "src") -Force | Out-Null
+
+    Invoke-TestGit -Repository $repository -Arguments @("init", "-q") | Out-Null
+    Invoke-TestGit -Repository $repository -Arguments @("config", "user.email", "ralph-tests@example.invalid") | Out-Null
+    Invoke-TestGit -Repository $repository -Arguments @("config", "user.name", "Ralph Tests") | Out-Null
+
+    Set-Content -Path (Join-Path $specDir "tasks.md") -Value "- [ ] T001 US1 first task`n- [ ] T002 US1 second task`n- [ ] T003 US1 third task" -Encoding UTF8
+    Copy-Item (Join-Path $FixtureDir "ralph-memory-valid-active.md") (Join-Path $specDir "ralph-memory.md")
+    Set-Content -Path (Join-Path $specDir "progress.md") -Value "# Ralph Progress Log`n`nFeature: test-feature`n`n---" -Encoding UTF8
+    Set-Content -Path (Join-Path $repository "src/work.txt") -Value "baseline" -Encoding UTF8
+    Invoke-TestGit -Repository $repository -Arguments @("add", ".") | Out-Null
+    Invoke-TestGit -Repository $repository -Arguments @("commit", "-q", "-m", "test: baseline") | Out-Null
+
+    return [pscustomobject]@{
+        Root = $repository
+        SpecDir = $specDir
+        TasksPath = Join-Path $specDir "tasks.md"
+        MemoryPath = Join-Path $specDir "ralph-memory.md"
+        ProgressPath = Join-Path $specDir "progress.md"
+        SubstantivePath = Join-Path $repository "src/work.txt"
+    }
+}
+
+# Commits a coordinated work unit that completes the given task id and returns the
+# validation result taken against a snapshot from before the edits.
+function Complete-PartialStoryTask {
+    param($Repo, [string]$TaskId, [string]$Message)
+
+    $before = New-RalphIterationSnapshot -RepoRoot $Repo.Root -TasksPath $Repo.TasksPath
+    $tasks = [System.IO.File]::ReadAllText($Repo.TasksPath).Replace("- [ ] $TaskId", "- [x] $TaskId")
+    [System.IO.File]::WriteAllText($Repo.TasksPath, $tasks, (New-Object System.Text.UTF8Encoding($false)))
+    Add-Content -Path $Repo.MemoryPath -Value "`n- $TaskId learning retained." -Encoding UTF8
+    Add-Content -Path $Repo.ProgressPath -Value "`n$TaskId committed." -Encoding UTF8
+    Add-Content -Path $Repo.SubstantivePath -Value "`n$TaskId substantive change" -Encoding UTF8
+    Invoke-TestGit -Repository $Repo.Root -Arguments @("add", ".") | Out-Null
+    Invoke-TestGit -Repository $Repo.Root -Arguments @("commit", "-q", "-m", $Message) | Out-Null
+
+    return Test-RalphIterationPostconditions `
+        -BeforeSnapshot $before `
+        -RepoRoot $Repo.Root `
+        -TasksPath $Repo.TasksPath `
+        -SpecDir $Repo.SpecDir `
+        -AgentExitCode 0
+}
+
+# T007 (US1 parity): a validated subset of a multi-task story is a complete work
+# unit; committing it is accepted even though later story tasks remain incomplete.
+$partialRepo = New-PartialStoryTestRepository -Name "ralph-partial-story"
+
+$firstResult = Complete-PartialStoryTask -Repo $partialRepo -TaskId "T001" -Message "feat: complete first task of story"
+Assert-True "accepts partial-story subset committed as coordinated work unit" $firstResult.IsValid
+$remainingAfterFirst = (New-RalphIterationSnapshot -RepoRoot $partialRepo.Root -TasksPath $partialRepo.TasksPath).IncompleteTaskIds.Count
+Assert-Equal "partial subset leaves later story tasks incomplete" 2 $remainingAfterFirst
+
+# Sequential coordinated commits finish the remaining tasks across iterations.
+$secondResult = Complete-PartialStoryTask -Repo $partialRepo -TaskId "T002" -Message "feat: complete second task of story"
+Assert-True "accepts second sequential partial-story work unit" $secondResult.IsValid
+$thirdResult = Complete-PartialStoryTask -Repo $partialRepo -TaskId "T003" -Message "feat: complete final task of story"
+Assert-True "accepts final sequential partial-story work unit" $thirdResult.IsValid
+$remainingAfterAll = (New-RalphIterationSnapshot -RepoRoot $partialRepo.Root -TasksPath $partialRepo.TasksPath).IncompleteTaskIds.Count
+Assert-Equal "story completed across sequential coordinated commits" 0 $remainingAfterAll
+
+Remove-Item $partialRepo.Root -Recurse -Force
+
+# T012 (US2 parity): a validated subset left uncommitted (unchanged HEAD, reduced
+# count) is the contradiction issue #50 forbids and is rejected.
+$uncommittedRepo = New-PartialStoryTestRepository -Name "ralph-partial-uncommitted"
+$uncommittedBefore = New-RalphIterationSnapshot -RepoRoot $uncommittedRepo.Root -TasksPath $uncommittedRepo.TasksPath
+$uncommittedTasks = [System.IO.File]::ReadAllText($uncommittedRepo.TasksPath).Replace("- [ ] T001", "- [x] T001")
+[System.IO.File]::WriteAllText($uncommittedRepo.TasksPath, $uncommittedTasks, (New-Object System.Text.UTF8Encoding($false)))
+$uncommittedValidation = Test-RalphIterationPostconditions `
+    -BeforeSnapshot $uncommittedBefore `
+    -RepoRoot $uncommittedRepo.Root `
+    -TasksPath $uncommittedRepo.TasksPath `
+    -SpecDir $uncommittedRepo.SpecDir `
+    -AgentExitCode 0
+Assert-True "rejects validated subset left uncommitted with unchanged HEAD" (-not $uncommittedValidation.IsValid)
+Assert-True "uncommitted subset reports coordinated-commit-invalid" (($uncommittedValidation.Defects | Where-Object { $_ -like 'coordinated-commit-invalid:*' }).Count -gt 0)
+Remove-Item $uncommittedRepo.Root -Recurse -Force
+
+# A failed/no-work iteration that edits tasks.md without reducing the count marks
+# no task complete and is rejected as failed-iteration-task-state.
+$failedEditRepo = New-PartialStoryTestRepository -Name "ralph-partial-failed-edit"
+$failedEditBefore = New-RalphIterationSnapshot -RepoRoot $failedEditRepo.Root -TasksPath $failedEditRepo.TasksPath
+$failedEditTasks = [System.IO.File]::ReadAllText($failedEditRepo.TasksPath).Replace("- [ ] T001 US1 first task", "- [ ] T001 US1 first task reworded")
+[System.IO.File]::WriteAllText($failedEditRepo.TasksPath, $failedEditTasks, (New-Object System.Text.UTF8Encoding($false)))
+$failedEditValidation = Test-RalphIterationPostconditions `
+    -BeforeSnapshot $failedEditBefore `
+    -RepoRoot $failedEditRepo.Root `
+    -TasksPath $failedEditRepo.TasksPath `
+    -SpecDir $failedEditRepo.SpecDir `
+    -AgentExitCode 7
+Assert-True "rejects failed iteration that edits tasks without reducing count" (-not $failedEditValidation.IsValid)
+Assert-True "failed iteration reports failed-iteration-task-state" (($failedEditValidation.Defects | Where-Object { $_ -like 'failed-iteration-task-state:*' }).Count -gt 0)
+Remove-Item $failedEditRepo.Root -Recurse -Force
+
+#endregion
+
 #region Tests: centralized completion gate
 
 Write-Section "centralized completion gate"

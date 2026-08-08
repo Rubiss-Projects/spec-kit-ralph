@@ -14,8 +14,8 @@ You **MUST** consider the user input before proceeding (if not empty).
 
 **CRITICAL**: Complete AT MOST ONE user story in this iteration.
 
-- If you cannot complete an entire user story, complete as many tasks as you can
-- Partial progress is fine -- uncompleted tasks will be handled in subsequent iterations
+- If you cannot complete an entire user story, complete and commit as many of its tasks as you can validate this iteration
+- Partial progress is committed as a coordinated work unit each iteration; the remaining tasks in the same story are handled in subsequent iterations
 - DO NOT start a second user story even if you have time remaining
 - This prevents context rot and keeps changes reviewable
 
@@ -52,18 +52,24 @@ You **MUST** consider the user input before proceeding (if not empty).
    - Do not change task state until the corresponding substantive result passes its quality checks
 
 5. **Persist the iteration outcome before any commit**:
-   - When ALL tasks in the selected user story are substantively complete and validated:
-     1. Mark the completed tasks by changing `[ ]` to `[x]` in `tasks.md`
-     2. Preserve and compact durable discoveries in `ralph-memory.md`; replace `Current Handoff` with only the information needed by the next iteration
+
+   The work unit for this iteration is the validated subset of tasks you actually
+   completed — a single task, a task group, or the whole user story. Whenever
+   that subset is non-empty, it MUST be committed in this same iteration; never
+   mark a task complete and leave that change uncommitted for a later iteration.
+
+   - When you have substantively completed and validated at least one task in the selected user story (a partial subset is a valid work unit; you need not finish the entire story):
+     1. Mark exactly the validated tasks by changing `[ ]` to `[x]` in `tasks.md`; leave tasks you did not validate as `[ ]`
+     2. Preserve and compact durable discoveries in `ralph-memory.md`; replace `Current Handoff` with only the information needed by the next iteration (for a partial story, point it at the next incomplete task in the same story)
      3. If no task remains anywhere in `tasks.md`, replace the handoff content with exactly `- Feature complete; no handoff required.`
      4. Append the Progress Report below with `**Commit**: This work-unit commit`
      5. Stage substantive files together with `tasks.md`, `ralph-memory.md`, and `progress.md`
-   - When the selected work unit fails, produces no work, or remains partial:
+   - When the selected work unit fails or produces no validated work:
      - Do not create a commit
      - Leave `HEAD` unchanged
-     - Leave `tasks.md` byte-for-byte unchanged for a failed or no-work attempt; a validated partial result may mark only its completed tasks
+     - Leave `tasks.md` byte-for-byte unchanged — do not mark any task `[x]`
      - Preserve useful failure knowledge in `ralph-memory.md` and append the Progress Report with `**Commit**: No commit - no completed work unit`
-     - Leave those state changes uncommitted so the next substantive work-unit commit includes them
+     - Leave those memory/audit changes uncommitted so the next substantive work-unit commit includes them
 
 6. **Create one substantive commit only after coordinated persistence**:
    - Before creating the commit, resolve the effective commit policy from `.specify/extensions/ralph/ralph-config.yml` (or `.local.yml` override):
@@ -72,7 +78,7 @@ You **MUST** consider the user input before proceeding (if not empty).
      - If `commit.style` is `legacy` (or absent), use: `feat(<feature-name>): <work-unit title>` — preserve the work-unit title exactly as the commit subject payload.
      - If `commit.style` is `conventional`, use: `feat(<scope>): <commit summary>` where `<scope>` defaults to `ralph` when `commit.scope` is not set, and `<commit summary>` is a concise description of the completed change. The work-unit title is preserved separately in the progress/audit log but **must not** appear verbatim as the conventional commit subject payload. Planning labels such as `US-`, `US1`, `Phase`, and task ranges must be omitted from `<commit summary>`.
      - If `commit.issue: auto` is set, infer an issue number from a leading numeric branch prefix (e.g. `069-...` → `#69`) and append ` #<N>` when inference succeeds; omit the suffix silently when no numeric prefix exists.
-   - When ALL tasks in the selected user story are complete (`[x]`), create exactly one commit using the resolved subject:
+   - When you have completed and marked (`[x]`) the validated work unit for this iteration — whether that is a single task, a task group, or the whole story — create exactly one commit using the resolved subject:
 
      ```sh
      git add -A
