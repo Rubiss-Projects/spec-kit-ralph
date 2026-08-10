@@ -166,6 +166,7 @@ Follow the patterns established in the codebase:
 | --------- | ----------------- |
 | User story unclear | Ask for clarification in progress entry, mark tasks as blocked |
 | Tests fail | Report failure, do not mark task complete, no commit |
-| Cannot complete story | Persist useful memory/audit context, leave `HEAD` unchanged, and make no commit |
+| Story partially done (at least one task validated) | Mark only the validated tasks `[x]` and commit them as one coordinated work unit this iteration; remaining tasks continue next iteration |
+| No task could be validated this iteration | Persist useful memory/audit context, leave `tasks.md` and `HEAD` unchanged, and make no commit |
 | All tasks done | Persist the terminal handoff, create the coordinated final work-unit commit, verify the clean completion gate, then output the completion signal |
 | Dependencies missing | Note in progress file, skip to next available task |
