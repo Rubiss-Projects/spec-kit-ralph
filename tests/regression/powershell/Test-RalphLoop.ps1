@@ -445,6 +445,73 @@ $reviewOnlyValidation = Test-RalphIterationPostconditions `
 Assert-True "coordinated state-only commit passes when task state advances" $reviewOnlyValidation.IsValid
 Remove-Item $reviewOnlyRepo.Root -Recurse -Force
 
+# Duplicate task IDs are one progress identity, not multiple completions.
+$duplicateIdsRepo = New-TransactionTestRepository -Name "ralph-duplicate-task-ids"
+Set-Content -Path $duplicateIdsRepo.TasksPath -Value @(
+    "- [ ] T001 Duplicate open task"
+    "- [ ] T001 Duplicate open task again"
+    "- [x] T002 Completed task"
+) -Encoding UTF8
+$duplicateIdsSnapshot = New-RalphIterationSnapshot -RepoRoot $duplicateIdsRepo.Root -TasksPath $duplicateIdsRepo.TasksPath
+Assert-Equal "duplicate incomplete IDs are unique in snapshot" 1 $duplicateIdsSnapshot.IncompleteTaskIds.Count
+Assert-Equal "completed IDs are captured in snapshot" "T002" ($duplicateIdsSnapshot.CompletedTaskIds | Select-Object -First 1)
+Remove-Item $duplicateIdsRepo.Root -Recurse -Force
+
+# Completing existing tasks while adding follow-up tasks is valid progress even
+# when the net number of unchecked tasks increases.
+$expansionRepo = New-TransactionTestRepository -Name "ralph-task-expansion"
+Set-Content -Path $expansionRepo.TasksPath -Value @(
+    "- [ ] T001 Expand implementation slices"
+    "- [ ] T002 Capture coverage gaps"
+) -Encoding UTF8
+Invoke-TestGit -Repository $expansionRepo.Root -Arguments @("add", "specs/test-feature/tasks.md") | Out-Null
+Invoke-TestGit -Repository $expansionRepo.Root -Arguments @("commit", "-q", "-m", "test: prepare task expansion") | Out-Null
+$expansionBefore = New-RalphIterationSnapshot -RepoRoot $expansionRepo.Root -TasksPath $expansionRepo.TasksPath
+Set-Content -Path $expansionRepo.TasksPath -Value @(
+    "- [x] T001 Expand implementation slices"
+    "- [x] T002 Capture coverage gaps"
+    "- [ ] T003 Follow-up slice one"
+    "- [ ] T004 Follow-up slice two"
+    "- [ ] T005 Follow-up slice three"
+) -Encoding UTF8
+Add-Content -Path $expansionRepo.MemoryPath -Value "`n- Task expansion accepted." -Encoding UTF8
+Add-Content -Path $expansionRepo.ProgressPath -Value "`nTask expansion completed with follow-up slices." -Encoding UTF8
+Add-Content -Path $expansionRepo.SubstantivePath -Value "`nsubstantive expansion inventory" -Encoding UTF8
+Invoke-TestGit -Repository $expansionRepo.Root -Arguments @("add", ".") | Out-Null
+Invoke-TestGit -Repository $expansionRepo.Root -Arguments @("commit", "-q", "-m", "feat: task expansion") | Out-Null
+$expansionValidation = Test-RalphIterationPostconditions `
+    -BeforeSnapshot $expansionBefore `
+    -RepoRoot $expansionRepo.Root `
+    -TasksPath $expansionRepo.TasksPath `
+    -SpecDir $expansionRepo.SpecDir `
+    -AgentExitCode 0
+Assert-True "substantive task expansion is accepted despite increased unchecked count" $expansionValidation.IsValid
+Assert-Equal "task expansion records completed existing IDs" 2 $expansionValidation.CompletedTaskIds.Count
+Assert-Equal "task expansion records added unchecked IDs" 3 $expansionValidation.AddedUncheckedTaskIds.Count
+Remove-Item $expansionRepo.Root -Recurse -Force
+
+# A planning/review task whose intended artifact is follow-up tasks may be
+# state-only, but it is still valid only when an existing task is checked off.
+$stateExpansionRepo = New-TransactionTestRepository -Name "ralph-state-task-expansion"
+$stateExpansionBefore = New-RalphIterationSnapshot -RepoRoot $stateExpansionRepo.Root -TasksPath $stateExpansionRepo.TasksPath
+Set-Content -Path $stateExpansionRepo.TasksPath -Value @(
+    "- [x] T001 Complete transaction"
+    "- [ ] T002 Planned follow-up one"
+    "- [ ] T003 Planned follow-up two"
+) -Encoding UTF8
+Add-Content -Path $stateExpansionRepo.MemoryPath -Value "`n- State-only expansion accepted." -Encoding UTF8
+Add-Content -Path $stateExpansionRepo.ProgressPath -Value "`nState-only task expansion completed." -Encoding UTF8
+Invoke-TestGit -Repository $stateExpansionRepo.Root -Arguments @("add", "specs/test-feature/tasks.md", "specs/test-feature/ralph-memory.md", "specs/test-feature/progress.md") | Out-Null
+Invoke-TestGit -Repository $stateExpansionRepo.Root -Arguments @("commit", "-q", "-m", "docs: state-only task expansion") | Out-Null
+$stateExpansionValidation = Test-RalphIterationPostconditions `
+    -BeforeSnapshot $stateExpansionBefore `
+    -RepoRoot $stateExpansionRepo.Root `
+    -TasksPath $stateExpansionRepo.TasksPath `
+    -SpecDir $stateExpansionRepo.SpecDir `
+    -AgentExitCode 0
+Assert-True "state-only task expansion is accepted when an existing task completes" $stateExpansionValidation.IsValid
+Remove-Item $stateExpansionRepo.Root -Recurse -Force
+
 # Replacing one incomplete task with another does not reduce remaining work and
 # must not make a state-only commit appear to complete a work unit.
 $taskSwapRepo = New-TransactionTestRepository -Name "ralph-task-swap"
@@ -465,6 +532,26 @@ $taskSwapValidation = Test-RalphIterationPostconditions `
 Assert-True "state-only task replacement without count reduction is rejected" (-not $taskSwapValidation.IsValid)
 Assert-True "task replacement reports bookkeeping-only diagnostic" (($taskSwapValidation.Defects | Where-Object { $_ -like 'bookkeeping-only:*' }).Count -gt 0)
 Remove-Item $taskSwapRepo.Root -Recurse -Force
+
+# Adding tasks without checking off existing work remains invalid task churn.
+$taskAddRepo = New-TransactionTestRepository -Name "ralph-add-only-tasks"
+$taskAddBefore = New-RalphIterationSnapshot -RepoRoot $taskAddRepo.Root -TasksPath $taskAddRepo.TasksPath
+Set-Content -Path $taskAddRepo.TasksPath -Value @(
+    "- [ ] T001 Complete transaction"
+    "- [ ] T002 Add-only follow-up"
+) -Encoding UTF8
+Add-Content -Path $taskAddRepo.ProgressPath -Value "`nAdd-only task churn." -Encoding UTF8
+Invoke-TestGit -Repository $taskAddRepo.Root -Arguments @("add", "specs/test-feature/tasks.md", "specs/test-feature/progress.md") | Out-Null
+Invoke-TestGit -Repository $taskAddRepo.Root -Arguments @("commit", "-q", "-m", "chore: add-only task churn") | Out-Null
+$taskAddValidation = Test-RalphIterationPostconditions `
+    -BeforeSnapshot $taskAddBefore `
+    -RepoRoot $taskAddRepo.Root `
+    -TasksPath $taskAddRepo.TasksPath `
+    -SpecDir $taskAddRepo.SpecDir `
+    -AgentExitCode 0
+Assert-True "add-only task churn is rejected" (-not $taskAddValidation.IsValid)
+Assert-True "add-only task churn reports failed/no-work HEAD advance" (($taskAddValidation.Defects | Where-Object { $_ -like 'failed-iteration-advanced-head:*' }).Count -gt 0)
+Remove-Item $taskAddRepo.Root -Recurse -Force
 
 # An earlier state-only checkpoint cannot borrow task advancement from a later
 # commit in the same iteration range.
@@ -1186,6 +1273,52 @@ foreach ($tokenCase in @(
     Remove-Item $tokenRepo.Root -Recurse -Force
     Remove-Item $tokenCliDir -Recurse -Force
 }
+
+$expansionLoopRepo = New-TransactionTestRepository -Name "ralph-loop-task-expansion"
+$expansionCliDir = Join-Path ([System.IO.Path]::GetTempPath()) "ralph-expansion-cli-$PID"
+New-Item -ItemType Directory -Path $expansionCliDir -Force | Out-Null
+$expansionAction = Join-Path $expansionCliDir "expand.ps1"
+$expansionLog = Join-Path $expansionCliDir "invocations.log"
+$expansionRepoLiteral = $expansionLoopRepo.Root.Replace("'", "''")
+$expansionTasksLiteral = $expansionLoopRepo.TasksPath.Replace("'", "''")
+$expansionMemoryLiteral = $expansionLoopRepo.MemoryPath.Replace("'", "''")
+$expansionProgressLiteral = $expansionLoopRepo.ProgressPath.Replace("'", "''")
+$expansionSourceLiteral = $expansionLoopRepo.SubstantivePath.Replace("'", "''")
+@"
+`$ErrorActionPreference = 'Stop'
+Set-Content -Path '$expansionTasksLiteral' -Value @(
+    '- [x] T001 Complete transaction',
+    '- [ ] T002 Follow-up slice',
+    '- [ ] T003 Follow-up slice'
+) -Encoding UTF8
+Add-Content -Path '$expansionMemoryLiteral' -Value "`n- Task expansion handoff." -Encoding UTF8
+Add-Content -Path '$expansionProgressLiteral' -Value "`nExpanded task list." -Encoding UTF8
+Add-Content -Path '$expansionSourceLiteral' -Value "`nsubstantive expansion" -Encoding UTF8
+& git -C '$expansionRepoLiteral' add .
+if (`$LASTEXITCODE -ne 0) { exit `$LASTEXITCODE }
+& git -C '$expansionRepoLiteral' commit -q -m 'feat: expand task list'
+if (`$LASTEXITCODE -ne 0) { exit `$LASTEXITCODE }
+"@ | Set-Content -Path $expansionAction -Encoding UTF8
+$expansionCli = New-FakeCopilot -Directory $expansionCliDir -InvocationLog $expansionLog -PowerShellScript $expansionAction
+
+$expansionOutput = & pwsh -NoLogo -NoProfile -File $SourceScript `
+    -FeatureName "test-feature" `
+    -TasksPath $expansionLoopRepo.TasksPath `
+    -SpecDir $expansionLoopRepo.SpecDir `
+    -MaxIterations 1 `
+    -Model "fake-model" `
+    -AgentCli $expansionCli `
+    -WorkingDirectory $expansionLoopRepo.Root 2>&1
+$expansionExit = $LASTEXITCODE
+$expansionText = $expansionOutput -join "`n"
+
+Assert-Equal "task expansion reaches iteration limit with remaining work" 1 $expansionExit
+Assert-True "task expansion reports accepted added tasks" ($expansionText -match 'Task expansion accepted: 2 new unchecked task\(s\) added')
+Assert-True "task expansion summary counts completed existing task" ($expansionText -match 'Tasks completed:\s+1')
+Assert-True "task expansion summary reports new remaining tasks" ($expansionText -match 'Tasks remaining:\s+2')
+
+Remove-Item $expansionLoopRepo.Root -Recurse -Force
+Remove-Item $expansionCliDir -Recurse -Force
 
 $expectedCompletionCategories = @(
     "agent-result-invalid",

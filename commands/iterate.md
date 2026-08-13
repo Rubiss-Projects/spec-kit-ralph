@@ -16,6 +16,7 @@ You **MUST** consider the user input before proceeding (if not empty).
 
 - If you cannot complete an entire user story, complete and commit as many of its tasks as you can validate this iteration
 - Partial progress is committed as a coordinated work unit each iteration; the remaining tasks in the same story are handled in subsequent iterations
+- A completed task may add follow-up tasks to `tasks.md`; this is valid only when at least one previously-open task is also marked `[x]` in the same coordinated commit
 - DO NOT start a second user story even if you have time remaining
 - This prevents context rot and keeps changes reviewable
 
@@ -90,6 +91,7 @@ You **MUST** consider the user input before proceeding (if not empty).
    - Conventional example: `git commit -m "feat(ralph): initialize ralph command"`
    - Conventional with issue: `git commit -m "feat(myapp): add context list filter flag #42"`
    - A completed review or analysis task may commit only `tasks.md`, `ralph-memory.md`, and `progress.md` when those coordinated records are the task's intended result
+   - A completed planning or task-expansion work unit may add new unchecked follow-up tasks; make the expansion clear in `progress.md` and `ralph-memory.md`, and remember that remaining tasks may increase while still being bounded by `max_iterations`
    - Never create a state-only commit when no task was completed; retained failure or no-work records must wait for the next completed work unit
    - Never amend or create a follow-up bookkeeping commit to insert a commit hash into the audit log
    - If the orchestrator feeds back only `commit-subject-invalid` defects for the just-created work-unit commit, repair the subject in the current normal iteration; do not treat this as permission for broader cleanup, reset, rebase, hidden recovery commits, or unrelated history edits
@@ -167,6 +169,7 @@ Follow the patterns established in the codebase:
 | User story unclear | Ask for clarification in progress entry, mark tasks as blocked |
 | Tests fail | Report failure, do not mark task complete, no commit |
 | Story partially done (at least one task validated) | Mark only the validated tasks `[x]` and commit them as one coordinated work unit this iteration; remaining tasks continue next iteration |
+| Validated task expansion | Mark the completed existing task(s) `[x]`, add the new unchecked follow-up tasks, commit the coordinated state, and continue within the configured iteration limit |
 | No task could be validated this iteration | Persist useful memory/audit context, leave `tasks.md` and `HEAD` unchanged, and make no commit |
 | All tasks done | Persist the terminal handoff, create the coordinated final work-unit commit, verify the clean completion gate, then output the completion signal |
 | Dependencies missing | Note in progress file, skip to next available task |
