@@ -15,10 +15,10 @@ the accepted output of that work unit, adds new unchecked follow-up tasks.
 
 Technical approach: classify progress by **completed task identity** rather
 than by net unchecked-task count. An iteration is valid progress when at least
-one task that was incomplete before the iteration is no longer incomplete after
-the iteration, even if new unchecked tasks were added. Bash needs first-class
-incomplete-task ID snapshots; PowerShell already has iteration-level ID
-snapshots but still needs the same identity-based rule in commit-level
+one task that was incomplete before the iteration is checked after the
+iteration, even if new unchecked tasks were added. Bash needs first-class
+incomplete/completed task ID snapshots; PowerShell already has iteration-level
+ID snapshots but still needs the same checked-existing-ID rule in commit-level
 bookkeeping checks and user-facing summaries. Both execution paths must report
 accepted task expansion clearly while preserving all existing failed/no-work,
 coordinated-commit, bookkeeping-only, clean-completion, and iteration-limit
@@ -116,7 +116,7 @@ Research output: [research.md](./research.md)
 
 Key decisions:
 
-- Progress is detected by completed task IDs, not net unchecked-task count.
+- Progress is detected by previously incomplete task IDs that are now checked, not net unchecked-task count.
 - Task expansion is accepted only when existing incomplete tasks were completed.
 - `max_iterations` remains the loop-size boundary; task expansion adds visibility, not new control semantics.
 - Bash and PowerShell must share the same conceptual snapshot fields and diagnostic categories.

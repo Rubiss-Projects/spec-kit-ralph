@@ -246,8 +246,9 @@ export SPECKIT_RALPH_AGENT_CLI="codex"
 2. Each **fresh** agent reads `ralph-memory.md` first, then `tasks.md` and design artifacts. Recent `progress.md` entries are optional audit context, not durable memory.
 3. The agent implements and validates one work unit — a single task, a validated task group, or a whole user story. A validated subset is committed as a coordinated work unit in the same iteration, so a multi-task story may span several iterations. Durable patterns, decisions, gotchas, commands, failed approaches, and the next handoff are compacted in memory.
 4. For completed work, the agent updates tasks and memory, appends progress, then creates one coordinated commit containing the work result, `tasks.md`, `ralph-memory.md`, and `progress.md`. Review or analysis tasks may intentionally produce only those coordinated records. The audit uses `This work-unit commit`; it never requires a future hash or a bookkeeping amend.
-5. Failed or no-work attempts leave tasks and `HEAD` unchanged. Useful memory and audit updates remain uncommitted and join the next substantive commit.
-6. The orchestrator validates only commits created after it snapshots `HEAD` for the current iteration. Earlier human-authored spec or task refinements form the trusted starting boundary, so a clean branch can be rerun without rewriting history.
+5. If a completed work unit adds follow-up tasks, Ralph still treats the iteration as progress when at least one previously-open task was checked off. The new unchecked tasks become remaining work, and `max_iterations` remains the safety limit for the expanded loop.
+6. Failed or no-work attempts leave tasks and `HEAD` unchanged. Useful memory and audit updates remain uncommitted and join the next substantive commit.
+7. The orchestrator validates only commits created after it snapshots `HEAD` for the current iteration. Earlier human-authored spec or task refinements form the trusted starting boundary, so a clean branch can be rerun without rewriting history.
 
 ### Termination Conditions
 

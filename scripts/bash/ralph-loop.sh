@@ -465,6 +465,24 @@ get_incomplete_task_count() {
     printf '%s\n' "${count:-0}"
 }
 
+get_incomplete_task_ids() {
+    local path="$1"
+    if [[ ! -f "$path" ]]; then
+        return 0
+    fi
+
+    sed -n 's/^- \[ \] \(T[0-9][0-9]*\).*/\1/p' "$path" | awk '!seen[$0]++'
+}
+
+get_completed_task_ids() {
+    local path="$1"
+    if [[ ! -f "$path" ]]; then
+        return 0
+    fi
+
+    sed -n 's/^- \[[xX]\] \(T[0-9][0-9]*\).*/\1/p' "$path" | awk '!seen[$0]++'
+}
+
 get_incomplete_task_count_at_commit() {
     local repo_root=$1
     local commit=$2
@@ -477,6 +495,70 @@ get_incomplete_task_count_at_commit() {
     fi
     count=$(printf '%s\n' "$task_content" | grep -c '^- \[ \]' 2>/dev/null) || true
     printf '%s\n' "${count:-0}"
+}
+
+get_incomplete_task_ids_at_commit() {
+    local repo_root=$1
+    local commit=$2
+    local tasks_relative=$3
+    local task_content
+
+    if ! task_content=$(git -C "$repo_root" show "$commit:$tasks_relative" 2>/dev/null); then
+        return 1
+    fi
+    printf '%s\n' "$task_content" | sed -n 's/^- \[ \] \(T[0-9][0-9]*\).*/\1/p' | awk '!seen[$0]++'
+}
+
+get_completed_task_ids_at_commit() {
+    local repo_root=$1
+    local commit=$2
+    local tasks_relative=$3
+    local task_content
+
+    if ! task_content=$(git -C "$repo_root" show "$commit:$tasks_relative" 2>/dev/null); then
+        return 1
+    fi
+    printf '%s\n' "$task_content" | sed -n 's/^- \[[xX]\] \(T[0-9][0-9]*\).*/\1/p' | awk '!seen[$0]++'
+}
+
+count_completed_task_ids() {
+    local before_incomplete_ids=$1
+    local after_completed_ids=$2
+
+    awk '
+        NR == FNR {
+            if ($0 != "") {
+                completed[$0] = 1
+            }
+            next
+        }
+        $0 != "" && completed[$0] && !seen[$0]++ {
+            count++
+        }
+        END {
+            printf "%d\n", count + 0
+        }
+    ' <(printf '%s\n' "$after_completed_ids") <(printf '%s\n' "$before_incomplete_ids")
+}
+
+count_added_unchecked_task_ids() {
+    local before_incomplete_ids=$1
+    local after_incomplete_ids=$2
+
+    awk '
+        NR == FNR {
+            if ($0 != "") {
+                before[$0] = 1
+            }
+            next
+        }
+        $0 != "" && !before[$0] && !seen[$0]++ {
+            count++
+        }
+        END {
+            printf "%d\n", count + 0
+        }
+    ' <(printf '%s\n' "$before_incomplete_ids") <(printf '%s\n' "$after_incomplete_ids")
 }
 
 initialize_progress_file() {
@@ -824,8 +906,14 @@ validate_iteration_commit_history() {
     local has_substantive
     local subject
     local subject_output
-    local commit_before_incomplete
-    local commit_after_incomplete
+    local before_incomplete_ids
+    local after_incomplete_ids
+    local after_completed_ids
+    local completed_existing_count
+    local commit_before_incomplete_ids
+    local commit_after_incomplete_ids
+    local commit_after_completed_ids
+    local commit_completed_existing_count
     local violations=()
 
     after_head=$(get_git_head_snapshot "$repo_root")
@@ -841,19 +929,23 @@ validate_iteration_commit_history() {
     tasks_relative=$(get_repo_relative_path "$repo_root" "$tasks_path")
     progress_relative=$(get_repo_relative_path "$repo_root" "$progress_path")
     memory_relative=$(get_repo_relative_path "$repo_root" "$memory_path")
+    before_incomplete_ids=$(get_incomplete_task_ids_at_commit "$repo_root" "$before_head" "$tasks_relative" 2>/dev/null || true)
+    after_incomplete_ids=$(get_incomplete_task_ids "$tasks_path")
+    after_completed_ids=$(get_completed_task_ids "$tasks_path")
+    completed_existing_count=$(count_completed_task_ids "$before_incomplete_ids" "$after_completed_ids")
 
     if [[ "$before_head" == "$after_head" ]]; then
         # Option 1: a validated work unit (task, task group, or story) must be
         # committed in the same iteration that marks it complete. An unchanged
         # HEAD with a reduced incomplete count means completion was stranded
         # uncommitted, which is rejected.
-        if [[ "$after_incomplete" -lt "$before_incomplete" ]]; then
+        if [[ "$completed_existing_count" -gt 0 ]]; then
             violations+=("coordinated-commit-invalid: completed task state was not included in a new work-unit commit")
         elif [[ "$after_task_state" != "$before_task_state" ]]; then
             violations+=("failed-iteration-task-state: failed or no-work iteration changed tasks.md")
         fi
     else
-        if [[ "$agent_exit" -ne 0 || "$after_incomplete" -ge "$before_incomplete" ]]; then
+        if [[ "$agent_exit" -ne 0 || "$completed_existing_count" -eq 0 ]]; then
             violations+=("failed-iteration-advanced-head: failed or no-work iteration advanced HEAD")
         fi
 
@@ -862,16 +954,20 @@ validate_iteration_commit_history() {
             commits=""
         }
 
-        commit_before_incomplete=$before_incomplete
+        commit_before_incomplete_ids=$before_incomplete_ids
         while IFS= read -r commit; do
             [[ -z "$commit" ]] && continue
-            if ! commit_after_incomplete=$(get_incomplete_task_count_at_commit "$repo_root" "$commit" "$tasks_relative"); then
+            if ! commit_after_incomplete_ids=$(get_incomplete_task_ids_at_commit "$repo_root" "$commit" "$tasks_relative"); then
                 violations+=("coordinated-commit-invalid: cannot inspect task state for commit $commit")
-                commit_after_incomplete=$commit_before_incomplete
+                commit_after_incomplete_ids=$commit_before_incomplete_ids
             fi
+            if ! commit_after_completed_ids=$(get_completed_task_ids_at_commit "$repo_root" "$commit" "$tasks_relative"); then
+                commit_after_completed_ids=""
+            fi
+            commit_completed_existing_count=$(count_completed_task_ids "$commit_before_incomplete_ids" "$commit_after_completed_ids")
             paths=$(git -C "$repo_root" diff-tree --root --no-commit-id --name-only -r "$commit" 2>/dev/null) || {
                 violations+=("coordinated-commit-invalid: cannot inspect commit $commit")
-                commit_before_incomplete=$commit_after_incomplete
+                commit_before_incomplete_ids=$commit_after_incomplete_ids
                 continue
             }
             has_tasks=false
@@ -894,8 +990,8 @@ validate_iteration_commit_history() {
             # for review or analysis tasks, the checked task and audit record can
             # be the intended work product. Without task completion, the same
             # commit shape is stale bookkeeping and remains invalid.
-            if [[ "$has_substantive" == "false" && "$commit_after_incomplete" -ge "$commit_before_incomplete" ]]; then
-                violations+=("bookkeeping-only: commit $commit contains no substantive path and did not reduce incomplete task count")
+            if [[ "$has_substantive" == "false" && "$commit_completed_existing_count" -eq 0 ]]; then
+                violations+=("bookkeeping-only: commit $commit contains no substantive path and did not complete an existing task")
             fi
             if [[ "$has_tasks" == "false" || "$has_progress" == "false" || "$has_memory" == "false" ]]; then
                 violations+=("coordinated-commit-invalid: commit $commit must include tasks.md, progress.md, and ralph-memory.md")
@@ -909,7 +1005,7 @@ validate_iteration_commit_history() {
                     violations+=("$subject_output")
                 fi
             fi
-            commit_before_incomplete=$commit_after_incomplete
+            commit_before_incomplete_ids=$commit_after_incomplete_ids
         done <<< "$commits"
     fi
 
@@ -1386,14 +1482,13 @@ print_summary() {
 
     local final_tasks
     final_tasks=$(get_incomplete_task_count "$TASKS_PATH")
-    local tasks_completed=$((INITIAL_TASKS - final_tasks))
 
     echo ""
     echo -e "\033[36m$border\033[0m"
     echo -e "\033[36m  Ralph Loop Summary\033[0m"
     echo -e "\033[36m$border\033[0m"
     echo -e "  \033[37mIterations run: $iterations_run\033[0m"
-    echo -e "  \033[37mTasks completed: $tasks_completed\033[0m"
+    echo -e "  \033[37mTasks completed: $TASKS_COMPLETED_DURING_RUN\033[0m"
     echo -e "  \033[37mTasks remaining: $final_tasks\033[0m"
     echo -ne "  \033[37mStatus: \033[0m"
     echo -e "${status_color}${status_label}\033[0m"
@@ -1453,6 +1548,7 @@ echo -e "\033[37mFound $INITIAL_TASKS incomplete task(s)\033[0m"
 iteration=1
 consecutive_failures=0
 max_consecutive_failures=3
+TASKS_COMPLETED_DURING_RUN=0
 completed=false
 circuit_breaker=false
 fatal_failure=false
@@ -1476,9 +1572,16 @@ while [[ $iteration -le $MAX_ITERATIONS && "$completed" == "false" && "$INTERRUP
     iteration_head_before=$(get_git_head_snapshot "$REPO_ROOT")
     iteration_task_state_before=$(get_task_state_snapshot "$TASKS_PATH")
     iteration_tasks_before=$(get_incomplete_task_count "$TASKS_PATH")
+    iteration_incomplete_ids_before=$(get_incomplete_task_ids "$TASKS_PATH")
     validation_head_before="${repair_head_before:-$iteration_head_before}"
     validation_task_state_before="${repair_task_state_before:-$iteration_task_state_before}"
     validation_tasks_before="${repair_tasks_before:-$iteration_tasks_before}"
+    if [[ -n "$repair_head_before" ]]; then
+        validation_tasks_relative=$(get_repo_relative_path "$REPO_ROOT" "$TASKS_PATH")
+        validation_incomplete_ids_before=$(get_incomplete_task_ids_at_commit "$REPO_ROOT" "$validation_head_before" "$validation_tasks_relative" 2>/dev/null || true)
+    else
+        validation_incomplete_ids_before=$iteration_incomplete_ids_before
+    fi
 
     # Invoke configured agent CLI with speckit.ralph.iterate behavior
     set +e
@@ -1490,6 +1593,10 @@ while [[ $iteration -le $MAX_ITERATIONS && "$completed" == "false" && "$INTERRUP
     set -e
 
     iteration_tasks_after=$(get_incomplete_task_count "$TASKS_PATH")
+    iteration_incomplete_ids_after=$(get_incomplete_task_ids "$TASKS_PATH")
+    iteration_completed_ids_after=$(get_completed_task_ids "$TASKS_PATH")
+    iteration_completed_count=$(count_completed_task_ids "$validation_incomplete_ids_before" "$iteration_completed_ids_after")
+    iteration_added_unchecked_count=$(count_added_unchecked_task_ids "$validation_incomplete_ids_before" "$iteration_incomplete_ids_after")
     commit_postconditions=0
     commit_postcondition_output=""
     iteration_branch=$(git -C "$REPO_ROOT" branch --show-current 2>/dev/null || true)
@@ -1530,6 +1637,12 @@ while [[ $iteration -le $MAX_ITERATIONS && "$completed" == "false" && "$INTERRUP
 
         if validate_completion_gate "$exit_code" "$commit_postconditions" "$REPO_ROOT" "$TASKS_PATH" "$MEMORY_TEMPLATE_PATH" "$MEMORY_PATH" "$FEATURE_NAME"; then
             print_status "$iteration" "success" "Completion gate passed"
+            if [[ "$exit_code" -eq 0 && "$iteration_completed_count" -gt 0 ]]; then
+                TASKS_COMPLETED_DURING_RUN=$((TASKS_COMPLETED_DURING_RUN + iteration_completed_count))
+                if [[ "$iteration_added_unchecked_count" -gt 0 ]]; then
+                    echo -e "\033[90mTask expansion accepted: $iteration_added_unchecked_count new unchecked task(s) added\033[0m"
+                fi
+            fi
             completed=true
         else
             print_status "$iteration" "failure" "Completion gate failed"
@@ -1578,6 +1691,12 @@ while [[ $iteration -le $MAX_ITERATIONS && "$completed" == "false" && "$INTERRUP
     else
         consecutive_failures=0
         print_status "$iteration" "success" "Iteration completed"
+        if [[ "$iteration_completed_count" -gt 0 ]]; then
+            TASKS_COMPLETED_DURING_RUN=$((TASKS_COMPLETED_DURING_RUN + iteration_completed_count))
+            if [[ "$iteration_added_unchecked_count" -gt 0 ]]; then
+                echo -e "\033[90mTask expansion accepted: $iteration_added_unchecked_count new unchecked task(s) added\033[0m"
+            fi
+        fi
     fi
 
     # Check remaining tasks

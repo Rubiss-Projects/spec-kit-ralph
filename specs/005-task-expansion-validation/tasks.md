@@ -9,10 +9,10 @@
 
 **Purpose**: Establish the working context and identify exact edit surfaces.
 
-- [ ] T001 Review task-expansion policy and validation matrix in specs/005-task-expansion-validation/contracts/task-expansion-policy.md and specs/005-task-expansion-validation/contracts/iteration-validation-contract.md
-- [ ] T002 Review existing Bash and PowerShell validation helpers in scripts/bash/ralph-loop.sh and scripts/powershell/ralph-loop.ps1
-- [ ] T003 [P] Review current Bash regression scaffold for coordinated iteration commits in tests/regression/bash/test-ralph-loop.sh
-- [ ] T004 [P] Review current PowerShell regression scaffold for transaction repositories in tests/regression/powershell/Test-RalphLoop.ps1
+- [x] T001 Review task-expansion policy and validation matrix in specs/005-task-expansion-validation/contracts/task-expansion-policy.md and specs/005-task-expansion-validation/contracts/iteration-validation-contract.md
+- [x] T002 Review existing Bash and PowerShell validation helpers in scripts/bash/ralph-loop.sh and scripts/powershell/ralph-loop.ps1
+- [x] T003 [P] Review current Bash regression scaffold for coordinated iteration commits in tests/regression/bash/test-ralph-loop.sh
+- [x] T004 [P] Review current PowerShell regression scaffold for transaction repositories in tests/regression/powershell/Test-RalphLoop.ps1
 
 ---
 
@@ -22,12 +22,12 @@
 
 **CRITICAL**: No user story work can begin until this phase is complete.
 
-- [ ] T005 Add Bash helper to extract unique incomplete task IDs from a task file in scripts/bash/ralph-loop.sh
-- [ ] T006 Add Bash helper to extract unique incomplete task IDs for a task file at a commit in scripts/bash/ralph-loop.sh
-- [ ] T007 Add Bash helper to count completed existing task IDs between two incomplete-ID snapshots in scripts/bash/ralph-loop.sh
-- [ ] T008 Update Bash regression helper extraction to include new task-ID helpers in tests/regression/bash/test-ralph-loop.sh
-- [ ] T009 Update PowerShell task-ID snapshot handling to treat duplicate incomplete IDs as a single progress identity in scripts/powershell/ralph-loop.ps1
-- [ ] T010 Add regression assertions for duplicate incomplete task IDs not being double-counted in tests/regression/bash/test-ralph-loop.sh and tests/regression/powershell/Test-RalphLoop.ps1
+- [x] T005 Add Bash helper to extract unique incomplete task IDs from a task file in scripts/bash/ralph-loop.sh
+- [x] T006 Add Bash helper to extract unique incomplete task IDs for a task file at a commit in scripts/bash/ralph-loop.sh
+- [x] T007 Add Bash helper to count completed existing task IDs between two incomplete-ID snapshots in scripts/bash/ralph-loop.sh
+- [x] T008 Update Bash regression helper extraction to include new task-ID helpers in tests/regression/bash/test-ralph-loop.sh
+- [x] T009 Update PowerShell task-ID snapshot handling to treat duplicate incomplete IDs as a single progress identity in scripts/powershell/ralph-loop.ps1
+- [x] T010 Add regression assertions for duplicate incomplete task IDs not being double-counted in tests/regression/bash/test-ralph-loop.sh and tests/regression/powershell/Test-RalphLoop.ps1
 
 **Checkpoint**: Both orchestrators can derive completed existing task IDs from before/after task snapshots.
 
@@ -41,18 +41,18 @@
 
 ### Tests for User Story 1
 
-- [ ] T011 [P] [US1] Add Bash regression for advanced-HEAD task expansion where completed existing IDs increase while unchecked count also increases in tests/regression/bash/test-ralph-loop.sh
-- [ ] T012 [P] [US1] Add PowerShell regression for advanced-HEAD task expansion where completed existing IDs increase while unchecked count also increases in tests/regression/powershell/Test-RalphLoop.ps1
-- [ ] T013 [P] [US1] Add Bash regression for state-only task-expansion work unit that completes an existing planning task and adds follow-up tasks in tests/regression/bash/test-ralph-loop.sh
-- [ ] T014 [P] [US1] Add PowerShell regression for state-only task-expansion work unit that completes an existing planning task and adds follow-up tasks in tests/regression/powershell/Test-RalphLoop.ps1
+- [x] T011 [P] [US1] Add Bash regression for advanced-HEAD task expansion where completed existing IDs increase while unchecked count also increases in tests/regression/bash/test-ralph-loop.sh
+- [x] T012 [P] [US1] Add PowerShell regression for advanced-HEAD task expansion where completed existing IDs increase while unchecked count also increases in tests/regression/powershell/Test-RalphLoop.ps1
+- [x] T013 [P] [US1] Add Bash regression for state-only task-expansion work unit that completes an existing planning task and adds follow-up tasks in tests/regression/bash/test-ralph-loop.sh
+- [x] T014 [P] [US1] Add PowerShell regression for state-only task-expansion work unit that completes an existing planning task and adds follow-up tasks in tests/regression/powershell/Test-RalphLoop.ps1
 
 ### Implementation for User Story 1
 
-- [ ] T015 [US1] Update Bash advanced-HEAD validation to use completed existing task IDs instead of net incomplete count in scripts/bash/ralph-loop.sh
-- [ ] T016 [US1] Update Bash commit-level bookkeeping-only validation to accept coordinated state-only commits when existing task IDs complete even if unchecked count increases in scripts/bash/ralph-loop.sh
-- [ ] T017 [US1] Update PowerShell commit-level bookkeeping-only validation to compare completed existing task IDs at each commit boundary in scripts/powershell/ralph-loop.ps1
-- [ ] T018 [US1] Run Bash focused regression cases for task-expansion acceptance in tests/regression/bash/test-ralph-loop.sh
-- [ ] T019 [US1] Run PowerShell focused regression cases for task-expansion acceptance in tests/regression/powershell/Test-RalphLoop.ps1
+- [x] T015 [US1] Update Bash advanced-HEAD validation to use completed existing task IDs instead of net incomplete count in scripts/bash/ralph-loop.sh
+- [x] T016 [US1] Update Bash commit-level bookkeeping-only validation to accept coordinated state-only commits when existing task IDs complete even if unchecked count increases in scripts/bash/ralph-loop.sh
+- [x] T017 [US1] Update PowerShell commit-level bookkeeping-only validation to compare completed existing task IDs at each commit boundary in scripts/powershell/ralph-loop.ps1
+- [x] T018 [US1] Run Bash focused regression cases for task-expansion acceptance in tests/regression/bash/test-ralph-loop.sh
+- [x] T019 [US1] Run PowerShell focused regression cases for task-expansion acceptance in tests/regression/powershell/Test-RalphLoop.ps1
 
 **Checkpoint**: User Story 1 is independently complete when valid task expansion is accepted in both execution paths.
 
@@ -66,19 +66,19 @@
 
 ### Tests for User Story 2
 
-- [ ] T020 [P] [US2] Add Bash regression asserting task-expansion output reports added unchecked tasks and updated remaining count in tests/regression/bash/test-ralph-loop.sh
-- [ ] T021 [P] [US2] Add PowerShell regression asserting task-expansion output reports added unchecked tasks and updated remaining count in tests/regression/powershell/Test-RalphLoop.ps1
-- [ ] T022 [P] [US2] Add Bash regression asserting summary completed count is based on completed existing IDs rather than initial-minus-final unchecked count in tests/regression/bash/test-ralph-loop.sh
-- [ ] T023 [P] [US2] Add PowerShell regression asserting summary completed count is based on completed existing IDs rather than initial-minus-final unchecked count in tests/regression/powershell/Test-RalphLoop.ps1
+- [x] T020 [P] [US2] Add Bash regression asserting task-expansion output reports added unchecked tasks and updated remaining count in tests/regression/bash/test-ralph-loop.sh
+- [x] T021 [P] [US2] Add PowerShell regression asserting task-expansion output reports added unchecked tasks and updated remaining count in tests/regression/powershell/Test-RalphLoop.ps1
+- [x] T022 [P] [US2] Add Bash regression asserting summary completed count is based on completed existing IDs rather than initial-minus-final unchecked count in tests/regression/bash/test-ralph-loop.sh
+- [x] T023 [P] [US2] Add PowerShell regression asserting summary completed count is based on completed existing IDs rather than initial-minus-final unchecked count in tests/regression/powershell/Test-RalphLoop.ps1
 
 ### Implementation for User Story 2
 
-- [ ] T024 [US2] Add Bash per-iteration task-expansion reporting after accepted validation in scripts/bash/ralph-loop.sh
-- [ ] T025 [US2] Add PowerShell per-iteration task-expansion reporting after accepted validation in scripts/powershell/ralph-loop.ps1
-- [ ] T026 [US2] Update Bash loop summary completed-task accounting to use accepted completed existing task IDs in scripts/bash/ralph-loop.sh
-- [ ] T027 [US2] Update PowerShell loop summary completed-task accounting to use accepted completed existing task IDs in scripts/powershell/ralph-loop.ps1
-- [ ] T028 [US2] Update user-facing task expansion guidance in README.md
-- [ ] T029 [US2] Update iteration guidance for dynamic follow-up tasks in commands/iterate.md
+- [x] T024 [US2] Add Bash per-iteration task-expansion reporting after accepted validation in scripts/bash/ralph-loop.sh
+- [x] T025 [US2] Add PowerShell per-iteration task-expansion reporting after accepted validation in scripts/powershell/ralph-loop.ps1
+- [x] T026 [US2] Update Bash loop summary completed-task accounting to use accepted completed existing task IDs in scripts/bash/ralph-loop.sh
+- [x] T027 [US2] Update PowerShell loop summary completed-task accounting to use accepted completed existing task IDs in scripts/powershell/ralph-loop.ps1
+- [x] T028 [US2] Update user-facing task expansion guidance in README.md
+- [x] T029 [US2] Update iteration guidance for dynamic follow-up tasks in commands/iterate.md
 
 **Checkpoint**: User Story 2 is independently complete when users can see accepted expansion and accurate completed/remaining counts.
 
@@ -92,19 +92,19 @@
 
 ### Tests for User Story 3
 
-- [ ] T030 [P] [US3] Add Bash regression rejecting add-only unchecked task changes with no completed existing task in tests/regression/bash/test-ralph-loop.sh
-- [ ] T031 [P] [US3] Add PowerShell regression rejecting add-only unchecked task changes with no completed existing task in tests/regression/powershell/Test-RalphLoop.ps1
-- [ ] T032 [P] [US3] Add Bash regression rejecting replacement of one incomplete task ID with another without completed progress in tests/regression/bash/test-ralph-loop.sh
-- [ ] T033 [P] [US3] Add PowerShell regression rejecting replacement of one incomplete task ID with another without completed progress in tests/regression/powershell/Test-RalphLoop.ps1
-- [ ] T034 [P] [US3] Add Bash regression rejecting failed-agent task-list mutation even when new tasks are added in tests/regression/bash/test-ralph-loop.sh
-- [ ] T035 [P] [US3] Add PowerShell regression rejecting failed-agent task-list mutation even when new tasks are added in tests/regression/powershell/Test-RalphLoop.ps1
+- [x] T030 [P] [US3] Add Bash regression rejecting add-only unchecked task changes with no completed existing task in tests/regression/bash/test-ralph-loop.sh
+- [x] T031 [P] [US3] Add PowerShell regression rejecting add-only unchecked task changes with no completed existing task in tests/regression/powershell/Test-RalphLoop.ps1
+- [x] T032 [P] [US3] Add Bash regression rejecting replacement of one incomplete task ID with another without completed progress in tests/regression/bash/test-ralph-loop.sh
+- [x] T033 [P] [US3] Add PowerShell regression rejecting replacement of one incomplete task ID with another without completed progress in tests/regression/powershell/Test-RalphLoop.ps1
+- [x] T034 [P] [US3] Add Bash regression rejecting failed-agent task-list mutation even when new tasks are added in tests/regression/bash/test-ralph-loop.sh
+- [x] T035 [P] [US3] Add PowerShell regression rejecting failed-agent task-list mutation even when new tasks are added in tests/regression/powershell/Test-RalphLoop.ps1
 
 ### Implementation for User Story 3
 
-- [ ] T036 [US3] Ensure Bash failed/no-work validation still rejects task-state changes without completed existing task IDs in scripts/bash/ralph-loop.sh
-- [ ] T037 [US3] Ensure PowerShell failed/no-work validation still rejects task-state changes without completed existing task IDs in scripts/powershell/ralph-loop.ps1
-- [ ] T038 [US3] Align invalid task-churn diagnostics with existing diagnostic categories in scripts/bash/ralph-loop.sh and scripts/powershell/ralph-loop.ps1
-- [ ] T039 [US3] Run negative guardrail regressions for both execution paths in tests/regression/bash/test-ralph-loop.sh and tests/regression/powershell/Test-RalphLoop.ps1
+- [x] T036 [US3] Ensure Bash failed/no-work validation still rejects task-state changes without completed existing task IDs in scripts/bash/ralph-loop.sh
+- [x] T037 [US3] Ensure PowerShell failed/no-work validation still rejects task-state changes without completed existing task IDs in scripts/powershell/ralph-loop.ps1
+- [x] T038 [US3] Align invalid task-churn diagnostics with existing diagnostic categories in scripts/bash/ralph-loop.sh and scripts/powershell/ralph-loop.ps1
+- [x] T039 [US3] Run negative guardrail regressions for both execution paths in tests/regression/bash/test-ralph-loop.sh and tests/regression/powershell/Test-RalphLoop.ps1
 
 **Checkpoint**: User Story 3 is independently complete when invalid task churn remains rejected across both execution paths.
 
@@ -114,12 +114,12 @@
 
 **Purpose**: Final documentation, release notes, and end-to-end validation.
 
-- [ ] T040 [P] Update CHANGELOG.md with the task-expansion validation fix and user-visible reporting behavior
-- [ ] T041 [P] Verify quickstart scenarios remain aligned with implemented behavior in specs/005-task-expansion-validation/quickstart.md
-- [ ] T042 Run full Bash regression harness with bash tests/regression/bash/test-ralph-loop.sh
-- [ ] T043 Run full PowerShell regression harness with pwsh tests/regression/powershell/Test-RalphLoop.ps1
-- [ ] T044 Verify README.md and commands/iterate.md contain no contradictory task-expansion guidance
-- [ ] T045 Confirm all task-expansion requirements FR-001 through FR-015 are satisfied by tests, docs, or implementation in specs/005-task-expansion-validation/spec.md
+- [x] T040 [P] Update CHANGELOG.md with the task-expansion validation fix and user-visible reporting behavior
+- [x] T041 [P] Verify quickstart scenarios remain aligned with implemented behavior in specs/005-task-expansion-validation/quickstart.md
+- [x] T042 Run full Bash regression harness with bash tests/regression/bash/test-ralph-loop.sh
+- [x] T043 Run full PowerShell regression harness with pwsh tests/regression/powershell/Test-RalphLoop.ps1
+- [x] T044 Verify README.md and commands/iterate.md contain no contradictory task-expansion guidance
+- [x] T045 Confirm all task-expansion requirements FR-001 through FR-015 are satisfied by tests, docs, or implementation in specs/005-task-expansion-validation/spec.md
 
 ---
 

@@ -8,8 +8,8 @@ choice from issue #49 and maps it onto the current Ralph lifecycle.
 ## Decision 1: Progress threshold is completed task identity
 
 - **Decision**: Ralph will classify an iteration as completed progress when at
-  least one task that was incomplete before the iteration is no longer
-  incomplete after the iteration, even if new unchecked tasks were added.
+  least one task that was incomplete before the iteration is checked after the
+  iteration, even if new unchecked tasks were added.
 - **Rationale**:
   - It directly captures the user-visible fact that work was completed.
   - It matches Spec Kit-compatible workflows where a completed task may refine
@@ -63,7 +63,7 @@ choice from issue #49 and maps it onto the current Ralph lifecycle.
 - **Decision**: Both execution paths will reason about:
   - incomplete task IDs before an iteration;
   - incomplete task IDs after an iteration;
-  - completed IDs as the set difference from before to after;
+  - completed IDs as previously incomplete IDs that are checked after the iteration;
   - newly added unchecked IDs as IDs present after but absent before;
   - task expansion as added unchecked tasks plus at least one completed existing
     task.
@@ -77,6 +77,9 @@ choice from issue #49 and maps it onto the current Ralph lifecycle.
 - **Alternatives considered**:
   - *Patch only the top-level advanced-HEAD check.* Rejected because
     bookkeeping-only validation and summary reporting would remain count-based.
+  - *Treat disappearance from the unchecked set as completion.* Rejected because
+    replacing or deleting an incomplete task without checking it off would look
+    like progress.
   - *Use task line text rather than task IDs.* Rejected because task descriptions
     can be edited while task identity should remain stable.
 

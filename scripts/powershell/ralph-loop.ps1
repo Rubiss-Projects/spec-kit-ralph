@@ -421,6 +421,19 @@ function Get-IncompleteTasks {
     return $taskMatches | ForEach-Object { $_.Groups[1].Value }
 }
 
+function Get-CompletedTasks {
+    param([string]$Path)
+
+    if (-not (Test-Path $Path)) {
+        return @()
+    }
+
+    $content = Get-Content $Path -Raw
+    $taskMatches = [regex]::Matches($content, '- \[[xX]\] (T\d+.*?)(?=\r?\n|$)')
+
+    return $taskMatches | ForEach-Object { $_.Groups[1].Value }
+}
+
 function Get-IncompleteTaskCount {
     param([string]$Path)
     
@@ -755,7 +768,15 @@ function New-RalphIterationSnapshot {
             if ($_ -match '^(T\d+)') {
                 $Matches[1]
             }
-        }
+        } | Sort-Object -Unique
+    )
+
+    $completedTaskIds = @(
+        Get-CompletedTasks -Path $TasksPath | ForEach-Object {
+            if ($_ -match '^(T\d+)') {
+                $Matches[1]
+            }
+        } | Sort-Object -Unique
     )
 
     return [pscustomobject]@{
@@ -763,7 +784,58 @@ function New-RalphIterationSnapshot {
         IsGitRepository = Test-RalphGitRepository -RepoRoot $RepoRoot
         TaskBytes = $taskBytes
         IncompleteTaskIds = $incompleteTaskIds
+        CompletedTaskIds = $completedTaskIds
     }
+}
+
+function Get-RalphCompletedExistingTaskIds {
+    param(
+        [string[]]$BeforeIncompleteTaskIds,
+        [string[]]$AfterCompletedTaskIds
+    )
+
+    $afterCompleted = @{}
+    foreach ($taskId in @($AfterCompletedTaskIds)) {
+        if ($taskId) {
+            $afterCompleted[$taskId] = $true
+        }
+    }
+
+    $completedExisting = New-Object System.Collections.Generic.List[string]
+    $seen = @{}
+    foreach ($taskId in @($BeforeIncompleteTaskIds)) {
+        if ($taskId -and $afterCompleted.ContainsKey($taskId) -and -not $seen.ContainsKey($taskId)) {
+            $seen[$taskId] = $true
+            $completedExisting.Add($taskId)
+        }
+    }
+
+    return @($completedExisting.ToArray())
+}
+
+function Get-RalphAddedUncheckedTaskIds {
+    param(
+        [string[]]$BeforeIncompleteTaskIds,
+        [string[]]$AfterIncompleteTaskIds
+    )
+
+    $beforeIncomplete = @{}
+    foreach ($taskId in @($BeforeIncompleteTaskIds)) {
+        if ($taskId) {
+            $beforeIncomplete[$taskId] = $true
+        }
+    }
+
+    $addedUnchecked = New-Object System.Collections.Generic.List[string]
+    $seen = @{}
+    foreach ($taskId in @($AfterIncompleteTaskIds)) {
+        if ($taskId -and -not $beforeIncomplete.ContainsKey($taskId) -and -not $seen.ContainsKey($taskId)) {
+            $seen[$taskId] = $true
+            $addedUnchecked.Add($taskId)
+        }
+    }
+
+    return @($addedUnchecked.ToArray())
 }
 
 # Classifies the commit history an iteration produced against the pre-iteration
@@ -790,17 +862,30 @@ function Test-RalphIterationPostconditions {
     # validation separately requires a working Git repository; this helper only
     # classifies history when an iteration actually runs inside one.
     if (-not $BeforeSnapshot.IsGitRepository -or -not $afterSnapshot.IsGitRepository) {
+        $completedTaskIds = @(Get-RalphCompletedExistingTaskIds `
+            -BeforeIncompleteTaskIds $BeforeSnapshot.IncompleteTaskIds `
+            -AfterCompletedTaskIds $afterSnapshot.CompletedTaskIds)
+        $addedUncheckedTaskIds = @(Get-RalphAddedUncheckedTaskIds `
+            -BeforeIncompleteTaskIds $BeforeSnapshot.IncompleteTaskIds `
+            -AfterIncompleteTaskIds $afterSnapshot.IncompleteTaskIds)
         return [pscustomobject]@{
             IsValid = $true
             Defects = @()
             BeforeHead = $BeforeSnapshot.Head
             AfterHead = $afterSnapshot.Head
+            CompletedTaskIds = @($completedTaskIds)
+            AddedUncheckedTaskIds = @($addedUncheckedTaskIds)
         }
     }
 
     $headAdvanced = $BeforeSnapshot.Head -ne $afterSnapshot.Head
     $taskStateChanged = $BeforeSnapshot.TaskBytes -ne $afterSnapshot.TaskBytes
-    $completedTaskIds = @($BeforeSnapshot.IncompleteTaskIds | Where-Object { $afterSnapshot.IncompleteTaskIds -notcontains $_ })
+    $completedTaskIds = @(Get-RalphCompletedExistingTaskIds `
+        -BeforeIncompleteTaskIds $BeforeSnapshot.IncompleteTaskIds `
+        -AfterCompletedTaskIds $afterSnapshot.CompletedTaskIds)
+    $addedUncheckedTaskIds = @(Get-RalphAddedUncheckedTaskIds `
+        -BeforeIncompleteTaskIds $BeforeSnapshot.IncompleteTaskIds `
+        -AfterIncompleteTaskIds $afterSnapshot.IncompleteTaskIds)
 
     if ($AgentExitCode -ne 0) {
         if ($headAdvanced) {
@@ -829,6 +914,8 @@ function Test-RalphIterationPostconditions {
             Defects = @($defects.ToArray())
             BeforeHead = $BeforeSnapshot.Head
             AfterHead = $afterSnapshot.Head
+            CompletedTaskIds = @($completedTaskIds)
+            AddedUncheckedTaskIds = @($addedUncheckedTaskIds)
         }
     }
 
@@ -841,6 +928,8 @@ function Test-RalphIterationPostconditions {
                 Defects = @($defects.ToArray())
                 BeforeHead = $BeforeSnapshot.Head
                 AfterHead = $afterSnapshot.Head
+                CompletedTaskIds = @($completedTaskIds)
+                AddedUncheckedTaskIds = @($addedUncheckedTaskIds)
             }
         }
         $commitRange = "$($BeforeSnapshot.Head)..$($afterSnapshot.Head)"
@@ -856,6 +945,8 @@ function Test-RalphIterationPostconditions {
             Defects = @($defects.ToArray())
             BeforeHead = $BeforeSnapshot.Head
             AfterHead = $afterSnapshot.Head
+            CompletedTaskIds = @($completedTaskIds)
+            AddedUncheckedTaskIds = @($addedUncheckedTaskIds)
         }
     }
 
@@ -872,7 +963,7 @@ function Test-RalphIterationPostconditions {
         }
     }
 
-    $commitBeforeIncomplete = $BeforeSnapshot.IncompleteTaskIds.Count
+    $commitBeforeIncompleteIds = @($BeforeSnapshot.IncompleteTaskIds)
     foreach ($commit in $newCommits) {
         $commitId = ([string]$commit).Trim()
         if (-not $commitId) {
@@ -882,28 +973,44 @@ function Test-RalphIterationPostconditions {
         $commitTaskOutput = @(& git -C $RepoRoot show "${commitId}:$($stateArtifacts[0])" 2>$null)
         if ($LASTEXITCODE -ne 0) {
             $defects.Add("coordinated-commit-invalid: unable to inspect task state for commit $commitId")
-            $commitAfterIncomplete = $commitBeforeIncomplete
+            $commitAfterIncompleteIds = @($commitBeforeIncompleteIds)
+            $commitAfterCompletedIds = @()
         } else {
             $commitTaskContent = $commitTaskOutput -join "`n"
-            $commitAfterIncomplete = [regex]::Matches(
+            $commitAfterIncompleteIds = @([regex]::Matches(
                 $commitTaskContent,
                 '- \[ \] (T\d+.*?)(?=\r?\n|$)'
-            ).Count
+            ) | ForEach-Object {
+                if ($_.Groups[1].Value -match '^(T\d+)') {
+                    $Matches[1]
+                }
+            } | Sort-Object -Unique)
+            $commitAfterCompletedIds = @([regex]::Matches(
+                $commitTaskContent,
+                '- \[[xX]\] (T\d+.*?)(?=\r?\n|$)'
+            ) | ForEach-Object {
+                if ($_.Groups[1].Value -match '^(T\d+)') {
+                    $Matches[1]
+                }
+            } | Sort-Object -Unique)
         }
+        $commitCompletedExistingIds = @(Get-RalphCompletedExistingTaskIds `
+            -BeforeIncompleteTaskIds $commitBeforeIncompleteIds `
+            -AfterCompletedTaskIds $commitAfterCompletedIds)
 
         $changedPaths = @(& git -C $RepoRoot diff-tree --no-commit-id --name-only -r --root $commitId 2>$null | Where-Object { $_ })
         if ($LASTEXITCODE -ne 0) {
             $defects.Add("coordinated-commit-invalid: unable to inspect paths for commit $commitId")
-            $commitBeforeIncomplete = $commitAfterIncomplete
+            $commitBeforeIncompleteIds = @($commitAfterIncompleteIds)
             continue
         }
 
         $substantivePaths = @($changedPaths | Where-Object { $stateArtifacts -notcontains $_ })
         # Review or analysis tasks may intentionally produce only coordinated
         # task, memory, and audit state. That shape is completed work when that
-        # commit reduces incomplete tasks; otherwise it is stale bookkeeping.
-        if ($substantivePaths.Count -eq 0 -and $commitAfterIncomplete -ge $commitBeforeIncomplete) {
-            $defects.Add("bookkeeping-only: commit $commitId contains no substantive path and did not reduce incomplete task count")
+        # commit completes an existing task; otherwise it is stale bookkeeping.
+        if ($substantivePaths.Count -eq 0 -and $commitCompletedExistingIds.Count -eq 0) {
+            $defects.Add("bookkeeping-only: commit $commitId contains no substantive path and did not complete an existing task")
         }
 
         foreach ($stateArtifact in $stateArtifacts) {
@@ -929,7 +1036,7 @@ function Test-RalphIterationPostconditions {
                 }
             }
         }
-        $commitBeforeIncomplete = $commitAfterIncomplete
+        $commitBeforeIncompleteIds = @($commitAfterIncompleteIds)
     }
 
     if ($AgentExitCode -eq 0 -and $completedTaskIds.Count -eq 0) {
@@ -941,6 +1048,8 @@ function Test-RalphIterationPostconditions {
         Defects = @($defects.ToArray())
         BeforeHead = $BeforeSnapshot.Head
         AfterHead = $afterSnapshot.Head
+        CompletedTaskIds = @($completedTaskIds)
+        AddedUncheckedTaskIds = @($addedUncheckedTaskIds)
     }
 }
 
@@ -1564,6 +1673,7 @@ $maxConsecutiveFailures = 3
 $completed = $false
 $circuitBreaker = $false
 $fatalFailure = $false
+$tasksCompletedDuringRun = 0
 $script:LastPostconditionDefects = @()
 $repairSnapshot = $null
 
@@ -1638,6 +1748,12 @@ try {
             if ($completion.IsValid) {
                 $completionMessage = if ($completionSignal) { "COMPLETE signal validated" } else { "All tasks complete and validated" }
                 Write-IterationStatus -Iteration $iteration -Status "success" -Message $completionMessage
+                if ($result.ExitCode -eq 0 -and $postconditions.CompletedTaskIds.Count -gt 0) {
+                    $tasksCompletedDuringRun += $postconditions.CompletedTaskIds.Count
+                    if ($postconditions.AddedUncheckedTaskIds.Count -gt 0) {
+                        Write-Host "Task expansion accepted: $($postconditions.AddedUncheckedTaskIds.Count) new unchecked task(s) added" -ForegroundColor DarkGray
+                    }
+                }
                 $completed = $true
                 break
             }
@@ -1691,6 +1807,12 @@ try {
         } else {
             $consecutiveFailures = 0
             Write-IterationStatus -Iteration $iteration -Status "success" -Message "Iteration completed"
+            if ($postconditions.CompletedTaskIds.Count -gt 0) {
+                $tasksCompletedDuringRun += $postconditions.CompletedTaskIds.Count
+                if ($postconditions.AddedUncheckedTaskIds.Count -gt 0) {
+                    Write-Host "Task expansion accepted: $($postconditions.AddedUncheckedTaskIds.Count) new unchecked task(s) added" -ForegroundColor DarkGray
+                }
+            }
         }
 
         $script:LastPostconditionDefects = @()
@@ -1723,7 +1845,6 @@ Write-Host "  Ralph Loop Summary" -ForegroundColor Cyan
 Write-Host ("=" * 60) -ForegroundColor Cyan
 
 $finalTasks = Get-IncompleteTaskCount -Path $TasksPath
-$tasksCompleted = $initialTasks - $finalTasks
 
 if ($completed) {
     $iterationsRun = $lastIterationRun
@@ -1733,7 +1854,7 @@ if ($completed) {
     $iterationsRun = $lastIterationRun
 }
 Write-Host "  Iterations run: $iterationsRun" -ForegroundColor White
-Write-Host "  Tasks completed: $tasksCompleted" -ForegroundColor White
+Write-Host "  Tasks completed: $tasksCompletedDuringRun" -ForegroundColor White
 Write-Host "  Tasks remaining: $finalTasks" -ForegroundColor White
 
 if ($completed) {

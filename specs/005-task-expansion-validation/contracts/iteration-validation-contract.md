@@ -9,6 +9,7 @@ For each iteration, Ralph captures before and after task snapshots:
 | `head` | Current Git `HEAD` |
 | `task_state` | Full task-file state for detecting any task mutation |
 | `incomplete_ids` | Unique IDs of unchecked tasks |
+| `completed_ids` | Unique IDs of checked tasks |
 | `incomplete_count` | Count of unchecked tasks |
 | `agent_exit` | Agent process result |
 
@@ -16,12 +17,14 @@ For each iteration, Ralph captures before and after task snapshots:
 
 | Derived Set | Rule |
 |-------------|------|
-| `completed_existing_ids` | `before.incomplete_ids - after.incomplete_ids` |
+| `completed_existing_ids` | `before.incomplete_ids ∩ after.completed_ids` |
 | `added_unchecked_ids` | `after.incomplete_ids - before.incomplete_ids` |
 | `task_expanded` | `added_unchecked_ids` is non-empty |
 | `made_progress` | `completed_existing_ids` is non-empty |
 
 Duplicate IDs are counted once for progress classification.
+Removing or replacing an unchecked task ID without checking that same ID does
+not count as completed progress.
 
 ## Classification Matrix
 

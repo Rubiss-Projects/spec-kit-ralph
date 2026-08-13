@@ -18,8 +18,7 @@ Represents a stable task identifier in the active task list.
 **Validation rules**:
 
 - A task is considered completed progress only if its `id` existed in the
-  pre-iteration incomplete set and does not exist in the post-iteration
-  incomplete set.
+  pre-iteration incomplete set and exists in the post-iteration completed set.
 - Duplicate or reused IDs must not be double-counted as multiple completed
   tasks.
 - Task text changes alone do not count as completed progress.
@@ -32,12 +31,13 @@ Represents the task state captured before or after an iteration.
 |-------|---------|
 | `task_state` | Full task-file byte/content snapshot used to detect any task-list change |
 | `incomplete_ids` | Unique task IDs currently unchecked |
+| `completed_ids` | Unique task IDs currently checked |
 | `incomplete_count` | Count of currently unchecked tasks |
 
 **Derived values**:
 
-- `completed_existing_ids`: IDs present in `before.incomplete_ids` and absent
-  from `after.incomplete_ids`.
+- `completed_existing_ids`: IDs present in `before.incomplete_ids` and present
+  in `after.completed_ids`.
 - `added_unchecked_ids`: IDs present in `after.incomplete_ids` and absent from
   `before.incomplete_ids`.
 - `task_expanded`: true when `added_unchecked_ids` is non-empty.

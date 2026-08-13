@@ -91,7 +91,13 @@ section() {
 extract_functions() {
     # Extract get_incomplete_task_count
     sed -n '/^get_incomplete_task_count()/,/^}/p' "$SOURCE_SCRIPT"
+    sed -n '/^get_incomplete_task_ids()/,/^}/p' "$SOURCE_SCRIPT"
+    sed -n '/^get_completed_task_ids()/,/^}/p' "$SOURCE_SCRIPT"
     sed -n '/^get_incomplete_task_count_at_commit()/,/^}/p' "$SOURCE_SCRIPT"
+    sed -n '/^get_incomplete_task_ids_at_commit()/,/^}/p' "$SOURCE_SCRIPT"
+    sed -n '/^get_completed_task_ids_at_commit()/,/^}/p' "$SOURCE_SCRIPT"
+    sed -n '/^count_completed_task_ids()/,/^}/p' "$SOURCE_SCRIPT"
+    sed -n '/^count_added_unchecked_task_ids()/,/^}/p' "$SOURCE_SCRIPT"
     # Extract initialize_progress_file
     sed -n '/^initialize_progress_file()/,/^}/p' "$SOURCE_SCRIPT"
     # Extract Ralph memory helpers
@@ -342,6 +348,17 @@ case "$RALPH_TEST_MODE" in
         printf '%s\n' '<promise>COMPLETE</promise>'
         exit 0
         ;;
+    expansion)
+        sed -i.bak 's/- \[ \] T001/- [x] T001/' "$RALPH_TEST_SPEC/tasks.md"
+        rm -f "$RALPH_TEST_SPEC/tasks.md.bak"
+        printf '%s\n' '- [ ] T002 Follow-up slice' '- [ ] T003 Follow-up slice' >> "$RALPH_TEST_SPEC/tasks.md"
+        printf '%s\n' '- task expansion handoff' >> "$RALPH_TEST_SPEC/ralph-memory.md"
+        printf '%s\n' 'expanded task list' >> "$RALPH_TEST_SPEC/progress.md"
+        printf '%s\n' 'substantive expansion' >> source.txt
+        git add source.txt "$RALPH_TEST_SPEC/tasks.md" "$RALPH_TEST_SPEC/ralph-memory.md" "$RALPH_TEST_SPEC/progress.md"
+        git commit -qm "expand task list"
+        exit 0
+        ;;
     subject-bad-then-repair)
         call_count=$(wc -l < "$RALPH_TEST_CALLS" | tr -d ' ')
         if [[ "$call_count" -eq 1 ]]; then
@@ -395,6 +412,19 @@ set -e
 assert_eq "completion token with remaining task exits one" "1" "$remaining_token_exit"
 assert_true "remaining-task token reports task count" grep -q '^tasks-incomplete: 1' <<< "$remaining_token_output"
 assert_eq "remaining-task token starts no next iteration" "1" "$(wc -l < "$ACTIVE_CALLS" | tr -d ' ')"
+
+TMP_EXPANSION_REPO="$TMP_GATE_ROOT/task-expansion"
+cp -R "$TMP_ACTIVE_REPO" "$TMP_EXPANSION_REPO"
+TMP_EXPANSION_SPEC="$TMP_EXPANSION_REPO/specs/test-feature"
+rm -f "$ACTIVE_CALLS"
+set +e
+expansion_output=$(cd "$TMP_EXPANSION_REPO" && RALPH_TEST_CALLS="$ACTIVE_CALLS" RALPH_TEST_MODE=expansion RALPH_TEST_SPEC="$TMP_EXPANSION_SPEC" RALPH_TEST_COMPLETE_MEMORY="$FIXTURE_DIR/ralph-memory-valid-complete.md" bash "$SOURCE_SCRIPT" --feature-name "test-feature" --tasks-path "$TMP_EXPANSION_SPEC/tasks.md" --spec-dir "$TMP_EXPANSION_SPEC" --max-iterations 1 --model "fake-model" --agent-cli "$ACTIVE_AGENT" 2>&1)
+expansion_exit=$?
+set -e
+assert_eq "task expansion reaches iteration limit with remaining work" "1" "$expansion_exit"
+assert_true "task expansion reports accepted added tasks" grep -q 'Task expansion accepted: 2 new unchecked task(s) added' <<< "$expansion_output"
+assert_true "task expansion summary counts completed existing task" grep -q 'Tasks completed: 1' <<< "$expansion_output"
+assert_true "task expansion summary reports new remaining tasks" grep -q 'Tasks remaining: 2' <<< "$expansion_output"
 
 rm -f "$ACTIVE_CALLS"
 set +e
@@ -607,6 +637,45 @@ git -C "$TMP_COMMIT_REPO" commit -qm "review-only coordinated work"
 review_after=$(get_incomplete_task_count "$TMP_COMMIT_SPEC/tasks.md")
 assert_true "accepts coordinated state-only commit when task state advances" validate_iteration_commit_history "$TMP_COMMIT_REPO" "$review_head" "$review_state" "$review_before" "$review_after" 0 "$TMP_COMMIT_SPEC/tasks.md" "$TMP_COMMIT_SPEC/progress.md" "$TMP_COMMIT_SPEC/ralph-memory.md"
 
+# Completing existing tasks while adding follow-up tasks is valid progress even
+# when the net number of unchecked tasks increases.
+printf '%s\n' '- [ ] T004 Expand implementation slices' '- [ ] T005 Capture coverage gaps' >> "$TMP_COMMIT_SPEC/tasks.md"
+git -C "$TMP_COMMIT_REPO" add "$TMP_COMMIT_SPEC/tasks.md"
+git -C "$TMP_COMMIT_REPO" commit -qm "prepare task expansion"
+expansion_head=$(get_git_head_snapshot "$TMP_COMMIT_REPO")
+expansion_state=$(get_task_state_snapshot "$TMP_COMMIT_SPEC/tasks.md")
+expansion_before=$(get_incomplete_task_count "$TMP_COMMIT_SPEC/tasks.md")
+printf '%s\n' 'substantive expansion inventory' >> "$TMP_COMMIT_REPO/source.txt"
+sed -i.bak 's/- \[ \] T004/- [x] T004/' "$TMP_COMMIT_SPEC/tasks.md"
+sed -i.bak 's/- \[ \] T005/- [x] T005/' "$TMP_COMMIT_SPEC/tasks.md"
+rm -f "$TMP_COMMIT_SPEC/tasks.md.bak"
+printf '%s\n' '- [ ] T006 Follow-up slice one' '- [ ] T007 Follow-up slice two' '- [ ] T008 Follow-up slice three' >> "$TMP_COMMIT_SPEC/tasks.md"
+printf '%s\n' '- task expansion accepted' >> "$TMP_COMMIT_SPEC/ralph-memory.md"
+printf '%s\n' 'task expansion completed with follow-up slices' >> "$TMP_COMMIT_SPEC/progress.md"
+git -C "$TMP_COMMIT_REPO" add .
+git -C "$TMP_COMMIT_REPO" commit -qm "task expansion coordinated work"
+expansion_after=$(get_incomplete_task_count "$TMP_COMMIT_SPEC/tasks.md")
+assert_true "accepts task expansion when existing tasks complete despite increased unchecked count" test "$expansion_after" -gt "$expansion_before"
+assert_true "accepts substantive task-expansion commit" validate_iteration_commit_history "$TMP_COMMIT_REPO" "$expansion_head" "$expansion_state" "$expansion_before" "$expansion_after" 0 "$TMP_COMMIT_SPEC/tasks.md" "$TMP_COMMIT_SPEC/progress.md" "$TMP_COMMIT_SPEC/ralph-memory.md"
+
+# A planning/review task whose intended artifact is follow-up tasks may be
+# state-only, but it is still valid only when an existing task is checked off.
+printf '%s\n' '- [ ] T009 Plan state-only follow-ups' >> "$TMP_COMMIT_SPEC/tasks.md"
+git -C "$TMP_COMMIT_REPO" add "$TMP_COMMIT_SPEC/tasks.md"
+git -C "$TMP_COMMIT_REPO" commit -qm "prepare state-only expansion"
+state_expansion_head=$(get_git_head_snapshot "$TMP_COMMIT_REPO")
+state_expansion_state=$(get_task_state_snapshot "$TMP_COMMIT_SPEC/tasks.md")
+state_expansion_before=$(get_incomplete_task_count "$TMP_COMMIT_SPEC/tasks.md")
+sed -i.bak 's/- \[ \] T009/- [x] T009/' "$TMP_COMMIT_SPEC/tasks.md"
+rm -f "$TMP_COMMIT_SPEC/tasks.md.bak"
+printf '%s\n' '- [ ] T010 Planned follow-up one' '- [ ] T011 Planned follow-up two' >> "$TMP_COMMIT_SPEC/tasks.md"
+printf '%s\n' '- state-only expansion accepted' >> "$TMP_COMMIT_SPEC/ralph-memory.md"
+printf '%s\n' 'state-only task expansion completed' >> "$TMP_COMMIT_SPEC/progress.md"
+git -C "$TMP_COMMIT_REPO" add "$TMP_COMMIT_SPEC/tasks.md" "$TMP_COMMIT_SPEC/ralph-memory.md" "$TMP_COMMIT_SPEC/progress.md"
+git -C "$TMP_COMMIT_REPO" commit -qm "state-only task expansion"
+state_expansion_after=$(get_incomplete_task_count "$TMP_COMMIT_SPEC/tasks.md")
+assert_true "accepts state-only task expansion when an existing task completes" validate_iteration_commit_history "$TMP_COMMIT_REPO" "$state_expansion_head" "$state_expansion_state" "$state_expansion_before" "$state_expansion_after" 0 "$TMP_COMMIT_SPEC/tasks.md" "$TMP_COMMIT_SPEC/progress.md" "$TMP_COMMIT_SPEC/ralph-memory.md"
+
 # Without task advancement, the same state-only shape is stale bookkeeping.
 bookkeeping_head=$(get_git_head_snapshot "$TMP_COMMIT_REPO")
 bookkeeping_state=$(get_task_state_snapshot "$TMP_COMMIT_SPEC/tasks.md")
@@ -623,9 +692,24 @@ assert_eq "bookkeeping-only commit validation exits one" "1" "$bookkeeping_exit"
 assert_true "reports bookkeeping-only violation" grep -q '^bookkeeping-only:' <<< "$bookkeeping_output"
 assert_eq "bookkeeping reporting does not mutate HEAD" "$bookkeeping_committed_head" "$(get_git_head_snapshot "$TMP_COMMIT_REPO")"
 
+# Adding tasks without checking off existing work remains invalid task churn.
+task_add_head=$(get_git_head_snapshot "$TMP_COMMIT_REPO")
+task_add_state=$(get_task_state_snapshot "$TMP_COMMIT_SPEC/tasks.md")
+task_add_count=$(get_incomplete_task_count "$TMP_COMMIT_SPEC/tasks.md")
+printf '%s\n' '- [ ] T012 Add-only follow-up' >> "$TMP_COMMIT_SPEC/tasks.md"
+printf '%s\n' 'add-only task churn' >> "$TMP_COMMIT_SPEC/progress.md"
+git -C "$TMP_COMMIT_REPO" add "$TMP_COMMIT_SPEC/tasks.md" "$TMP_COMMIT_SPEC/progress.md"
+git -C "$TMP_COMMIT_REPO" commit -qm "add-only task churn"
+set +e
+task_add_output=$(validate_iteration_commit_history "$TMP_COMMIT_REPO" "$task_add_head" "$task_add_state" "$task_add_count" "$(get_incomplete_task_count "$TMP_COMMIT_SPEC/tasks.md")" 0 "$TMP_COMMIT_SPEC/tasks.md" "$TMP_COMMIT_SPEC/progress.md" "$TMP_COMMIT_SPEC/ralph-memory.md" 2>&1)
+task_add_exit=$?
+set -e
+assert_eq "add-only task churn validation exits one" "1" "$task_add_exit"
+assert_true "add-only task churn reports failed/no-work HEAD advance" grep -q '^failed-iteration-advanced-head:' <<< "$task_add_output"
+
 # An earlier state-only checkpoint cannot borrow task advancement from a later
 # commit in the same iteration range.
-printf '%s\n' '- [ ] T004 Multi-commit review' >> "$TMP_COMMIT_SPEC/tasks.md"
+printf '%s\n' '- [ ] T020 Multi-commit review' >> "$TMP_COMMIT_SPEC/tasks.md"
 git -C "$TMP_COMMIT_REPO" add "$TMP_COMMIT_SPEC/tasks.md"
 git -C "$TMP_COMMIT_REPO" commit -qm "prepare multi-commit review"
 multi_head=$(get_git_head_snapshot "$TMP_COMMIT_REPO")
@@ -637,7 +721,7 @@ printf '%s\n' 'premature checkpoint' >> "$TMP_COMMIT_SPEC/progress.md"
 git -C "$TMP_COMMIT_REPO" add "$TMP_COMMIT_SPEC/tasks.md" "$TMP_COMMIT_SPEC/ralph-memory.md" "$TMP_COMMIT_SPEC/progress.md"
 git -C "$TMP_COMMIT_REPO" commit -qm "state-only checkpoint"
 checkpoint_commit=$(get_git_head_snapshot "$TMP_COMMIT_REPO")
-sed -i.bak 's/- \[ \] T004/- [x] T004/' "$TMP_COMMIT_SPEC/tasks.md"
+sed -i.bak 's/- \[ \] T020/- [x] T020/' "$TMP_COMMIT_SPEC/tasks.md"
 rm -f "$TMP_COMMIT_SPEC/tasks.md.bak"
 printf '%s\n' '- multi-commit review completed' >> "$TMP_COMMIT_SPEC/ralph-memory.md"
 printf '%s\n' 'multi-commit review completed' >> "$TMP_COMMIT_SPEC/progress.md"
@@ -922,6 +1006,19 @@ assert_true "result is arithmetic-safe (3)" test "$result" -eq 3
 result=$(get_incomplete_task_count "$FIXTURE_DIR/tasks-empty.md")
 line_count=$(printf '%s\n' "$result" | wc -l | tr -d ' ')
 assert_eq "single-line output (regression #1)" "1" "$line_count"
+
+TMP_TASK_IDS=$(mktemp)
+printf '%s\n' \
+    '- [ ] T001 First open task' \
+    '- [ ] T001 Duplicate open task' \
+    '- [x] T002 Completed task' \
+    '- [X] T003 Uppercase completed task' \
+    '- [ ] T004 Another open task' > "$TMP_TASK_IDS"
+assert_eq "unique incomplete task ids are extracted" $'T001\nT004' "$(get_incomplete_task_ids "$TMP_TASK_IDS")"
+assert_eq "unique completed task ids are extracted" $'T002\nT003' "$(get_completed_task_ids "$TMP_TASK_IDS")"
+assert_eq "completed existing ids require checked after-state" "1" "$(count_completed_task_ids $'T001\nT002' $'T002\nT003')"
+assert_eq "added unchecked ids ignore existing before-state" "1" "$(count_added_unchecked_task_ids $'T001\nT002' $'T002\nT004')"
+rm -f "$TMP_TASK_IDS"
 
 #endregion
 
