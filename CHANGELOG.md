@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.2] - 2026-08-23
+
 ### Fixed
 - Accepted valid task-expansion iterations that complete existing tasks while adding follow-up unchecked tasks, and kept add-only task churn rejected ([#49](https://github.com/Rubiss-Projects/spec-kit-ralph/issues/49)).
 - Reconciled the iterate command's partial-progress instructions with the orchestrator's commit validation: a validated task subset is now committed as a coordinated work unit each iteration, so a multi-task user story can span several iterations without terminating the loop as `FAILED` ([#50](https://github.com/Rubiss-Projects/spec-kit-ralph/issues/50)).
