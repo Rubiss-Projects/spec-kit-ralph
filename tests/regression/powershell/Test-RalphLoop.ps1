@@ -1736,6 +1736,7 @@ $script:IterateCommandPath = Join-Path $RepoRoot "commands/iterate.md"
 $expectedPrompt = New-IterationPrompt -Iteration 7 -CommitPolicy $commitPolicy
 $originalEncoding = $OutputEncoding
 $originalConsoleEncoding = [Console]::OutputEncoding
+$originalErrorActionPreference = $ErrorActionPreference
 $result = Invoke-AgentIteration -Model "provider/model-name" -Iteration 7 -WorkDir $tmpOpenCodeDir
 $actualArgs = [System.IO.File]::ReadAllLines($env:RALPH_TEST_ARGS)
 $expectedArgs = @("run", "--model", "provider/model-name", "--auto", "--dir", $tmpOpenCodeDir)
@@ -1748,9 +1749,16 @@ Assert-True "OpenCode preserves completion without trailing newline" (Test-Compl
 Assert-True "OpenCode does not reuse sessions or Copilot flags" (-not ($actualArgs -match '^--(continue|session|attach|agent|yolo)$|^-p$'))
 Assert-Equal "OpenCode restores output encoding" $originalEncoding $OutputEncoding
 Assert-Equal "OpenCode restores console encoding" $originalConsoleEncoding ([Console]::OutputEncoding)
+Assert-Equal "OpenCode preserves caller error handling" $originalErrorActionPreference $ErrorActionPreference
 $env:RALPH_TEST_EXIT = "17"
+$nativePreference = Get-Variable PSNativeCommandUseErrorActionPreference -ErrorAction SilentlyContinue
+if ($nativePreference) { $savedNativePreference = $nativePreference.Value; $PSNativeCommandUseErrorActionPreference = $true }
 $result = Invoke-AgentIteration -Model "provider/missing-model" -Iteration 8 -WorkDir ""
 Assert-Equal "OpenCode preserves failed CLI status" 17 $result.ExitCode
+if ($nativePreference) {
+    Assert-Equal "OpenCode preserves caller native error handling" $true $PSNativeCommandUseErrorActionPreference
+    $PSNativeCommandUseErrorActionPreference = $savedNativePreference
+}
 Assert-True "OpenCode omits unspecified directory" (-not ([System.IO.File]::ReadAllLines($env:RALPH_TEST_ARGS) -contains '--dir'))
 
 $tmpOpenCodeRepo = Join-Path $tmpOpenCodeRoot "repo"
