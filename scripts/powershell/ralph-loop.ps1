@@ -1541,7 +1541,12 @@ function Invoke-OpenCodeIteration {
 
     $prevOutputEncoding = $OutputEncoding
     $prevConsoleEncoding = [Console]::OutputEncoding
+    $prevErrorActionPreference = $ErrorActionPreference
     try {
+        # Windows PowerShell exposes redirected native stderr as error records.
+        # Capture those records and the CLI status even when the caller uses Stop.
+        $ErrorActionPreference = 'Continue'
+        $PSNativeCommandUseErrorActionPreference = $false
         $OutputEncoding = [System.Text.Encoding]::UTF8
         [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
         Write-Host "`n--- OpenCode Agent Output ---" -ForegroundColor DarkCyan
@@ -1562,6 +1567,7 @@ function Invoke-OpenCodeIteration {
     finally {
         $OutputEncoding = $prevOutputEncoding
         [Console]::OutputEncoding = $prevConsoleEncoding
+        $ErrorActionPreference = $prevErrorActionPreference
     }
     return @{
         Output = $output
