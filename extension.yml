@@ -18,6 +18,8 @@ requires:
       required: false
     - name: "claude"
       required: false
+    - name: "opencode"
+      required: false
     - name: "git"
       required: true
 
@@ -51,6 +53,7 @@ tags:
   - "copilot"
   - "codex"
   - "claude"
+  - "opencode"
 
 defaults:
   model: "claude-sonnet-4.6"

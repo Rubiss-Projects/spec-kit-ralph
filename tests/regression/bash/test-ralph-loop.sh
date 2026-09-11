@@ -134,6 +134,8 @@ extract_functions() {
     sed -n '/^invoke_codex_iteration()/,/^}/p' "$SOURCE_SCRIPT"
     # Extract invoke_claude_iteration
     sed -n '/^invoke_claude_iteration()/,/^}/p' "$SOURCE_SCRIPT"
+    sed -n '/^invoke_opencode_iteration()/,/^}/p' "$SOURCE_SCRIPT"
+    sed -n '/^invoke_agent_iteration()/,/^}/p' "$SOURCE_SCRIPT"
     # Extract test_completion_signal
     sed -n '/^test_completion_signal()/,/^}/p' "$SOURCE_SCRIPT"
     # Extract load_ralph_config
@@ -1235,6 +1237,12 @@ assert_eq "detects codex path" "codex" "$(get_agent_cli_kind "/usr/local/bin/cod
 assert_eq "detects codex exe path" "codex" "$(get_agent_cli_kind "C:\\Tools\\codex.exe")"
 assert_eq "detects claude" "claude" "$(get_agent_cli_kind "claude")"
 assert_eq "detects claude path" "claude" "$(get_agent_cli_kind "/usr/local/bin/claude")"
+assert_eq "detects opencode" "opencode" "$(get_agent_cli_kind "opencode")"
+assert_eq "detects opencode path with spaces" "opencode" "$(get_agent_cli_kind "/opt/Agent Tools/opencode")"
+assert_eq "detects mixed-case opencode exe" "opencode" "$(get_agent_cli_kind 'C:\Agent Tools\OpenCode.EXE')"
+assert_eq "detects opencode cmd" "opencode" "$(get_agent_cli_kind 'C:\Tools\opencode.cmd')"
+assert_eq "detects opencode bat" "opencode" "$(get_agent_cli_kind 'C:\Tools\opencode.bat')"
+assert_eq "rejects similarly named wrapper" "unsupported" "$(get_agent_cli_kind "opencode-wrapper")"
 assert_eq "rejects unsupported cli" "unsupported" "$(get_agent_cli_kind "my-custom-cli")"
 
 #endregion
@@ -1512,6 +1520,76 @@ assert_true "uses --dangerously-skip-permissions flag" grep -q -- "--dangerously
 assert_false "does not pass --agent flag" grep -q -- "--agent" <<< "$claude_output"
 
 rm -rf "$TMP_CLAUDE_DIR"
+
+#endregion
+
+#region Tests: OpenCode dispatch and lifecycle
+
+section "OpenCode dispatch and lifecycle"
+TMP_OPENCODE_ROOT=$(mktemp -d)
+TMP_OPENCODE_DIR="$TMP_OPENCODE_ROOT/agent tools"
+mkdir -p "$TMP_OPENCODE_DIR"
+AGENT_CLI="$TMP_OPENCODE_DIR/opencode"
+cat > "$AGENT_CLI" << 'FAKEOPENCODE'
+#!/usr/bin/env bash
+printf '%s\n' "$@" > "$RALPH_TEST_ARGS"
+cat > "$RALPH_TEST_STDIN"
+printf '%s\n' invoked >> "$RALPH_TEST_CALLS"
+printf '%s\n' 'fake OpenCode stdout'
+printf '%s\n' 'fake OpenCode stderr' >&2
+if [[ "${RALPH_TEST_EXIT:-0}" == 0 ]]; then
+    printf '%s' '<promise>COMPLETE</promise>'
+fi
+exit "${RALPH_TEST_EXIT:-0}"
+FAKEOPENCODE
+chmod +x "$AGENT_CLI"
+export RALPH_TEST_ARGS="$TMP_OPENCODE_ROOT/args"
+export RALPH_TEST_STDIN="$TMP_OPENCODE_ROOT/stdin"
+export RALPH_TEST_CALLS="$TMP_OPENCODE_ROOT/calls"
+export RALPH_TEST_EXIT=0
+VERBOSE=false
+ITERATE_COMMAND_PATH="$REPO_ROOT/commands/iterate.md"
+expected_prompt=$(build_iteration_prompt 7)
+opencode_output=$(invoke_agent_iteration "provider/model-name" 7 "$TMP_OPENCODE_DIR" 2>"$TMP_OPENCODE_ROOT/stream")
+opencode_exit=$?
+expected_args=$(printf '%s\n' run --model provider/model-name --auto --dir "$TMP_OPENCODE_DIR")
+assert_eq "OpenCode dispatch succeeds" "0" "$opencode_exit"
+assert_eq "OpenCode forwards model and directory as separate arguments" "$expected_args" "$(cat "$RALPH_TEST_ARGS")"
+assert_eq "OpenCode forwards complete multiline iteration prompt on stdin" "$expected_prompt" "$(cat "$RALPH_TEST_STDIN")"
+assert_true "OpenCode captures stdout" grep -q 'fake OpenCode stdout' <<< "$opencode_output"
+assert_true "OpenCode captures stderr" grep -q 'fake OpenCode stderr' <<< "$opencode_output"
+assert_true "OpenCode streams output" grep -q 'fake OpenCode stdout' "$TMP_OPENCODE_ROOT/stream"
+assert_true "OpenCode preserves completion without trailing newline" test_completion_signal "$opencode_output"
+assert_false "OpenCode does not reuse sessions or Copilot flags" grep -Eq '^--(continue|session|attach|agent|yolo)$|^-p$' "$RALPH_TEST_ARGS"
+
+RALPH_TEST_EXIT=17
+set +e
+opencode_output=$(invoke_agent_iteration "provider/missing-model" 8 "" 2>/dev/null)
+opencode_exit=$?
+set -e
+assert_eq "OpenCode preserves failed CLI status" "17" "$opencode_exit"
+assert_false "OpenCode omits unspecified directory" grep -q '^--dir$' "$RALPH_TEST_ARGS"
+
+TMP_OPENCODE_SPEC="$TMP_OPENCODE_ROOT/repo/specs/test-feature"
+mkdir -p "$TMP_OPENCODE_SPEC"
+printf '%s\n' '- [ ] T001 Keep working' > "$TMP_OPENCODE_SPEC/tasks.md"
+git -C "$TMP_OPENCODE_ROOT/repo" init -q
+git -C "$TMP_OPENCODE_ROOT/repo" -c user.name=Test -c user.email=test@example.invalid add .
+git -C "$TMP_OPENCODE_ROOT/repo" -c user.name=Test -c user.email=test@example.invalid commit -qm initial
+: > "$RALPH_TEST_CALLS"
+set +e
+opencode_loop_output=$(cd "$TMP_OPENCODE_ROOT/repo" && bash "$SOURCE_SCRIPT" --feature-name test-feature --tasks-path "$TMP_OPENCODE_SPEC/tasks.md" --spec-dir "$TMP_OPENCODE_SPEC" --max-iterations 5 --model provider/model-name --agent-cli "$AGENT_CLI" 2>&1)
+opencode_loop_exit=$?
+set -e
+assert_eq "OpenCode failures stop the full loop" "1" "$opencode_loop_exit"
+if [[ $(wc -l < "$RALPH_TEST_CALLS") -ne 3 ]]; then
+    printf '%s\n' "$opencode_loop_output"
+fi
+assert_eq "OpenCode trips circuit breaker after three failed calls" "3" "$(wc -l < "$RALPH_TEST_CALLS" | tr -d ' ')"
+assert_true "OpenCode failure output survives in full loop" grep -q 'fake OpenCode stderr' <<< "$opencode_loop_output"
+assert_eq "failed OpenCode completion does not advance tasks" "1" "$(get_incomplete_task_count "$TMP_OPENCODE_SPEC/tasks.md")"
+unset RALPH_TEST_ARGS RALPH_TEST_STDIN RALPH_TEST_CALLS RALPH_TEST_EXIT
+rm -rf "$TMP_OPENCODE_ROOT"
 
 #endregion
 

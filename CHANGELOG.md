@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Added official OpenCode CLI support in both orchestrators, with non-interactive fresh iterations, model and prompt forwarding, streamed output, and the existing failure handling ([#3](https://github.com/Rubiss-Projects/spec-kit-ralph/issues/3)).
+
+### Fixed
+- Fixed the Bash failure counter exiting on the first failed agent call under `set -e`, allowing the three-consecutive-failure circuit breaker and failure summary to run.
+
 ## [1.4.2] - 2026-08-23
 
 ### Fixed

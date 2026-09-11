@@ -1133,6 +1133,7 @@ get_agent_cli_kind() {
         copilot) echo "copilot" ;;
         codex) echo "codex" ;;
         claude) echo "claude" ;;
+        opencode) echo "opencode" ;;
         *) echo "unsupported" ;;
     esac
 }
@@ -1446,6 +1447,40 @@ invoke_codex_iteration() {
     return $exit_code
 }
 
+invoke_opencode_iteration() {
+    local model=$1
+    local iteration=$2
+    local work_dir=$3
+    local prompt
+    prompt=$(build_iteration_prompt "$iteration")
+
+    # stdin preserves multiline prompts and avoids Windows command-length limits.
+    # A new run without --continue/--session gives every iteration a fresh context.
+    local opencode_args=(run --model "$model" --auto)
+    if [[ -n "$work_dir" ]]; then
+        opencode_args+=(--dir "$work_dir")
+    fi
+
+    if [[ "$VERBOSE" == "true" ]]; then
+        printf 'DEBUG: OpenCode iteration %s, model %s, directory %s\n' "$iteration" "$model" "$work_dir" >&2
+    fi
+    printf '\n--- OpenCode Agent Output ---\n' >&2
+    local output_file
+    output_file=$(mktemp)
+    set +e
+    printf '%s' "$prompt" | "$AGENT_CLI" "${opencode_args[@]}" 2>&1 | while IFS= read -r line || [[ -n "$line" ]]; do
+        printf '%s\n' "$line" >&2
+        printf '%s\n' "$line" >> "$output_file"
+    done
+    local pipeline_status=("${PIPESTATUS[@]}")
+    local exit_code=${pipeline_status[1]}
+    set -e
+    printf '%s\n\n' '--- End Agent Output ---' >&2
+    cat "$output_file"
+    rm -f "$output_file"
+    return "$exit_code"
+}
+
 invoke_agent_iteration() {
     local model=$1
     local iteration=$2
@@ -1463,9 +1498,12 @@ invoke_agent_iteration() {
         claude)
             invoke_claude_iteration "$model" "$iteration" "$work_dir"
             ;;
+        opencode)
+            invoke_opencode_iteration "$model" "$iteration" "$work_dir"
+            ;;
         *)
             printf 'Unsupported agent CLI: %s\n' "$AGENT_CLI" >&2
-            printf '%s\n' "Supported agent CLIs: copilot, codex, claude" >&2
+            printf '%s\n' "Supported agent CLIs: copilot, codex, claude, opencode" >&2
             return 2
             ;;
     esac
@@ -1692,7 +1730,9 @@ while [[ $iteration -le $MAX_ITERATIONS && "$completed" == "false" && "$INTERRUP
 
     # Check exit code
     if [[ $exit_code -ne 0 ]]; then
-        ((consecutive_failures++))
+        # A post-increment returns status 1 when the old value is zero, which
+        # would terminate this script under set -e before the circuit breaker.
+        consecutive_failures=$((consecutive_failures + 1))
         print_status "$iteration" "failure" "Exit code $exit_code (failure $consecutive_failures/$max_consecutive_failures)"
 
         if [[ $consecutive_failures -ge $max_consecutive_failures ]]; then
