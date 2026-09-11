@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - Fixed the Bash failure counter exiting on the first failed agent call under `set -e`, allowing the three-consecutive-failure circuit breaker and failure summary to run.
+- Required `speckit.ralph.run` to dispatch the orchestrator and verify fresh startup output before reporting success, with explicit in-app/native terminal fallbacks, a bounded startup check, and actionable failed or unverified launch results ([#29](https://github.com/Rubiss-Projects/spec-kit-ralph/issues/29)).
 
 ## [1.4.2] - 2026-08-23
 
