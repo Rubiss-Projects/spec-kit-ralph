@@ -51,6 +51,10 @@ With options:
 
 The command validates prerequisites, detects the current feature context, and delegates to the platform-appropriate orchestrator script.
 
+The launcher prefers an in-app terminal with command execution and readable output, then falls back to Terminal/iTerm on macOS, Windows Terminal/PowerShell on Windows, or a graphical terminal such as gnome-terminal, konsole, or xterm on Linux. It must dispatch the command and verify fresh orchestrator startup output within 30 seconds before reporting success; opening an idle terminal is insufficient. After verification, the launcher exits and you monitor the loop in that terminal.
+
+If no supported visible terminal is available, the launcher reports an actionable error with a fully resolved direct command. If the command was dispatched but startup cannot be verified, inspect that terminal and stop any existing run before retrying to avoid duplicate loops. Headless and CI users can use direct script invocation below.
+
 Only launcher flags are accepted here. Free-form text such as `Implement US1` is ignored by the launcher because Ralph selects the next incomplete work unit from `tasks.md` inside the orchestrated iteration.
 
 ### Path 2 — Direct Script Invocation
