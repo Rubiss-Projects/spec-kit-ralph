@@ -1138,6 +1138,7 @@ function Get-AgentCliKind {
         "copilot" { return "copilot" }
         "codex" { return "codex" }
         "claude" { return "claude" }
+        "opencode" { return "opencode" }
         default { return "unsupported" }
     }
 }
@@ -1519,6 +1520,55 @@ function Invoke-CodexIteration {
     }
 }
 
+function Invoke-OpenCodeIteration {
+    param(
+        [string]$Model,
+        [int]$Iteration,
+        [string]$WorkDir,
+        [switch]$Verbose
+    )
+
+    $prompt = New-IterationPrompt -Iteration $Iteration -CommitPolicy $commitPolicy
+    # stdin preserves multiline prompts and avoids Windows command-length limits.
+    # Never resume a session: every iteration must start with fresh context.
+    $openCodeArgs = @("run", "--model", $Model, "--auto")
+    if ($WorkDir) {
+        $openCodeArgs += @("--dir", $WorkDir)
+    }
+    if ($Verbose) {
+        Write-Host "DEBUG: OpenCode iteration $Iteration, model $Model, directory $WorkDir" -ForegroundColor Magenta
+    }
+
+    $prevOutputEncoding = $OutputEncoding
+    $prevConsoleEncoding = [Console]::OutputEncoding
+    try {
+        $OutputEncoding = [System.Text.Encoding]::UTF8
+        [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+        Write-Host "`n--- OpenCode Agent Output ---" -ForegroundColor DarkCyan
+        $outputLines = @()
+        $prompt | & $AgentCli @openCodeArgs 2>&1 | ForEach-Object {
+            $line = if ($_ -is [System.Management.Automation.ErrorRecord]) { $_.Exception.Message } else { $_ }
+            Write-Host $line
+            $outputLines += $line
+        }
+        $output = $outputLines -join "`n"
+        $exitCode = $LASTEXITCODE
+        Write-Host "--- End Agent Output ---`n" -ForegroundColor DarkCyan
+    }
+    catch {
+        $output = "Error invoking opencode: $_"
+        $exitCode = 1
+    }
+    finally {
+        $OutputEncoding = $prevOutputEncoding
+        [Console]::OutputEncoding = $prevConsoleEncoding
+    }
+    return @{
+        Output = $output
+        ExitCode = $exitCode
+    }
+}
+
 function Invoke-AgentIteration {
     param(
         [string]$Model,
@@ -1532,9 +1582,10 @@ function Invoke-AgentIteration {
         "copilot" { return Invoke-CopilotIteration -Model $Model -Iteration $Iteration -WorkDir $WorkDir -Verbose:$Verbose }
         "codex" { return Invoke-CodexIteration -Model $Model -Iteration $Iteration -WorkDir $WorkDir -Verbose:$Verbose }
         "claude" { return Invoke-ClaudeIteration -Model $Model -Iteration $Iteration -WorkDir $WorkDir -Verbose:$Verbose }
+        "opencode" { return Invoke-OpenCodeIteration -Model $Model -Iteration $Iteration -WorkDir $WorkDir -Verbose:$Verbose }
         default {
             Write-Host "Unsupported agent CLI: $AgentCli" -ForegroundColor Red
-            Write-Host "Supported agent CLIs: copilot, codex, claude" -ForegroundColor Red
+            Write-Host "Supported agent CLIs: copilot, codex, claude, opencode" -ForegroundColor Red
             return @{
                 Output = "Unsupported agent CLI: $AgentCli"
                 ExitCode = 2

@@ -1537,6 +1537,12 @@ Assert-Equal "detects codex" "codex" (Get-AgentCliKind -Cli "codex")
 Assert-Equal "detects codex path" "codex" (Get-AgentCliKind -Cli "C:\Tools\codex.exe")
 Assert-Equal "detects claude" "claude" (Get-AgentCliKind -Cli "claude")
 Assert-Equal "detects claude path" "claude" (Get-AgentCliKind -Cli "C:\Tools\claude.exe")
+Assert-Equal "detects opencode" "opencode" (Get-AgentCliKind -Cli "opencode")
+Assert-Equal "detects opencode path with spaces" "opencode" (Get-AgentCliKind -Cli "/opt/Agent Tools/opencode")
+Assert-Equal "detects mixed-case opencode exe" "opencode" (Get-AgentCliKind -Cli "C:\Agent Tools\OpenCode.EXE")
+Assert-Equal "detects opencode cmd" "opencode" (Get-AgentCliKind -Cli "C:\Tools\opencode.cmd")
+Assert-Equal "detects opencode bat" "opencode" (Get-AgentCliKind -Cli "C:\Tools\opencode.bat")
+Assert-Equal "rejects similarly named wrapper" "unsupported" (Get-AgentCliKind -Cli "opencode-wrapper")
 Assert-Equal "rejects unsupported cli" "unsupported" (Get-AgentCliKind -Cli "my-custom-cli")
 
 #endregion
@@ -1693,6 +1699,79 @@ Assert-True "skills mode sends slash command prompt" ($result.Output -match "\[-
 Assert-True "skills mode does not pass --skills runtime flag" (-not ($result.Output -match "\[--skills\]"))
 
 Remove-Item $tmpCopilotDir -Recurse -Force
+
+#endregion
+
+#region Tests: OpenCode dispatch and lifecycle
+
+Write-Section "OpenCode dispatch and lifecycle"
+$tmpOpenCodeRoot = Join-Path ([System.IO.Path]::GetTempPath()) "ralph-opencode-$PID"
+$tmpOpenCodeDir = Join-Path $tmpOpenCodeRoot "agent tools"
+New-Item -ItemType Directory -Path $tmpOpenCodeDir -Force | Out-Null
+$fakeOpenCodeScript = Join-Path $tmpOpenCodeDir "fake.ps1"
+@'
+[Console]::InputEncoding = [System.Text.Encoding]::UTF8
+[System.IO.File]::WriteAllLines($env:RALPH_TEST_ARGS, [string[]]$args)
+[System.IO.File]::WriteAllText($env:RALPH_TEST_STDIN, [Console]::In.ReadToEnd())
+[System.IO.File]::AppendAllText($env:RALPH_TEST_CALLS, "invoked`n")
+[Console]::Out.WriteLine('fake OpenCode stdout')
+[Console]::Error.WriteLine('fake OpenCode stderr')
+if ($env:RALPH_TEST_EXIT -eq '0') { [Console]::Out.Write('<promise>COMPLETE</promise>') }
+exit ([int]$env:RALPH_TEST_EXIT)
+'@ | Set-Content -LiteralPath $fakeOpenCodeScript -Encoding UTF8
+if (($env:OS -eq "Windows_NT") -or ($PSVersionTable.PSEdition -eq "Desktop")) {
+    $fakeOpenCode = Join-Path $tmpOpenCodeDir "opencode.cmd"
+    @("@echo off", "powershell.exe -NoLogo -NoProfile -File `"$fakeOpenCodeScript`" %*", "exit /b %errorlevel%") | Set-Content -LiteralPath $fakeOpenCode -Encoding ASCII
+} else {
+    $fakeOpenCode = Join-Path $tmpOpenCodeDir "opencode"
+    @('#!/usr/bin/env bash', 'exec pwsh -NoLogo -NoProfile -File "$(dirname "$0")/fake.ps1" "$@"') -join "`n" | Set-Content -LiteralPath $fakeOpenCode -Encoding UTF8
+    & chmod +x $fakeOpenCode
+}
+$env:RALPH_TEST_ARGS = Join-Path $tmpOpenCodeRoot "args"
+$env:RALPH_TEST_STDIN = Join-Path $tmpOpenCodeRoot "stdin"
+$env:RALPH_TEST_CALLS = Join-Path $tmpOpenCodeRoot "calls"
+$env:RALPH_TEST_EXIT = "0"
+$script:AgentCli = $fakeOpenCode
+$script:IterateCommandPath = Join-Path $RepoRoot "commands/iterate.md"
+$expectedPrompt = New-IterationPrompt -Iteration 7 -CommitPolicy $commitPolicy
+$originalEncoding = $OutputEncoding
+$originalConsoleEncoding = [Console]::OutputEncoding
+$result = Invoke-AgentIteration -Model "provider/model-name" -Iteration 7 -WorkDir $tmpOpenCodeDir
+$actualArgs = [System.IO.File]::ReadAllLines($env:RALPH_TEST_ARGS)
+$expectedArgs = @("run", "--model", "provider/model-name", "--auto", "--dir", $tmpOpenCodeDir)
+Assert-Equal "OpenCode dispatch succeeds" 0 $result.ExitCode
+Assert-Equal "OpenCode forwards model and directory as separate arguments" ($expectedArgs -join "`n") ($actualArgs -join "`n")
+Assert-Equal "OpenCode forwards complete multiline iteration prompt on stdin" ($expectedPrompt.TrimEnd("`r", "`n")) ([System.IO.File]::ReadAllText($env:RALPH_TEST_STDIN).TrimEnd("`r", "`n"))
+Assert-True "OpenCode captures stdout" ($result.Output -match 'fake OpenCode stdout')
+Assert-True "OpenCode captures stderr" ($result.Output -match 'fake OpenCode stderr')
+Assert-True "OpenCode preserves completion without trailing newline" (Test-CompletionSignal -Output $result.Output)
+Assert-True "OpenCode does not reuse sessions or Copilot flags" (-not ($actualArgs -match '^--(continue|session|attach|agent|yolo)$|^-p$'))
+Assert-Equal "OpenCode restores output encoding" $originalEncoding $OutputEncoding
+Assert-Equal "OpenCode restores console encoding" $originalConsoleEncoding ([Console]::OutputEncoding)
+$env:RALPH_TEST_EXIT = "17"
+$result = Invoke-AgentIteration -Model "provider/missing-model" -Iteration 8 -WorkDir ""
+Assert-Equal "OpenCode preserves failed CLI status" 17 $result.ExitCode
+Assert-True "OpenCode omits unspecified directory" (-not ([System.IO.File]::ReadAllLines($env:RALPH_TEST_ARGS) -contains '--dir'))
+
+$tmpOpenCodeRepo = Join-Path $tmpOpenCodeRoot "repo"
+$tmpOpenCodeSpec = Join-Path $tmpOpenCodeRepo "specs/test-feature"
+New-Item -ItemType Directory -Path $tmpOpenCodeSpec -Force | Out-Null
+Set-Content -LiteralPath (Join-Path $tmpOpenCodeSpec "tasks.md") -Value '- [ ] T001 Keep working' -Encoding UTF8
+Invoke-TestGit -Repository $tmpOpenCodeRepo -Arguments @("init", "-q") | Out-Null
+Invoke-TestGit -Repository $tmpOpenCodeRepo -Arguments @("add", ".") | Out-Null
+Invoke-TestGit -Repository $tmpOpenCodeRepo -Arguments @("-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-qm", "initial") | Out-Null
+[System.IO.File]::WriteAllText($env:RALPH_TEST_CALLS, "")
+$loopOutput = & pwsh -NoLogo -NoProfile -File $SourceScript -FeatureName test-feature -TasksPath (Join-Path $tmpOpenCodeSpec "tasks.md") -SpecDir $tmpOpenCodeSpec -MaxIterations 5 -Model provider/model-name -AgentCli $fakeOpenCode -WorkingDirectory $tmpOpenCodeRepo 2>&1
+$loopExit = $LASTEXITCODE
+Assert-Equal "OpenCode failures stop the full loop" 1 $loopExit
+Assert-Equal "OpenCode trips circuit breaker after three failed calls" 3 ([System.IO.File]::ReadAllLines($env:RALPH_TEST_CALLS).Count)
+Assert-True "OpenCode failure output survives in full loop" (($loopOutput -join "`n") -match 'fake OpenCode stderr')
+Assert-Equal "failed OpenCode completion does not advance tasks" 1 (Get-IncompleteTaskCount -Path (Join-Path $tmpOpenCodeSpec "tasks.md"))
+Remove-Item Env:RALPH_TEST_ARGS, Env:RALPH_TEST_STDIN, Env:RALPH_TEST_CALLS, Env:RALPH_TEST_EXIT
+# Only remove the fixed test root that was created under the OS temp directory.
+$expectedOpenCodeRoot = Join-Path ([System.IO.Path]::GetTempPath()) "ralph-opencode-$PID"
+if ([System.IO.Path]::GetFullPath($tmpOpenCodeRoot) -ne [System.IO.Path]::GetFullPath($expectedOpenCodeRoot)) { throw "Unexpected OpenCode test path" }
+Remove-Item -LiteralPath $tmpOpenCodeRoot -Recurse -Force
 
 #endregion
 

@@ -7,7 +7,7 @@ Autonomous implementation loop for [spec-kit](https://github.com/github/spec-kit
 | Requirement | Why |
 |---|---|
 | [spec-kit](https://github.com/github/spec-kit) (`specify` CLI) >= 0.8.5 | Extension host — provides project structure, task management, and integration metadata used for skills-mode dispatch |
-| [GitHub Copilot CLI](https://docs.github.com/en/copilot), [OpenAI Codex CLI](https://developers.openai.com/codex/cli), or [Claude Code](https://docs.claude.com/en/docs/claude-code) | Agent CLI used to execute each iteration (`copilot` is the default) |
+| [GitHub Copilot CLI](https://docs.github.com/en/copilot), [OpenAI Codex CLI](https://developers.openai.com/codex/cli), [Claude Code](https://docs.claude.com/en/docs/claude-code), or [OpenCode](https://opencode.ai/docs/cli/) | Agent CLI used to execute each iteration (`copilot` is the default) |
 | [Git](https://git-scm.com/) | Version control — Ralph commits completed work units automatically |
 
 Your project must be initialized with `specify init` and have a feature branch checked out with a completed `tasks.md`.
@@ -93,7 +93,7 @@ model: "claude-sonnet-4.6"
 max_iterations: 10
 
 # Path or name of the agent CLI binary
-# Supported: copilot, codex, claude
+# Supported: copilot, codex, claude, opencode
 agent_cli: "copilot"
 
 # Commit subject policy (optional — omit this block to preserve today's behavior)
@@ -160,6 +160,7 @@ Ralph supports CLI-specific invocation codepaths selected by `agent_cli`.
 | `copilot` | `copilot --agent speckit.ralph.iterate -p ... --model ... --yolo -s` or `copilot -p "/speckit-ralph-iterate ..." --model ... --yolo -s` | Default path. Resolves the registered command/skill name from `.specify/integration.json`: dot separator uses `--agent speckit.ralph.iterate`; dash/skills mode invokes `/speckit-ralph-iterate` in the prompt. Spec Kit integration options such as `--skills` are not passed as Copilot runtime flags. |
 | `codex` | `codex exec --json --model ... --sandbox danger-full-access --cd ... -` | Uses Codex non-interactive mode and passes the existing `speckit.ralph.iterate` command text via stdin. |
 | `claude` | `claude -p ... --model ... --dangerously-skip-permissions` | Uses Claude Code print/non-interactive mode. Passes the existing `speckit.ralph.iterate` command text in the prompt (Claude Code has no registered agent to select). `--dangerously-skip-permissions` runs unattended (equivalent to `--permission-mode bypassPermissions`). |
+| `opencode` | `opencode run --model ... --auto --dir ...` | Uses a fresh non-interactive session and sends the iteration command via stdin. Streams text output and preserves the CLI exit status. `--auto` approves permissions unless explicitly denied by OpenCode configuration. |
 
 To use Codex:
 
@@ -180,6 +181,18 @@ agent_cli: "claude"
 ```
 
 Install and authenticate Claude Code (`claude`) first. Ralph passes `--dangerously-skip-permissions` so iterations run unattended — only use this in a trusted working directory. Ralph does not store Anthropic API keys or credentials in its config.
+
+To use OpenCode:
+
+```yaml
+model: "anthropic/claude-sonnet-4-6"
+max_iterations: 10
+agent_cli: "opencode"
+```
+
+Install and authenticate [OpenCode](https://opencode.ai/docs/cli/#run) first. Use a CLI version whose `opencode run --help` includes `--auto` and choose an available `provider/model` ID from `opencode models`; the default Copilot model ID is not an OpenCode model ID. Ralph passes `--auto` for unattended iterations while retaining explicit OpenCode permission denials. Each iteration starts a new process and session without `--continue`, `--session`, or `--attach`. Ralph does not store provider credentials in its configuration.
+
+The same config, `SPECKIT_RALPH_AGENT_CLI`, and `--agent-cli`/`-AgentCli` overrides accept `opencode` or a path to an executable named `opencode`, `opencode.exe`, `opencode.cmd`, or `opencode.bat` (case-insensitive).
 
 ### Configuration Precedence
 
