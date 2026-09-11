@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-09-11
+
 ### Added
 - Added official OpenCode CLI support in both orchestrators, with non-interactive fresh iterations, model and prompt forwarding, streamed output, and the existing failure handling ([#3](https://github.com/Rubiss-Projects/spec-kit-ralph/issues/3)).
 
