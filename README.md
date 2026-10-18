@@ -261,11 +261,12 @@ export SPECKIT_RALPH_AGENT_CLI="codex"
 
 1. The orchestrator creates a missing `ralph-memory.md` from the installed canonical template, or validates the existing file without rewriting it. A malformed file reports all structural defects, remains byte-for-byte unchanged, and blocks agent invocation.
 2. Each **fresh** agent reads `ralph-memory.md` first, then `tasks.md` and design artifacts. Recent `progress.md` entries are optional audit context, not durable memory.
-3. The agent implements and validates one work unit — a single task, a validated task group, or a whole user story. A validated subset is committed as a coordinated work unit in the same iteration, so a multi-task story may span several iterations. Durable patterns, decisions, gotchas, commands, failed approaches, and the next handoff are compacted in memory.
+3. The agent selects the earliest unfinished, dependency-ready work unit, respecting declared phase dependencies and explicit task dependencies, with phase/task document order breaking ties. Setup, Foundational, and final Polish/Cross-Cutting tasks are eligible without story labels. Each iteration stays within one user story or one non-story phase: a single task or validated task group can be committed without finishing the whole story or phase. Blocked prerequisites prevent dependent work; later independent work is eligible only when declared dependencies permit it. No additional permission is needed for prerequisites already authorized by `tasks.md`. Durable patterns, decisions, gotchas, commands, failed approaches, and the next handoff are compacted in memory.
 4. For completed work, the agent updates tasks and memory, appends progress, then creates one coordinated commit containing the work result, `tasks.md`, `ralph-memory.md`, and `progress.md`. Review or analysis tasks may intentionally produce only those coordinated records. The audit uses `This work-unit commit`; it never requires a future hash or a bookkeeping amend.
 5. If a completed work unit adds follow-up tasks, Ralph still treats the iteration as progress when at least one previously-open task was checked off. The new unchecked tasks become remaining work, and `max_iterations` remains the safety limit for the expanded loop.
 6. Failed or no-work attempts leave tasks and `HEAD` unchanged. Useful memory and audit updates remain uncommitted and join the next substantive commit.
 7. The orchestrator validates only commits created after it snapshots `HEAD` for the current iteration. Earlier human-authored spec or task refinements form the trusted starting boundary, so a clean branch can be rerun without rewriting history.
+8. A separate no-progress counter advances after each iteration without an accepted completed work unit, even when the agent exits successfully. Only validated completion of an existing task resets it; prose, memory/audit edits alone, and added tasks do not. Completion with follow-up additions still resets it even if the remaining count stays the same or increases. After three consecutive no-progress iterations, Ralph reports remaining tasks and available agent/handoff/audit context and exits `1` before launching another iteration. The counter applies within the current run.
 
 ### Termination Conditions
 
@@ -275,10 +276,12 @@ export SPECKIT_RALPH_AGENT_CLI="codex"
 | Zero tasks but stale handoff, invalid memory, invalid commit, Git error, or any dirty path | `1` | Blocked immediately; all relevant diagnostics are printed and no agent is launched |
 | Completion signal with remaining tasks or a failed agent | `1` | Inconsistent protocol; the signal cannot force success |
 | Max iterations reached | `1` | Safety limit — increase `max_iterations` if needed |
-| 3 consecutive failures | `1` | Circuit breaker — agent is stuck |
+| Invalid task changes or work-unit commits | `1` | Immediate validation failure; no three-iteration retry allowance |
+| 3 consecutive agent failures | `1` | Existing exit-code circuit breaker |
+| 3 consecutive iterations without validated completed work | `1` | Independent no-progress circuit breaker, including successful exits and unsuccessful subject repairs |
 | Ctrl+C | `130` | User interrupted the loop |
 
-The terminal `Current Handoff` must contain only `- Feature complete; no handoff required.`. Completion also requires `git status --short --untracked-files=all` to succeed with no output. Ralph reports dirty paths and stops; it does not stage, amend, reset, stash, or launch a cleanup iteration. The only retry exception is a subject-only `commit-subject-invalid` defect from explicitly configured commit policy, before completion is accepted; in that case Ralph may run the next normal iteration so the agent can repair its own just-created work-unit commit subject.
+The terminal `Current Handoff` must contain only `- Feature complete; no handoff required.`. Completion also requires `git status --short --untracked-files=all` to succeed with no output. Ralph reports dirty paths and stops; it does not stage, amend, reset, stash, or launch a cleanup iteration. The only retry exception is a subject-only `commit-subject-invalid` defect from explicitly configured commit policy, before completion is accepted; in that case Ralph may run the next normal iteration so the agent can repair its own just-created work-unit commit subject. Unsuccessful repair iterations count toward the no-progress limit, including when all task checkboxes are already checked. A successfully repaired unit counts once when accepted against the retained pre-work validation baseline.
 
 ## Resuming After Interruption
 

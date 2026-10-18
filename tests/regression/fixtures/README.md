@@ -9,6 +9,23 @@ A tasks.md where all items are complete.
 ## tasks-empty.md
 A tasks.md with no task items at all.
 
+## tasks-phased.md
+Generic Setup, Foundational, two user-story, and final Polish/Cross-Cutting phases.
+Prerequisite and final tasks have no story labels. Phase and task dependencies
+include an explicit independent story. Prompt contract tests guard dependency
+ordering, blocked prerequisites, permitted independent work, and work-unit boundaries.
+
+## no-progress-agent.sh / no-progress-agent.ps1
+Equivalent deterministic mock agents used only by the regression harnesses.
+Focused scenarios cover successful no-ops, retained memory/audit notes, mixed exit
+codes, add-only task churn, validated progress resets with and without task
+expansion, and stalled/successful subject repair. Boundary cases cover iteration
+limits and fatal validation/completion errors on the third attempt. Harnesses
+assert invocation counts, exit results, and reported iteration counts.
+Existing suites retain commit validation, failure, and completion coverage.
+Selection is checked through the delivered prompt contract; mocks do not prove
+an AI agent follows dependency ordering.
+
 ## ralph-config-valid.yml
 A valid ralph config file for config loading tests.
 
