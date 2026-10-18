@@ -1991,6 +1991,127 @@ assert_eq "conventional+scope+summary+issue: clean subject with scope, summary, 
 
 #endregion
 
+#region Tests: selection contract and no-progress circuit breaker
+
+section "phase-aware selection prompt contract"
+
+# Selection is delegated to the iteration command, not a shell Markdown scheduler.
+# Guard the delivered instructions; mock loop tests below validate accepted work units.
+ITERATE_COMMAND_PATH="$REPO_ROOT/commands/iterate.md"
+selection_prompt=$(build_iteration_prompt 1)
+assert_true "selection includes unlabelled prerequisite and final phases" grep -Fq 'Setup, Foundational, and final Polish/Cross-Cutting tasks without `[USn]` labels are eligible work' <<< "$selection_prompt"
+assert_true "selection respects phase and explicit task dependencies" grep -Fq 'Respect declared phase dependencies and explicit task dependencies' <<< "$selection_prompt"
+assert_true "selection uses document order among eligible tasks" grep -Fq 'use phase/task document order to break ties among eligible tasks' <<< "$selection_prompt"
+assert_true "blocked prerequisites prohibit dependent work" grep -Fq 'A blocked prerequisite prevents dependent work' <<< "$selection_prompt"
+assert_true "later independent work requires declared permission" grep -Fq 'Independent later work may proceed only when declared dependencies permit it' <<< "$selection_prompt"
+assert_true "missing labels do not imply independence" grep -Fq 'missing story labels or `[P]` markers alone do not establish independence' <<< "$selection_prompt"
+assert_true "selection keeps story and phase boundaries separate" grep -Fq 'Never mix story and non-story work, span multiple non-story phases, or work on more than one user story' <<< "$selection_prompt"
+assert_true "no ready work leaves task state unchanged" grep -Fq 'If no unfinished work is dependency-ready' <<< "$selection_prompt"
+assert_true "authorized prerequisites need no additional permission" grep -Fq 'request additional permission for prerequisite work already authorized' <<< "$selection_prompt"
+assert_false "selection no longer filters to story sections" grep -Fq 'Find the FIRST user story section' <<< "$selection_prompt"
+ITERATE_COMMAND_PATH="$REPO_ROOT/nonexistent-iterate-command.md"
+fallback_prompt=$(build_iteration_prompt 1)
+assert_true "fallback selects earliest dependency-ready work" grep -Fq 'earliest unfinished, dependency-ready work unit' <<< "$fallback_prompt"
+assert_true "fallback includes unlabelled phases" grep -Fq 'Support unlabelled Setup, Foundational, and final Polish/Cross-Cutting tasks' <<< "$fallback_prompt"
+assert_true "fallback limits one story or non-story phase" grep -Fq 'one user story OR one non-story phase; never mix them' <<< "$fallback_prompt"
+assert_true "fallback preserves explicit dependency ordering" grep -Fq 'respecting declared phase and task dependencies and using document order' <<< "$fallback_prompt"
+assert_true "fallback permits validated partial commits" grep -Fq 'a whole story is not required' <<< "$fallback_prompt"
+assert_false "fallback no longer requires whole-story commits" grep -Fq 'commit only when the current user story is complete' <<< "$fallback_prompt"
+ITERATE_COMMAND_PATH="$REPO_ROOT/commands/iterate.md"
+
+section "no-progress full-loop regression"
+
+TMP_NO_PROGRESS=$(mktemp -d)
+mkdir -p "$TMP_NO_PROGRESS/agent"
+cp "$FIXTURE_DIR/no-progress-agent.sh" "$TMP_NO_PROGRESS/agent/copilot"
+chmod +x "$TMP_NO_PROGRESS/agent/copilot"
+for scenario in noop memory mixed add-only reset expansion equal-expansion repair-stuck repair-reset repair-final-stuck repair-final-success limit threshold-limit fatal-third false-token-third; do
+    scenario_repo="$TMP_NO_PROGRESS/$scenario"
+    scenario_spec="$scenario_repo/specs/test-feature"
+    scenario_calls="$TMP_NO_PROGRESS/$scenario.calls"
+    mkdir -p "$scenario_spec"
+    cp "$FIXTURE_DIR/tasks-phased.md" "$scenario_spec/tasks.md"
+    cp "$FIXTURE_DIR/ralph-memory-valid-active.md" "$scenario_spec/ralph-memory.md"
+    printf '%s\n' '# Ralph Progress Log' > "$scenario_spec/progress.md"
+    printf '%s\n' baseline > "$scenario_repo/work.txt"
+    case "$scenario" in
+        repair-*)
+            mkdir -p "$scenario_repo/.specify/extensions/ralph"
+            printf '%s\n' 'commit:' '  style: conventional' '  scope: ralph' > "$scenario_repo/.specify/extensions/ralph/ralph-config.yml"
+            ;;
+    esac
+    case "$scenario" in
+        repair-final-*)
+            sed -i.bak '/T006/!s/^- \[ \]/- [x]/' "$scenario_spec/tasks.md"
+            rm -f "$scenario_spec/tasks.md.bak"
+            ;;
+    esac
+    git -C "$scenario_repo" init -q
+    git -C "$scenario_repo" config user.name 'Ralph Test'
+    git -C "$scenario_repo" config user.email 'ralph@example.test'
+    git -C "$scenario_repo" add .
+    git -C "$scenario_repo" commit -qm 'test: baseline'
+    scenario_head=$(git -C "$scenario_repo" rev-parse HEAD)
+    scenario_limit=9
+    scenario_mode="$scenario"
+    expected_calls=3
+    expected_exit=1
+    expected_diagnostic='no-progress: 3 consecutive iterations'
+    expected_completed=0
+    case "$scenario" in
+        add-only) expected_calls=1; expected_diagnostic='failed-iteration-task-state:' ;;
+        reset|expansion|equal-expansion|repair-reset) expected_calls=6; expected_completed=1 ;;
+        repair-final-success) expected_calls=3; expected_exit=0; expected_diagnostic='COMPLETED'; expected_completed=1 ;;
+        threshold-limit) scenario_mode=noop; scenario_limit=3 ;;
+        fatal-third) expected_diagnostic='failed-iteration-task-state:' ;;
+        false-token-third) expected_diagnostic='tasks-incomplete:' ;;
+        limit) scenario_mode=noop; scenario_limit=2; expected_calls=2; expected_diagnostic='ITERATION LIMIT REACHED' ;;
+    esac
+    if scenario_output=$(cd "$scenario_repo" && RALPH_TEST_MODE="$scenario_mode" RALPH_TEST_CALLS="$scenario_calls" RALPH_TEST_SPEC="$scenario_spec" RALPH_TEST_COMPLETE_MEMORY="$FIXTURE_DIR/ralph-memory-valid-complete.md" bash "$SOURCE_SCRIPT" --feature-name test-feature --tasks-path "$scenario_spec/tasks.md" --spec-dir "$scenario_spec" --max-iterations "$scenario_limit" --model fake-model --agent-cli "$TMP_NO_PROGRESS/agent/copilot" 2>&1); then
+        scenario_exit=0
+    else
+        scenario_exit=$?
+    fi
+    assert_eq "$scenario exits with expected result" "$expected_exit" "$scenario_exit"
+    assert_eq "$scenario launches exactly the expected iterations" "$expected_calls" "$(wc -l < "$scenario_calls" | tr -d ' ')"
+    assert_true "$scenario reports actual iteration count" grep -Fq "Iterations run: $expected_calls" <<< "$scenario_output"
+    assert_true "$scenario reports expected termination" grep -Fq "$expected_diagnostic" <<< "$scenario_output"
+    assert_true "$scenario counts accepted completed tasks exactly once" grep -Fq "Tasks completed: $expected_completed" <<< "$scenario_output"
+    case "$scenario" in
+        noop|memory|mixed|reset|expansion|equal-expansion|repair-stuck|repair-reset)
+            assert_true "$scenario reports remaining task IDs" grep -Fq 'T006 Review integrated behavior' <<< "$scenario_output"
+            assert_true "$scenario includes available blocker output" grep -Fq 'Blocker: required input unavailable.' <<< "$scenario_output"
+            ;;
+    esac
+    case "$scenario" in
+        noop|memory|mixed|limit)
+            assert_eq "$scenario preserves HEAD" "$scenario_head" "$(git -C "$scenario_repo" rev-parse HEAD)"
+            assert_eq "$scenario preserves task bytes" "$(cat "$FIXTURE_DIR/tasks-phased.md")" "$(cat "$scenario_spec/tasks.md")"
+            ;;
+    esac
+    case "$scenario" in
+        memory)
+            assert_true "no-progress includes retained handoff" grep -Fq 'Blocker retained in handoff.' <<< "$scenario_output"
+            assert_true "no-progress includes retained audit" grep -Fq 'Blocked attempt retained in audit.' <<< "$scenario_output"
+            ;;
+        expansion|equal-expansion)
+            added=1; remaining=6
+            if [[ "$scenario" == expansion ]]; then added=2; remaining=7; fi
+            assert_true "$scenario reports accepted expansion" grep -Fq "Task expansion accepted: $added" <<< "$scenario_output"
+            assert_true "$scenario preserves expanded remaining work" grep -Fq "Tasks remaining: $remaining" <<< "$scenario_output"
+            ;;
+        repair-final-stuck)
+            assert_true "task-zero repair still hits no-progress limit" grep -Fq 'Tasks remaining: 0' <<< "$scenario_output"
+            ;;
+        fatal-third|false-token-third)
+            assert_false "$scenario keeps fatal diagnostics ahead of no-progress reporting" grep -Fq 'no-progress:' <<< "$scenario_output"
+            ;;
+    esac
+done
+rm -rf "$TMP_NO_PROGRESS"
+
+#endregion
+
 #region Summary
 
 echo ""

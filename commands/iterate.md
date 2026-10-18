@@ -12,8 +12,10 @@ You **MUST** consider the user input before proceeding (if not empty).
 
 ## Scope Constraint
 
-**CRITICAL**: Complete AT MOST ONE user story in this iteration.
+**CRITICAL**: Complete AT MOST ONE focused work unit in this iteration: tasks from one user story OR tasks from one non-story phase.
 
+- Setup, Foundational, and final Polish/Cross-Cutting tasks without `[USn]` labels are eligible work. Execute them as a separate work unit: one task or a validated task group within the same non-story phase.
+- Never mix story and non-story work, span multiple non-story phases, or work on more than one user story in an iteration.
 - If you cannot complete an entire user story, complete and commit as many of its tasks as you can validate this iteration
 - Partial progress is committed as a coordinated work unit each iteration; the remaining tasks in the same story are handled in subsequent iterations
 - A completed task may add follow-up tasks to `tasks.md`; this is valid only when at least one previously-open task is also marked `[x]` in the same coordinated commit
@@ -34,7 +36,7 @@ You **MUST** consider the user input before proceeding (if not empty).
 
 2. **Read context first**:
    - Read `FEATURE_DIR/ralph-memory.md` FIRST -- it is the primary durable source for codebase patterns, decisions, gotchas, reusable commands, failed approaches, and the current handoff
-   - Read `FEATURE_DIR/tasks.md` -- understand task structure and identify next incomplete user story
+   - Read `FEATURE_DIR/tasks.md` -- identify unfinished tasks, declared phase dependencies, and explicit task dependencies across all phases
    - Read `FEATURE_DIR/plan.md` for tech stack, architecture, and file structure
    - **IF EXISTS**: Read `FEATURE_DIR/data-model.md` for entities and relationships
    - **IF EXISTS**: Read `FEATURE_DIR/contracts/` for API specifications
@@ -42,9 +44,11 @@ You **MUST** consider the user input before proceeding (if not empty).
    - **IF EXISTS**: Read only the recent relevant entries in `FEATURE_DIR/progress.md` for optional audit context; never use it as the primary memory bridge
 
 3. **Identify scope**:
-   - Find the FIRST user story section with incomplete tasks (`- [ ]`)
-   - Work ONLY on tasks within that single user story
-   - Example: If "US-001: Initialize Ralph Command" has incomplete tasks, work only on US-001
+   - Select the earliest unfinished, dependency-ready work unit. Respect declared phase dependencies and explicit task dependencies; use phase/task document order to break ties among eligible tasks.
+   - A blocked prerequisite prevents dependent work. Independent later work may proceed only when declared dependencies permit it; missing story labels or `[P]` markers alone do not establish independence.
+   - Keep all selected tasks within one user story or one non-story phase. Recheck dependencies before starting each task; stop at that work-unit boundary even if later work is ready.
+   - Do not skip prerequisites, invent story labels, or request additional permission for prerequisite work already authorized by `tasks.md`.
+   - If no unfinished work is dependency-ready, report the blocking dependencies in the response and memory/audit handoff. Leave `tasks.md` and `HEAD` unchanged; do not invent progress.
 
 4. **Implement and validate tasks**:
    - Complete tasks in dependency order (non-[P] before parallel [P] where noted)
@@ -59,9 +63,9 @@ You **MUST** consider the user input before proceeding (if not empty).
    that subset is non-empty, it MUST be committed in this same iteration; never
    mark a task complete and leave that change uncommitted for a later iteration.
 
-   - When you have substantively completed and validated at least one task in the selected user story (a partial subset is a valid work unit; you need not finish the entire story):
+   - When you have substantively completed and validated at least one task in the selected story or non-story phase (a partial subset is a valid work unit; you need not finish the entire story or phase):
      1. Mark exactly the validated tasks by changing `[ ]` to `[x]` in `tasks.md`; leave tasks you did not validate as `[ ]`
-     2. Preserve and compact durable discoveries in `ralph-memory.md`; replace `Current Handoff` with only the information needed by the next iteration (for a partial story, point it at the next incomplete task in the same story)
+     2. Preserve and compact durable discoveries in `ralph-memory.md`; replace `Current Handoff` with the next dependency-ready task/phase or story, and any blocking dependencies. The next iteration must recheck selection against `tasks.md`.
      3. If no task remains anywhere in `tasks.md`, replace the handoff content with exactly `- Feature complete; no handoff required.`
      4. Append the Progress Report below with `**Commit**: This work-unit commit`
      5. Stage substantive files together with `tasks.md`, `ralph-memory.md`, and `progress.md`
@@ -104,7 +108,7 @@ APPEND to FEATURE_DIR/progress.md:
 ```markdown
 ---
 ## Iteration [N] - [YYYY-MM-DD HH:MM]
-**Work Unit**: [US-XXX title or failed/partial description]
+**Work Unit**: [Story or non-story phase and task IDs; completed/partial/blocked description]
 **Tasks Completed**:
 - [x] Task ID: description
 **Tasks Remaining in Work Unit**: [count or description]
@@ -166,10 +170,17 @@ Follow the patterns established in the codebase:
 
 | Condition | Expected Behavior |
 | --------- | ----------------- |
-| User story unclear | Ask for clarification in progress entry, mark tasks as blocked |
+| Work unit unclear | Record the uncertainty in memory/audit and the response; leave unvalidated task state unchanged |
 | Tests fail | Report failure, do not mark task complete, no commit |
 | Story partially done (at least one task validated) | Mark only the validated tasks `[x]` and commit them as one coordinated work unit this iteration; remaining tasks continue next iteration |
 | Validated task expansion | Mark the completed existing task(s) `[x]`, add the new unchecked follow-up tasks, commit the coordinated state, and continue within the configured iteration limit |
 | No task could be validated this iteration | Persist useful memory/audit context, leave `tasks.md` and `HEAD` unchanged, and make no commit |
 | All tasks done | Persist the terminal handoff, create the coordinated final work-unit commit, verify the clean completion gate, then output the completion signal |
-| Dependencies missing | Note in progress file, skip to next available task |
+| Dependencies missing | Report blocking dependencies; select later independent work only when declared dependencies permit it, within the iteration boundary |
+
+The orchestrator stops after three consecutive iterations without a validated completed
+work unit, regardless of successful agent exits. Memory/audit edits and task additions
+alone are not progress. Existing task completion in a valid coordinated commit resets
+that counter even when follow-up tasks keep the remaining count unchanged or increase it.
+Invalid task changes and commit/completion violations still fail immediately, except for
+the existing subject-only repair path; unsuccessful repair iterations count as no progress.

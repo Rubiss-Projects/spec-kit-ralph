@@ -10,6 +10,7 @@
     - Agent outputs <promise>COMPLETE</promise>
     - Max iterations reached
     - All tasks in tasks.md are complete
+    - 3 consecutive failures or iterations without validated progress
     - User interrupts with Ctrl+C
 
     Configuration precedence (highest to lowest):
@@ -1226,7 +1227,7 @@ function New-IterationPrompt {
     if (Test-Path $IterateCommandPath) {
         $commandText = Get-Content -Path $IterateCommandPath -Raw
     } else {
-        $commandText = "Complete at most one work unit from tasks.md. Mark completed tasks, update progress.md, commit only when the current user story is complete, and output <promise>COMPLETE</promise> when all tasks are done."
+        $commandText = "Select the earliest unfinished, dependency-ready work unit from tasks.md, respecting declared phase and task dependencies and using document order to break ties. Support unlabelled Setup, Foundational, and final Polish/Cross-Cutting tasks. Work within one user story OR one non-story phase; never mix them or cross that boundary. Blocked prerequisites prevent dependent work; later independent work is eligible only when declared dependencies permit it. Do not invent story labels or request additional permission for authorized prerequisites. Commit a validated task subset with tasks.md, progress.md, and ralph-memory.md in one coordinated commit; a whole story is not required. Follow-up task additions require completion of an existing task. If no work is ready or validated, report blockers, leave tasks.md and HEAD unchanged, and retain only memory/audit notes without committing. Output <promise>COMPLETE</promise> alone on a line only when all tasks are done, the coordinated commit is valid, the repository is clean, and Current Handoff is exactly: - Feature complete; no handoff required."
     }
 
     $prompt = @"
@@ -1741,6 +1742,8 @@ $iteration = 1
 $lastIterationRun = 0
 $consecutiveFailures = 0
 $maxConsecutiveFailures = 3
+$consecutiveNoProgress = 0
+$maxConsecutiveNoProgress = 3
 $completed = $false
 $circuitBreaker = $false
 $fatalFailure = $false
@@ -1753,7 +1756,7 @@ $interrupted = $false
 Set-RalphConsoleControlCMode -TreatAsInput $false
 
 try {
-    while ($iteration -le $MaxIterations -and -not $completed -and -not $interrupted -and -not $circuitBreaker -and -not $fatalFailure) {
+    while ($iteration -le $MaxIterations -and -not $completed -and -not $interrupted -and -not $circuitBreaker -and -not $fatalFailure -and $consecutiveNoProgress -lt $maxConsecutiveNoProgress) {
         # Repeat preparation before every fresh agent process. A prior failed
         # iteration or user edit may have invalidated memory since preflight.
         if (-not (Prepare-RalphMemory -Path $MemoryPath -TemplatePath $MemoryTemplatePath -Feature $FeatureName)) {
@@ -1789,6 +1792,14 @@ try {
             -CommitPolicy $commitPolicy `
             -FeatureName $FeatureName `
             -Branch ([string]$currentBranch).Trim()
+
+        # Account before any repair continue. The loop guard prevents a fourth
+        # no-progress iteration without changing completion or fatal-error precedence.
+        if ($result.ExitCode -eq 0 -and $postconditions.IsValid -and $postconditions.CompletedTaskIds.Count -gt 0 -and $validationSnapshot.Head -and $postconditions.AfterHead -and $validationSnapshot.Head -ne $postconditions.AfterHead) {
+            $consecutiveNoProgress = 0
+        } else {
+            $consecutiveNoProgress++
+        }
 
         $completionSignal = Test-CompletionSignal -Output $result.Output
         $remainingTasks = Get-IncompleteTaskCount -Path $TasksPath
@@ -1877,7 +1888,11 @@ try {
             }
         } else {
             $consecutiveFailures = 0
-            Write-IterationStatus -Iteration $iteration -Status "success" -Message "Iteration completed"
+            if ($consecutiveNoProgress -eq 0) {
+                Write-IterationStatus -Iteration $iteration -Status "success" -Message "Iteration completed"
+            } else {
+                Write-IterationStatus -Iteration $iteration -Status "skipped" -Message "No validated work unit ($consecutiveNoProgress/$maxConsecutiveNoProgress)"
+            }
             if ($postconditions.CompletedTaskIds.Count -gt 0) {
                 $tasksCompletedDuringRun += $postconditions.CompletedTaskIds.Count
                 if ($postconditions.AddedUncheckedTaskIds.Count -gt 0) {
@@ -1909,6 +1924,20 @@ finally {
 #endregion
 
 #region Summary
+
+# Completion, interruption, and fatal validation errors keep their existing priority.
+# Report no progress even when its threshold coincides with MaxIterations.
+if ($consecutiveNoProgress -ge $maxConsecutiveNoProgress -and -not $completed -and -not $interrupted -and -not $fatalFailure) {
+    Write-Host "no-progress: 3 consecutive iterations without a validated completed work unit. Stopping loop." -ForegroundColor Red
+    Get-IncompleteTasks -Path $TasksPath | ForEach-Object { Write-Host "- [ ] $_" }
+    Write-Host "Latest agent output (last 20 lines):"
+    ($result.Output -split "`r?`n" | Select-Object -Last 20) | ForEach-Object { Write-Host $_ }
+    foreach ($contextPath in @($MemoryPath, $ProgressPath)) {
+        Write-Host "Recent context (${contextPath}):"
+        Get-Content -LiteralPath $contextPath -Tail 20 -ErrorAction SilentlyContinue | ForEach-Object { Write-Host $_ }
+    }
+    $circuitBreaker = $true
+}
 
 Write-Host ""
 Write-Host ("=" * 60) -ForegroundColor Cyan

@@ -2183,6 +2183,135 @@ Assert-Equal "conventional+scope+summary+issue: clean subject with scope, summar
 
 #endregion
 
+#region Tests: selection contract and no-progress circuit breaker
+
+Write-Section "phase-aware selection prompt contract"
+
+# Selection is an agent instruction contract, not a shell Markdown scheduler.
+$script:IterateCommandPath = Join-Path $RepoRoot 'commands/iterate.md'
+$selectionPrompt = New-IterationPrompt -Iteration 1
+$selectionRules = @(
+    'Setup, Foundational, and final Polish/Cross-Cutting tasks without `[USn]` labels are eligible work',
+    'Respect declared phase dependencies and explicit task dependencies',
+    'use phase/task document order to break ties among eligible tasks',
+    'A blocked prerequisite prevents dependent work',
+    'Independent later work may proceed only when declared dependencies permit it',
+    'missing story labels or `[P]` markers alone do not establish independence',
+    'Never mix story and non-story work, span multiple non-story phases, or work on more than one user story',
+    'If no unfinished work is dependency-ready',
+    'request additional permission for prerequisite work already authorized'
+)
+foreach ($rule in $selectionRules) {
+    Assert-True "selection contract: $rule" ($selectionPrompt.Contains($rule))
+}
+Assert-True "selection no longer filters to story sections" (-not $selectionPrompt.Contains('Find the FIRST user story section'))
+$script:IterateCommandPath = Join-Path $RepoRoot 'nonexistent-iterate-command.md'
+$fallbackPrompt = New-IterationPrompt -Iteration 1
+foreach ($rule in @(
+    'earliest unfinished, dependency-ready work unit',
+    'Support unlabelled Setup, Foundational, and final Polish/Cross-Cutting tasks',
+    'one user story OR one non-story phase; never mix them',
+    'respecting declared phase and task dependencies and using document order',
+    'a whole story is not required'
+)) {
+    Assert-True "fallback contract: $rule" ($fallbackPrompt.Contains($rule))
+}
+Assert-True "fallback no longer requires whole-story commits" (-not $fallbackPrompt.Contains('commit only when the current user story is complete'))
+$script:IterateCommandPath = Join-Path $RepoRoot 'commands/iterate.md'
+
+Write-Section "no-progress full-loop regression"
+
+$noProgressRoot = Join-Path ([System.IO.Path]::GetTempPath()) "ralph-no-progress-$PID"
+New-Item -ItemType Directory -Path $noProgressRoot -Force | Out-Null
+$noProgressCli = New-FakeCopilot -Directory $noProgressRoot -PowerShellScript (Join-Path $FixtureDir 'no-progress-agent.ps1')
+# Preserve any harness caller's environment; each subprocess receives its own scenario.
+$savedNoProgressEnvironment = @{}
+foreach ($key in @('RALPH_TEST_CALLS', 'RALPH_TEST_MODE', 'RALPH_TEST_SPEC', 'RALPH_TEST_COMPLETE_MEMORY')) {
+    $savedNoProgressEnvironment[$key] = [Environment]::GetEnvironmentVariable($key)
+}
+try {
+    foreach ($scenario in @('noop', 'memory', 'mixed', 'add-only', 'reset', 'expansion', 'equal-expansion', 'repair-stuck', 'repair-reset', 'repair-final-stuck', 'repair-final-success', 'limit', 'threshold-limit', 'fatal-third', 'false-token-third')) {
+        $scenarioRepo = New-TransactionTestRepository -Name "ralph-no-progress-$scenario"
+        Copy-Item (Join-Path $FixtureDir 'tasks-phased.md') $scenarioRepo.TasksPath -Force
+        if ($scenario -like 'repair-*') {
+            $scenarioConfig = Join-Path $scenarioRepo.Root '.specify/extensions/ralph'
+            New-Item -ItemType Directory -Path $scenarioConfig -Force | Out-Null
+            Set-Content -Path (Join-Path $scenarioConfig 'ralph-config.yml') -Value "commit:`n  style: conventional`n  scope: ralph" -Encoding UTF8
+        }
+        if ($scenario -like 'repair-final-*') {
+            $phaseText = [System.IO.File]::ReadAllText($scenarioRepo.TasksPath)
+            foreach ($id in @('T001', 'T002', 'T003', 'T004', 'T005')) {
+                $phaseText = $phaseText.Replace("- [ ] $id ", "- [x] $id ")
+            }
+            [System.IO.File]::WriteAllText($scenarioRepo.TasksPath, $phaseText, (New-Object System.Text.UTF8Encoding($false)))
+        }
+        Invoke-TestGit -Repository $scenarioRepo.Root -Arguments @('add', '.') | Out-Null
+        Invoke-TestGit -Repository $scenarioRepo.Root -Arguments @('commit', '-q', '-m', 'test: phased baseline') | Out-Null
+        $scenarioHead = (Invoke-TestGit -Repository $scenarioRepo.Root -Arguments @('rev-parse', 'HEAD') | Select-Object -First 1).Trim()
+        $scenarioTasksBefore = [System.IO.File]::ReadAllText($scenarioRepo.TasksPath)
+        $env:RALPH_TEST_MODE = $scenario
+        $env:RALPH_TEST_CALLS = Join-Path $noProgressRoot "$scenario.calls"
+        $env:RALPH_TEST_SPEC = $scenarioRepo.SpecDir
+        $env:RALPH_TEST_COMPLETE_MEMORY = Join-Path $FixtureDir 'ralph-memory-valid-complete.md'
+        $scenarioLimit = 9
+        $expectedCalls = 3
+        $expectedExit = 1
+        $expectedDiagnostic = 'no-progress: 3 consecutive iterations'
+        $expectedCompleted = 0
+        switch ($scenario) {
+            'add-only' { $expectedCalls = 1; $expectedDiagnostic = 'failed-iteration-task-state:' }
+            { $_ -in @('reset', 'expansion', 'equal-expansion', 'repair-reset') } { $expectedCalls = 6; $expectedCompleted = 1 }
+            'repair-final-success' { $expectedExit = 0; $expectedDiagnostic = 'COMPLETED'; $expectedCompleted = 1 }
+            'threshold-limit' { $env:RALPH_TEST_MODE = 'noop'; $scenarioLimit = 3 }
+            'fatal-third' { $expectedDiagnostic = 'failed-iteration-task-state:' }
+            'false-token-third' { $expectedDiagnostic = 'tasks-incomplete:' }
+            'limit' { $env:RALPH_TEST_MODE = 'noop'; $scenarioLimit = 2; $expectedCalls = 2; $expectedDiagnostic = 'ITERATION LIMIT REACHED' }
+        }
+        $scenarioOutput = & pwsh -NoLogo -NoProfile -File $SourceScript `
+            -FeatureName 'test-feature' -TasksPath $scenarioRepo.TasksPath -SpecDir $scenarioRepo.SpecDir `
+            -MaxIterations $scenarioLimit -Model 'fake-model' -AgentCli $noProgressCli -WorkingDirectory $scenarioRepo.Root 2>&1
+        $scenarioExit = $LASTEXITCODE
+        $scenarioText = $scenarioOutput -join "`n"
+        Assert-Equal "$scenario exits with expected result" $expectedExit $scenarioExit
+        Assert-Equal "$scenario launches exactly the expected iterations" $expectedCalls (@(Get-Content -LiteralPath $env:RALPH_TEST_CALLS).Count)
+        Assert-True "$scenario reports actual iteration count" ($scenarioText.Contains("Iterations run: $expectedCalls"))
+        Assert-True "$scenario reports expected termination" ($scenarioText.Contains($expectedDiagnostic))
+        Assert-True "$scenario counts accepted completed tasks exactly once" ($scenarioText.Contains("Tasks completed: $expectedCompleted"))
+        if ($scenario -in @('noop', 'memory', 'mixed', 'reset', 'expansion', 'equal-expansion', 'repair-stuck', 'repair-reset')) {
+            Assert-True "$scenario reports remaining task IDs" ($scenarioText.Contains('T006 Review integrated behavior'))
+            Assert-True "$scenario includes available blocker output" ($scenarioText.Contains('Blocker: required input unavailable.'))
+        }
+        if ($scenario -in @('noop', 'memory', 'mixed', 'limit')) {
+            Assert-Equal "$scenario preserves HEAD" $scenarioHead ((Invoke-TestGit -Repository $scenarioRepo.Root -Arguments @('rev-parse', 'HEAD') | Select-Object -First 1).Trim())
+            Assert-Equal "$scenario preserves task bytes" $scenarioTasksBefore ([System.IO.File]::ReadAllText($scenarioRepo.TasksPath))
+        }
+        switch ($scenario) {
+            'memory' {
+                Assert-True 'no-progress includes retained handoff' ($scenarioText.Contains('Blocker retained in handoff.'))
+                Assert-True 'no-progress includes retained audit' ($scenarioText.Contains('Blocked attempt retained in audit.'))
+            }
+            { $_ -in @('expansion', 'equal-expansion') } {
+                $added = 1; $remaining = 6
+                if ($scenario -eq 'expansion') { $added = 2; $remaining = 7 }
+                Assert-True "$scenario reports accepted expansion" ($scenarioText.Contains("Task expansion accepted: $added"))
+                Assert-True "$scenario preserves expanded remaining work" ($scenarioText.Contains("Tasks remaining: $remaining"))
+            }
+            'repair-final-stuck' { Assert-True 'task-zero repair still hits no-progress limit' ($scenarioText.Contains('Tasks remaining: 0')) }
+            { $_ -in @('fatal-third', 'false-token-third') } {
+                Assert-True "$scenario keeps fatal diagnostics ahead of no-progress reporting" (-not $scenarioText.Contains('no-progress:'))
+            }
+        }
+        Remove-Item $scenarioRepo.Root -Recurse -Force
+    }
+} finally {
+    foreach ($key in $savedNoProgressEnvironment.Keys) {
+        [Environment]::SetEnvironmentVariable($key, $savedNoProgressEnvironment[$key])
+    }
+    Remove-Item $noProgressRoot -Recurse -Force
+}
+
+#endregion
+
 #region Summary
 
 Write-Host ""

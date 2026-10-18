@@ -9,7 +9,7 @@
 # - Agent outputs <promise>COMPLETE</promise>
 # - Max iterations reached
 # - All tasks in tasks.md are complete
-# - 3 consecutive failures (circuit breaker)
+# - 3 consecutive failures or iterations without validated progress (circuit breakers)
 # - User interrupts with Ctrl+C
 #
 # Configuration precedence (highest wins):
@@ -1216,7 +1216,7 @@ build_iteration_prompt() {
     if [[ -f "$ITERATE_COMMAND_PATH" ]]; then
         command_text=$(cat "$ITERATE_COMMAND_PATH")
     else
-        command_text="Complete at most one work unit from tasks.md. Mark completed tasks, update progress.md, commit only when the current user story is complete, and output <promise>COMPLETE</promise> when all tasks are done."
+        command_text="Select the earliest unfinished, dependency-ready work unit from tasks.md, respecting declared phase and task dependencies and using document order to break ties. Support unlabelled Setup, Foundational, and final Polish/Cross-Cutting tasks. Work within one user story OR one non-story phase; never mix them or cross that boundary. Blocked prerequisites prevent dependent work; later independent work is eligible only when declared dependencies permit it. Do not invent story labels or request additional permission for authorized prerequisites. Commit a validated task subset with tasks.md, progress.md, and ralph-memory.md in one coordinated commit; a whole story is not required. Follow-up task additions require completion of an existing task. If no work is ready or validated, report blockers, leave tasks.md and HEAD unchanged, and retain only memory/audit notes without committing. Output <promise>COMPLETE</promise> alone on a line only when all tasks are done, the coordinated commit is valid, the repository is clean, and Current Handoff is exactly: - Feature complete; no handoff required."
     fi
 
     cat << EOF
@@ -1593,6 +1593,9 @@ echo -e "\033[37mFound $INITIAL_TASKS incomplete task(s)\033[0m"
 iteration=1
 consecutive_failures=0
 max_consecutive_failures=3
+consecutive_no_progress=0
+max_consecutive_no_progress=3
+last_iteration_run=0
 TASKS_COMPLETED_DURING_RUN=0
 completed=false
 circuit_breaker=false
@@ -1603,7 +1606,7 @@ repair_task_state_before=""
 repair_incomplete_ids_before=""
 repair_completed_ids_before=""
 
-while [[ $iteration -le $MAX_ITERATIONS && "$completed" == "false" && "$INTERRUPTED" == "false" && "$circuit_breaker" == "false" && "$fatal_failure" == "false" ]]; do
+while [[ $iteration -le $MAX_ITERATIONS && "$completed" == "false" && "$INTERRUPTED" == "false" && "$circuit_breaker" == "false" && "$fatal_failure" == "false" && $consecutive_no_progress -lt $max_consecutive_no_progress ]]; do
     print_header "$iteration" "$MAX_ITERATIONS"
     print_status "$iteration" "running" "Starting iteration"
 
@@ -1631,6 +1634,7 @@ while [[ $iteration -le $MAX_ITERATIONS && "$completed" == "false" && "$INTERRUP
     fi
 
     # Invoke configured agent CLI with speckit.ralph.iterate behavior
+    last_iteration_run=$iteration
     set +e
     output=$(invoke_agent_iteration \
         "$MODEL" \
@@ -1663,6 +1667,15 @@ while [[ $iteration -le $MAX_ITERATIONS && "$completed" == "false" && "$INTERRUP
         [[ -n "$commit_postcondition_output" ]] && printf '%s\n' "$commit_postcondition_output" >&2
     fi
 
+    # Account before any repair continue. The loop guard prevents a fourth
+    # no-progress iteration without changing completion or fatal-error precedence.
+    iteration_head_after=$(get_git_head_snapshot "$REPO_ROOT")
+    if [[ "$exit_code" -eq 0 && "$commit_postconditions" -eq 0 && "$iteration_completed_count" -gt 0 && -n "$validation_head_before" && -n "$iteration_head_after" && "$validation_head_before" != "$iteration_head_after" ]]; then
+        consecutive_no_progress=0
+    else
+        consecutive_no_progress=$((consecutive_no_progress + 1))
+    fi
+
     completion_signaled=false
     if test_completion_signal "$output"; then
         completion_signaled=true
@@ -1675,10 +1688,13 @@ while [[ $iteration -le $MAX_ITERATIONS && "$completed" == "false" && "$INTERRUP
         if [[ "$commit_postconditions" -ne 0 ]] && is_recoverable_commit_subject_postcondition "$commit_postcondition_output"; then
             print_status "$iteration" "failure" "Commit subject postcondition violation"
             LAST_POSTCONDITION_DEFECTS="$commit_postcondition_output"
-            repair_head_before="${repair_head_before:-$iteration_head_before}"
-            repair_task_state_before="${repair_task_state_before:-$iteration_task_state_before}"
-            repair_incomplete_ids_before="${repair_incomplete_ids_before:-$iteration_incomplete_ids_before}"
-            repair_completed_ids_before="${repair_completed_ids_before:-$iteration_completed_ids_before}"
+            # Retain even empty ID snapshots until this unit is accepted.
+            if [[ -z "$repair_head_before" ]]; then
+                repair_head_before=$iteration_head_before
+                repair_task_state_before=$iteration_task_state_before
+                repair_incomplete_ids_before=$iteration_incomplete_ids_before
+                repair_completed_ids_before=$iteration_completed_ids_before
+            fi
             ((iteration++))
             continue
         fi
@@ -1703,10 +1719,13 @@ while [[ $iteration -le $MAX_ITERATIONS && "$completed" == "false" && "$INTERRUP
         if is_recoverable_commit_subject_postcondition "$commit_postcondition_output"; then
             print_status "$iteration" "failure" "Commit subject postcondition violation"
             LAST_POSTCONDITION_DEFECTS="$commit_postcondition_output"
-            repair_head_before="${repair_head_before:-$iteration_head_before}"
-            repair_task_state_before="${repair_task_state_before:-$iteration_task_state_before}"
-            repair_incomplete_ids_before="${repair_incomplete_ids_before:-$iteration_incomplete_ids_before}"
-            repair_completed_ids_before="${repair_completed_ids_before:-$iteration_completed_ids_before}"
+            # Retain even empty ID snapshots until this unit is accepted.
+            if [[ -z "$repair_head_before" ]]; then
+                repair_head_before=$iteration_head_before
+                repair_task_state_before=$iteration_task_state_before
+                repair_incomplete_ids_before=$iteration_incomplete_ids_before
+                repair_completed_ids_before=$iteration_completed_ids_before
+            fi
             ((iteration++))
             continue
         fi
@@ -1742,7 +1761,11 @@ while [[ $iteration -le $MAX_ITERATIONS && "$completed" == "false" && "$INTERRUP
         fi
     else
         consecutive_failures=0
-        print_status "$iteration" "success" "Iteration completed"
+        if [[ "$consecutive_no_progress" -eq 0 ]]; then
+            print_status "$iteration" "success" "Iteration completed"
+        else
+            print_status "$iteration" "skipped" "No validated work unit ($consecutive_no_progress/$max_consecutive_no_progress)"
+        fi
         if [[ "$iteration_completed_count" -gt 0 ]]; then
             TASKS_COMPLETED_DURING_RUN=$((TASKS_COMPLETED_DURING_RUN + iteration_completed_count))
             if [[ "$iteration_added_unchecked_count" -gt 0 ]]; then
@@ -1762,6 +1785,21 @@ done
 
 #region Summary
 
+# Completion, interruption, and fatal validation errors keep their existing priority.
+# Report no progress even when its threshold coincides with max_iterations.
+if [[ $consecutive_no_progress -ge $max_consecutive_no_progress && "$completed" == "false" && "$INTERRUPTED" == "false" && "$fatal_failure" == "false" ]]; then
+    printf '%s\n' 'no-progress: 3 consecutive iterations without a validated completed work unit. Stopping loop.'
+    grep '^- \[ \]' "$TASKS_PATH" || true
+    printf '%s\n' 'Latest agent output (last 20 lines):'
+    printf '%s\n' "$output" | tail -n 20
+    for context_path in "$MEMORY_PATH" "$PROGRESS_PATH"; do
+        [[ -r "$context_path" ]] || continue
+        printf 'Recent context (%s):\n' "$context_path"
+        tail -n 20 "$context_path" || true
+    done
+    circuit_breaker=true
+fi
+
 iterations_run=$((iteration > MAX_ITERATIONS ? MAX_ITERATIONS : iteration))
 if [[ "$completed" == "true" ]]; then
     # Completed via signal or all tasks done
@@ -1775,7 +1813,7 @@ elif [[ "$INTERRUPTED" == "true" ]]; then
     print_summary "$((iteration - 1))" "INTERRUPTED" "\033[33m"
     exit 130
 elif [[ "$circuit_breaker" == "true" ]]; then
-    print_summary "$iteration" "FAILED" "\033[31m"
+    print_summary "$last_iteration_run" "FAILED" "\033[31m"
     exit 1
 elif [[ "$fatal_failure" == "true" ]]; then
     print_summary "$iteration" "FAILED" "\033[31m"
