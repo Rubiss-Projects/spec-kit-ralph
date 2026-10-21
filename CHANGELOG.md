@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Select dependency-ready work across Setup, Foundational, user-story, and final phases, including tasks without story labels. Keep each iteration within one story or one non-story phase and allow validated partial commits in fallback prompts.
 - Stop both orchestrators after three consecutive iterations without validated completed work, independently of agent exit codes. Count unsuccessful subject repairs, retain immediate validation failures, and accept completion with follow-up task additions as progress.
 - Report remaining tasks and available blocker context when the no-progress circuit breaker stops a run.
+- Recognize task IDs wrapped in Markdown emphasis (`- [x] **T1. …**`, `__T1__`, `*T1*`) in both orchestrators. Since 1.4.2 such a completed task yielded no ID, and a fully completed iteration was rejected as `failed-iteration-advanced-head` ([#59](https://github.com/Rubiss-Projects/spec-kit-ralph/issues/59)).
 
 ## [1.5.0] - 2026-09-11
 

@@ -1435,6 +1435,25 @@ Assert-Equal "all done returns empty" 0 $tasks.Count
 $tasks = Get-IncompleteTasks -Path $missingPath
 Assert-Equal "missing file returns empty" 0 $tasks.Count
 
+# Task IDs wrapped in Markdown emphasis are still task IDs
+$emphasisPath = Join-Path ([System.IO.Path]::GetTempPath()) ("ralph-emphasis-" + [guid]::NewGuid() + ".md")
+@(
+    '- [ ] **T1. Bold open task.**'
+    '- [x] **T2.** Bold completed task'
+    '- [ ] __T3__ Underscore open task'
+    '- [ ] *T4* Italic open task'
+    '- [ ] Task without an ID that mentions T9'
+) | Set-Content -LiteralPath $emphasisPath
+$tasks = @(Get-IncompleteTasks -Path $emphasisPath)
+Assert-Equal "emphasized incomplete tasks are found" 3 $tasks.Count
+Assert-True "bold incomplete task starts with its ID" ($tasks[0] -like "T1*")
+Assert-True "underscore incomplete task starts with its ID" ($tasks[1] -like "T3*")
+Assert-True "italic incomplete task starts with its ID" ($tasks[2] -like "T4*")
+$tasks = @(Get-CompletedTasks -Path $emphasisPath)
+Assert-Equal "emphasized completed task is found" 1 $tasks.Count
+Assert-True "bold completed task starts with its ID" ($tasks[0] -like "T2*")
+Remove-Item -LiteralPath $emphasisPath -Force
+
 #endregion
 
 #region Tests: Test-CompletionSignal
