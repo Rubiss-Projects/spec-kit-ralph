@@ -417,7 +417,7 @@ function Get-IncompleteTasks {
     }
     
     $content = Get-Content $Path -Raw
-    $taskMatches = [regex]::Matches($content, '- \[ \] (T\d+.*?)(?=\r?\n|$)')
+    $taskMatches = [regex]::Matches($content, '- \[ \] [*_]*(T\d+.*?)(?=\r?\n|$)')
     
     return $taskMatches | ForEach-Object { $_.Groups[1].Value }
 }
@@ -430,7 +430,7 @@ function Get-CompletedTasks {
     }
 
     $content = Get-Content $Path -Raw
-    $taskMatches = [regex]::Matches($content, '- \[[xX]\] (T\d+.*?)(?=\r?\n|$)')
+    $taskMatches = [regex]::Matches($content, '- \[[xX]\] [*_]*(T\d+.*?)(?=\r?\n|$)')
 
     return $taskMatches | ForEach-Object { $_.Groups[1].Value }
 }
@@ -991,7 +991,7 @@ function Test-RalphIterationPostconditions {
             $commitTaskContent = $commitTaskOutput -join "`n"
             $commitAfterIncompleteIds = @([regex]::Matches(
                 $commitTaskContent,
-                '- \[ \] (T\d+.*?)(?=\r?\n|$)'
+                '- \[ \] [*_]*(T\d+.*?)(?=\r?\n|$)'
             ) | ForEach-Object {
                 if ($_.Groups[1].Value -match '^(T\d+)') {
                     $Matches[1]
@@ -999,7 +999,7 @@ function Test-RalphIterationPostconditions {
             } | Sort-Object -Unique)
             $commitAfterCompletedIds = @([regex]::Matches(
                 $commitTaskContent,
-                '- \[[xX]\] (T\d+.*?)(?=\r?\n|$)'
+                '- \[[xX]\] [*_]*(T\d+.*?)(?=\r?\n|$)'
             ) | ForEach-Object {
                 if ($_.Groups[1].Value -match '^(T\d+)') {
                     $Matches[1]

@@ -471,7 +471,7 @@ get_incomplete_task_ids() {
         return 0
     fi
 
-    sed -n 's/^- \[ \] \(T[0-9][0-9]*\).*/\1/p' "$path" | awk '!seen[$0]++'
+    sed -n 's/^- \[ \] [*_]*\(T[0-9][0-9]*\).*/\1/p' "$path" | awk '!seen[$0]++'
 }
 
 get_completed_task_ids() {
@@ -480,7 +480,7 @@ get_completed_task_ids() {
         return 0
     fi
 
-    sed -n 's/^- \[[xX]\] \(T[0-9][0-9]*\).*/\1/p' "$path" | awk '!seen[$0]++'
+    sed -n 's/^- \[[xX]\] [*_]*\(T[0-9][0-9]*\).*/\1/p' "$path" | awk '!seen[$0]++'
 }
 
 get_incomplete_task_count_at_commit() {
@@ -506,7 +506,7 @@ get_incomplete_task_ids_at_commit() {
     if ! task_content=$(git -C "$repo_root" show "$commit:$tasks_relative" 2>/dev/null); then
         return 1
     fi
-    printf '%s\n' "$task_content" | sed -n 's/^- \[ \] \(T[0-9][0-9]*\).*/\1/p' | awk '!seen[$0]++'
+    printf '%s\n' "$task_content" | sed -n 's/^- \[ \] [*_]*\(T[0-9][0-9]*\).*/\1/p' | awk '!seen[$0]++'
 }
 
 get_completed_task_ids_at_commit() {
@@ -518,7 +518,7 @@ get_completed_task_ids_at_commit() {
     if ! task_content=$(git -C "$repo_root" show "$commit:$tasks_relative" 2>/dev/null); then
         return 1
     fi
-    printf '%s\n' "$task_content" | sed -n 's/^- \[[xX]\] \(T[0-9][0-9]*\).*/\1/p' | awk '!seen[$0]++'
+    printf '%s\n' "$task_content" | sed -n 's/^- \[[xX]\] [*_]*\(T[0-9][0-9]*\).*/\1/p' | awk '!seen[$0]++'
 }
 
 count_completed_task_ids() {

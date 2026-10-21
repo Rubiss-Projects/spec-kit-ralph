@@ -1094,6 +1094,31 @@ assert_eq "completed existing ids ignore stale checked before-state" "0" "$(coun
 assert_eq "added unchecked ids ignore existing before-state" "1" "$(count_added_unchecked_task_ids $'T001\nT002' $'T002\nT004')"
 rm -f "$TMP_TASK_IDS"
 
+# Task IDs wrapped in Markdown emphasis are still task IDs. Without this, a
+# completed work unit written as `- [x] **T1. ...**` yields no completed IDs and
+# the iteration is rejected as failed-iteration-advanced-head.
+TMP_EMPHASIS_IDS=$(mktemp)
+printf '%s\n' \
+    '- [ ] **T1. Bold open task.**' \
+    '- [x] **T2.** Bold completed task' \
+    '- [ ] __T3__ Underscore open task' \
+    '- [ ] *T4* Italic open task' \
+    '- [ ] Task without an ID that mentions T9' > "$TMP_EMPHASIS_IDS"
+assert_eq "emphasized incomplete task ids are extracted" $'T1\nT3\nT4' "$(get_incomplete_task_ids "$TMP_EMPHASIS_IDS")"
+assert_eq "emphasized completed task ids are extracted" "T2" "$(get_completed_task_ids "$TMP_EMPHASIS_IDS")"
+rm -f "$TMP_EMPHASIS_IDS"
+
+TMP_EMPHASIS_REPO=$(mktemp -d)
+git -C "$TMP_EMPHASIS_REPO" init -q
+git -C "$TMP_EMPHASIS_REPO" config user.email "test@example.com"
+git -C "$TMP_EMPHASIS_REPO" config user.name "Test"
+printf '%s\n' '- [x] **T1. Done.**' '- [ ] **T2. Open.**' > "$TMP_EMPHASIS_REPO/tasks.md"
+git -C "$TMP_EMPHASIS_REPO" add tasks.md
+git -C "$TMP_EMPHASIS_REPO" commit -q -m "tasks"
+assert_eq "emphasized incomplete ids are read at a commit" "T2" "$(get_incomplete_task_ids_at_commit "$TMP_EMPHASIS_REPO" HEAD tasks.md)"
+assert_eq "emphasized completed ids are read at a commit" "T1" "$(get_completed_task_ids_at_commit "$TMP_EMPHASIS_REPO" HEAD tasks.md)"
+rm -rf "$TMP_EMPHASIS_REPO"
+
 #endregion
 
 #region Tests: test_completion_signal
